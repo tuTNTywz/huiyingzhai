@@ -1,0 +1,111 @@
+<navigation-bar title="上传作业" back="{{true}}" color="#1A1A1A" background="#FFFFFF"></navigation-bar>
+<scroll-view class="scrollarea" scroll-y type="list">
+  <view class="page">
+
+    <view class="tip">
+      <view class="tip__icon">!</view>
+      <text class="tip__text">发布后全班同学都会收到通知，请确认信息无误</text>
+    </view>
+
+    <view class="card">
+      <view class="field">
+        <text class="field__label">作业标题<text class="field__star">*</text></text>
+        <input
+          class="field__input"
+          value="{{title}}"
+          placeholder="如：高数第三章课后习题"
+          placeholder-class="field__placeholder"
+          maxlength="40"
+          bindinput="onTitleInput"
+        />
+      </view>
+
+      <view class="field">
+        <text class="field__label">所属课程<text class="field__star">*</text></text>
+        <picker mode="selector" range="{{courses}}" value="{{courseIndex}}" bindchange="onCourseChange">
+          <view class="field__picker">
+            <text class="{{course ? 'field__value' : 'field__placeholder'}}">{{course || '请选择课程'}}</text>
+            <view class="field__chevron"></view>
+          </view>
+        </picker>
+      </view>
+
+      <view class="field">
+        <text class="field__label">任课教师</text>
+        <input
+          class="field__input"
+          value="{{teacher}}"
+          placeholder="选填，默认显示为课代表"
+          placeholder-class="field__placeholder"
+          maxlength="12"
+          bindinput="onTeacherInput"
+        />
+      </view>
+
+      <view class="field">
+        <text class="field__label">截止时间<text class="field__star">*</text></text>
+        <view class="field__row">
+          <picker class="field__row-item" mode="date" value="{{date}}" start="{{minDate}}" bindchange="onDateChange">
+            <view class="field__picker field__picker--compact">
+              <text class="field__value">{{date}}</text>
+              <view class="field__chevron"></view>
+            </view>
+          </picker>
+          <picker
+            class="field__row-item field__row-item--right"
+            mode="time"
+            value="{{time}}"
+            bindchange="onTimeChange"
+          >
+            <view class="field__picker field__picker--compact">
+              <text class="field__value">{{time}}</text>
+              <view class="field__chevron"></view>
+            </view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="field">
+        <text class="field__label">作业要求</text>
+        <textarea
+          class="field__textarea"
+          value="{{desc}}"
+          placeholder="填写题目范围、提交格式、注意事项等"
+          placeholder-class="field__placeholder"
+          maxlength="{{maxDesc}}"
+          bindinput="onDescInput"
+        ></textarea>
+        <text class="field__count">{{descLength}}/{{maxDesc}}</text>
+      </view>
+
+      <view class="field field--last">
+        <text class="field__label">附件</text>
+        <view class="file" wx:if="{{!attachment}}" bindtap="onChooseFile" hover-class="press">
+          <view class="file__plus">
+            <view class="file__plus-h"></view>
+            <view class="file__plus-v"></view>
+          </view>
+          <text class="file__hint">从聊天记录选择文件</text>
+        </view>
+        <view class="file-selected" wx:else>
+          <view class="file-selected__icon">附</view>
+          <view class="file-selected__body">
+            <text class="file-selected__name">{{attachment.name}}</text>
+            <text class="file-selected__size" wx:if="{{attachment.sizeText}}">{{attachment.sizeText}}</text>
+          </view>
+          <view class="file-selected__remove" catchtap="onRemoveFile">×</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="footer-note">发布人为：课代表 · 可在作业页撤回自己发布的作业</view>
+  </view>
+</scroll-view>
+
+<view class="submit-bar">
+  <view
+    class="submit-btn {{canSubmit ? '' : 'submit-btn--disabled'}}"
+    bindtap="onSubmit"
+    hover-class="press"
+  >发布作业</view>
+</view>
