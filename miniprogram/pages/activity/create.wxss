@@ -1,0 +1,7 @@
+.picker-row {
+  display: flex;
+  gap: 16rpx;
+}
+.picker-row picker {
+  flex: 1;
+}

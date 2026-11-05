@@ -1,0 +1,40 @@
+<view class="card">
+  <view class="form-item">
+    <view class="form-label">作业标题</view>
+    <input class="form-input" placeholder="如：《论语》第三篇诵读" value="{{title}}" bindinput="onTitle" />
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">作业说明（选填）</view>
+    <textarea class="form-textarea" placeholder="简述作业要求…" value="{{desc}}" bindinput="onDesc" maxlength="500" />
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">截止时间</view>
+    <view class="picker-row">
+      <picker mode="date" value="{{date}}" start="{{minDate}}" bindchange="onDate">
+        <view class="picker-value {{date ? '' : 'picker-placeholder'}}">
+          {{date || '选择日期'}}
+        </view>
+      </picker>
+      <picker mode="time" value="{{time}}" bindchange="onTime">
+        <view class="picker-value">{{time}}</view>
+      </picker>
+    </view>
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">附件（支持 PDF、Word、Excel、PPT 等）</view>
+    <view class="btn-plain attach-btn" bindtap="chooseFile">＋ 添加附件</view>
+    <view class="file-item" wx:for="{{attachments}}" wx:key="tempPath">
+      <view class="file-name">📄 {{item.name}}</view>
+      <view class="file-del" data-index="{{index}}" catchtap="removeFile">移除</view>
+    </view>
+  </view>
+
+  <button
+    class="{{submitting ? 'btn-disabled' : 'btn-primary'}}"
+    disabled="{{submitting}}"
+    bindtap="submit"
+  >发 布</button>
+</view>

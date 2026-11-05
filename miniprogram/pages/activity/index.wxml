@@ -1,0 +1,27 @@
+<view class="page-header">
+  <view class="page-title">活动</view>
+  <view class="page-sub">「 群贤毕至，少长咸集 」</view>
+</view>
+
+<block wx:if="{{isCommittee}}">
+  <view class="btn-primary create-btn" bindtap="goCreate">＋ 发布活动</view>
+</block>
+
+<view wx:if="{{!loading && list.length === 0}}" class="empty">暂无活动，静候佳音</view>
+
+<view
+  class="card act-item"
+  wx:for="{{list}}"
+  wx:key="_id"
+  data-id="{{item._id}}"
+  bindtap="goDetail"
+  bindlongpress="onDelete"
+>
+  <view class="act-top">
+    <view class="title">{{item.title}}</view>
+    <text class="tag {{item.ended ? 'tag-gray' : 'tag-gold'}}">{{item.ended ? '已结束' : '待举办'}}</text>
+  </view>
+  <view class="act-line">🕒 {{item.timeText}}</view>
+  <view class="act-line">📍 {{item.place}}</view>
+  <view class="subtitle act-creator">发布人：{{item.creatorName}}</view>
+</view>

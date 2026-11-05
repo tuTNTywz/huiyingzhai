@@ -1,0 +1,36 @@
+<view class="reg-header">
+  <view class="reg-seal">斋</view>
+  <view class="reg-title">{{editMode ? '修改资料' : '入斋登记'}}</view>
+  <view class="reg-sub">{{editMode ? '「 学籍有变，及时更正 」' : '「 请填学籍，以入同窗之列 」'}}</view>
+</view>
+
+<view class="card">
+  <view class="form-item">
+    <view class="form-label">姓名</view>
+    <input class="form-input" placeholder="填写真实姓名" value="{{name}}" bindinput="onName" maxlength="20" />
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">学号</view>
+    <input class="form-input" type="text" placeholder="填写学号" value="{{studentId}}" bindinput="onStudentId" maxlength="30" />
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">班级</view>
+    <input class="form-input" placeholder="如：高三（2）班" value="{{className}}" bindinput="onClassName" maxlength="30" />
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">职位</view>
+    <picker mode="selector" range="{{positions}}" value="{{positionIndex}}" bindchange="onPosition">
+      <view class="picker-value {{position ? '' : 'picker-placeholder'}}">{{position || '请选择职位'}}</view>
+    </picker>
+    <view class="position-tip">选择班委职务（班长、学习委员等）即具备发布作业、活动与发起签到的权限</view>
+  </view>
+
+  <button
+    class="{{submitting ? 'btn-disabled' : 'btn-primary'}}"
+    disabled="{{submitting}}"
+    bindtap="submit"
+  >{{editMode ? '保 存 资 料' : '登 记 入 斋'}}</button>
+</view>

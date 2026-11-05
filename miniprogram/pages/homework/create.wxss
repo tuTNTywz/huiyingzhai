@@ -1,0 +1,36 @@
+.picker-row {
+  display: flex;
+  gap: 16rpx;
+}
+.picker-row picker {
+  flex: 1;
+}
+
+.attach-btn {
+  text-align: center;
+  padding: 18rpx 0;
+  background: #f6f1e4;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f6f1e4;
+  border-radius: 10rpx;
+  padding: 16rpx 20rpx;
+  margin-top: 14rpx;
+}
+.file-name {
+  font-size: 26rpx;
+  color: #6f6858;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-del {
+  font-size: 24rpx;
+  color: #b5543c;
+  padding-left: 20rpx;
+}

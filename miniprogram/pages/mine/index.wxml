@@ -1,0 +1,71 @@
+<view class="page-header">
+  <view class="page-title">我的</view>
+  <view class="page-sub">「 温故而知新 」</view>
+</view>
+
+<!-- 个人信息 -->
+<view class="card">
+  <view class="section-title">个人信息</view>
+  <view class="profile-top" wx:if="{{user}}">
+    <view class="avatar">{{initial}}</view>
+    <view class="profile-name">
+      <view class="name">{{user.name || '未登记'}}</view>
+      <view class="profile-tags">
+        <text class="tag {{isCommittee ? 'tag-gold' : 'tag-green'}}">{{isCommittee ? '班委' : '普通同学'}}</text>
+        <text class="tag {{registered ? 'tag-gold' : 'tag-red'}}">{{registered ? '已登记' : '未登记'}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="divider"></view>
+
+  <view class="cell"><view class="cell-label">姓　名</view><view class="cell-value">{{user.name || '—'}}</view></view>
+  <view class="cell"><view class="cell-label">学　号</view><view class="cell-value">{{user.studentId || '—'}}</view></view>
+  <view class="cell"><view class="cell-label">班　级</view><view class="cell-value">{{user.className || '—'}}</view></view>
+  <view class="cell"><view class="cell-label">职　位</view><view class="cell-value">{{user.position || '—'}}</view></view>
+  <view class="cell"><view class="cell-label">身　份</view><view class="cell-value">{{isCommittee ? '班委' : '普通同学'}}</view></view>
+
+  <button class="btn-primary edit-btn" bindtap="openRegister">{{registered ? '登记 / 修改资料' : '立即登记'}}</button>
+</view>
+
+<view class="card tip-card">
+  <view class="section-title">说明</view>
+  <view class="tip-text">· 首次登录需登记姓名、学号、班级与职位\n· 也可随时在此处打开登记窗口修改个人信息\n· 班委职位（班长、学习委员等）可发布作业、活动并发起签到\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
+</view>
+
+<!-- 注册窗口 -->
+<view class="modal-mask" wx:if="{{showModal}}" bindtap="closeRegister">
+  <view class="modal-card" catchtap="noop">
+    <view class="modal-seal">斋</view>
+    <view class="modal-title">{{registered ? '修改资料' : '入斋登记'}}</view>
+    <view class="modal-sub">「 请填学籍，以入同窗之列 」</view>
+
+    <view class="form-item">
+      <view class="form-label">姓名</view>
+      <input class="form-input" placeholder="填写真实姓名" value="{{form.name}}" data-field="name" bindinput="onField" maxlength="20" />
+    </view>
+
+    <view class="form-item">
+      <view class="form-label">学号</view>
+      <input class="form-input" placeholder="填写学号" value="{{form.studentId}}" data-field="studentId" bindinput="onField" maxlength="30" />
+    </view>
+
+    <view class="form-item">
+      <view class="form-label">班级</view>
+      <input class="form-input" placeholder="如：高三（2）班" value="{{form.className}}" data-field="className" bindinput="onField" maxlength="30" />
+    </view>
+
+    <view class="form-item">
+      <view class="form-label">职位</view>
+      <picker mode="selector" range="{{positions}}" value="{{positionIndex}}" bindchange="onPosition">
+        <view class="picker-value {{form.position ? '' : 'picker-placeholder'}}">{{form.position || '请选择职位'}}</view>
+      </picker>
+      <view class="position-tip">班委职务可发布作业、活动与发起签到；职位变更会同步更新身份</view>
+    </view>
+
+    <view class="modal-actions">
+      <button wx:if="{{registered}}" class="btn-plain" bindtap="closeRegister">取 消</button>
+      <button class="{{submitting ? 'btn-disabled' : 'btn-primary'}}" disabled="{{submitting}}" bindtap="submit">{{submitting ? '提交中…' : submitText}}</button>
+    </view>
+  </view>
+</view>

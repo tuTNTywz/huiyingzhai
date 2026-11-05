@@ -1,0 +1,127 @@
+.page-header {
+  padding: 40rpx 32rpx 8rpx;
+}
+.page-title {
+  font-size: 44rpx;
+  font-weight: bold;
+  letter-spacing: 4rpx;
+}
+.page-sub {
+  font-size: 24rpx;
+  color: #8a8478;
+  margin-top: 8rpx;
+}
+.profile-top {
+  display: flex;
+  align-items: center;
+  margin-top: 20rpx;
+}
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: #e8dcc6;
+  color: #9c6b4a;
+  font-size: 44rpx;
+  margin-right: 28rpx;
+}
+.profile-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.name {
+  font-size: 38rpx;
+  font-weight: bold;
+  margin-bottom: 8rpx;
+}
+.profile-tags {
+  display: flex;
+  gap: 8rpx;
+}
+.cell-label {
+  font-size: 28rpx;
+  color: #6f6858;
+}
+.cell-value {
+  font-size: 28rpx;
+  color: #3d3a34;
+}
+.edit-btn {
+  margin-top: 32rpx;
+}
+.section-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #9c6b4a;
+  margin-bottom: 12rpx;
+}
+.tip-text {
+  font-size: 24rpx;
+  color: #8a8478;
+  white-space: pre-wrap;
+}
+
+/* 注册窗口 */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx;
+  background: rgba(61, 58, 52, 0.48);
+}
+.modal-card {
+  width: 100%;
+  max-height: 84vh;
+  overflow-y: auto;
+  background: #fdfbf6;
+  border: 1rpx solid #e4dccb;
+  border-radius: 20rpx;
+  padding: 36rpx 30rpx 30rpx;
+  box-shadow: 0 12rpx 40rpx rgba(60, 45, 25, 0.18);
+}
+.modal-seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 10rpx;
+  background: #9c6b4a;
+  color: #fdfbf6;
+  font-size: 32rpx;
+}
+.modal-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  letter-spacing: 4rpx;
+  margin-top: 20rpx;
+}
+.modal-sub {
+  font-size: 23rpx;
+  color: #8a8478;
+  margin: 6rpx 0 30rpx;
+}
+.position-tip {
+  font-size: 22rpx;
+  color: #8a8478;
+  margin-top: 12rpx;
+  line-height: 1.5;
+}
+.modal-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 12rpx;
+}
+.modal-actions button {
+  flex: 1;
+}

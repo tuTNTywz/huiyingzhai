@@ -1,0 +1,34 @@
+.page-header {
+  padding: 40rpx 32rpx 8rpx;
+}
+.page-title {
+  font-size: 44rpx;
+  font-weight: bold;
+  letter-spacing: 4rpx;
+}
+.page-sub {
+  font-size: 24rpx;
+  color: #8a8478;
+  margin-top: 8rpx;
+}
+.create-btn {
+  margin: 24rpx 24rpx 0;
+  text-align: center;
+}
+.act-item:active {
+  background: #f6f0e2;
+}
+.act-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14rpx;
+}
+.act-line {
+  font-size: 26rpx;
+  color: #6f6858;
+  margin-top: 8rpx;
+}
+.act-creator {
+  margin-top: 14rpx;
+}

@@ -1,0 +1,19 @@
+<view class="card" wx:if="{{activity}}">
+  <view class="detail-title">{{activity.title}}</view>
+  <view class="detail-meta">
+    <text class="tag {{ended ? 'tag-gray' : 'tag-gold'}}">{{ended ? '已结束' : '待举办'}}</text>
+    <text class="subtitle">发布于 {{activity.createTimeText}}</text>
+  </view>
+
+  <view class="divider"></view>
+
+  <view class="info-row"><text class="info-label">时　间</text><text>{{activity.timeText}}</text></view>
+  <view class="info-row"><text class="info-label">地　点</text><text>{{activity.place}}</text></view>
+  <view class="info-row"><text class="info-label">发布人</text><text>{{activity.creatorName}}（班委）</text></view>
+
+  <view class="divider"></view>
+  <view class="section-title">活动说明</view>
+  <view class="detail-desc">{{activity.content || '（暂无详细说明）'}}</view>
+
+  <button wx:if="{{isCommittee}}" class="btn-plain del-btn" bindtap="onDelete">删除活动</button>
+</view>

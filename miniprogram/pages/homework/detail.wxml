@@ -1,0 +1,29 @@
+<view class="card" wx:if="{{homework}}">
+  <view class="detail-title">{{homework.title}}</view>
+  <view class="detail-meta">
+    <text class="tag {{expired ? 'tag-gray' : 'tag-green'}}">{{expired ? '已截止' : '进行中'}}</text>
+    <text class="subtitle">截止：{{homework.deadlineText}}</text>
+  </view>
+  <view class="subtitle detail-creator">布置人：{{homework.creatorName}} · {{homework.createTimeText}}</view>
+
+  <view class="divider"></view>
+
+  <view class="section-title">作业说明</view>
+  <view class="detail-desc">{{homework.desc || '（详见附件）'}}</view>
+
+  <block wx:if="{{homework.attachments.length}}">
+    <view class="divider"></view>
+    <view class="section-title">附件列表</view>
+    <view
+      class="cell file-row"
+      wx:for="{{homework.attachments}}"
+      wx:key="fileID"
+      data-fileid="{{item.fileID}}"
+      data-name="{{item.name}}"
+      bindtap="downloadFile"
+    >
+      <view class="file-name">📄 {{item.name}}</view>
+      <view class="file-action">{{downloading === item.fileID ? '下载中…' : '查看'}}</view>
+    </view>
+  </block>
+</view>

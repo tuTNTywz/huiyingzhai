@@ -1,0 +1,27 @@
+<view class="page-header">
+  <view class="page-title">签到簿</view>
+  <view class="page-sub">「 学而时习之 」</view>
+</view>
+
+<block wx:if="{{isCommittee}}">
+  <view class="btn-primary create-btn" bindtap="goCreate">＋ 发起签到</view>
+</block>
+
+<view wx:if="{{!loading && list.length === 0}}" class="empty">暂无签到任务</view>
+
+<view
+  class="card sign-item"
+  wx:for="{{list}}"
+  wx:key="_id"
+  data-id="{{item._id}}"
+  bindtap="goDetail"
+>
+  <view class="sign-top">
+    <view class="title">{{item.title}}</view>
+    <text class="tag {{item.status === 'active' ? 'tag-green' : item.status === 'pending' ? 'tag-gold' : 'tag-gray'}}">
+      {{item.status === 'active' ? '进行中' : item.status === 'pending' ? '未开始' : '已结束'}}
+    </text>
+  </view>
+  <view class="subtitle sign-meta">截止：{{item.endText}}</view>
+  <view class="subtitle">发起人：{{item.creatorName}}</view>
+</view>

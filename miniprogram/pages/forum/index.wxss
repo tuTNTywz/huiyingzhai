@@ -1,0 +1,68 @@
+.page-header {
+  padding: 40rpx 32rpx 8rpx;
+}
+.page-title {
+  font-size: 44rpx;
+  font-weight: bold;
+  letter-spacing: 4rpx;
+}
+.page-sub {
+  font-size: 24rpx;
+  color: #8a8478;
+  margin-top: 8rpx;
+}
+.compose-hint {
+  font-size: 26rpx;
+  color: #9c6b4a;
+  margin-bottom: 14rpx;
+}
+.compose-input {
+  background: #f6f1e4;
+  border-radius: 12rpx;
+  padding: 18rpx 24rpx;
+  width: auto;
+  height: 150rpx;
+  font-size: 28rpx;
+}
+.compose-btn {
+  margin-top: 24rpx;
+}
+.post-item:active {
+  background: #f6f0e2;
+}
+.post-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.post-author {
+  display: flex;
+  align-items: center;
+  font-size: 27rpx;
+}
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background: #e8dcc6;
+  color: #9c6b4a;
+  font-size: 26rpx;
+  margin-right: 14rpx;
+}
+.post-content {
+  font-size: 28rpx;
+  color: #3d3a34;
+  margin: 18rpx 0;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.post-foot {
+  border-top: 1rpx solid #eee8da;
+  padding-top: 14rpx;
+}

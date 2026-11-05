@@ -1,0 +1,65 @@
+{
+  "pages": [
+    "pages/homework/index",
+    "pages/activity/index",
+    "pages/forum/index",
+    "pages/sign/index",
+    "pages/mine/index",
+    "pages/homework/create",
+    "pages/homework/detail",
+    "pages/activity/create",
+    "pages/activity/detail",
+    "pages/forum/detail",
+    "pages/sign/create",
+    "pages/sign/detail",
+    "pages/register/index"
+  ],
+  "window": {
+    "backgroundColor": "#f5f1e8",
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#f5f1e8",
+    "navigationBarTitleText": "汇英斋",
+    "navigationBarTextStyle": "black"
+  },
+  "tabBar": {
+    "color": "#8a8478",
+    "selectedColor": "#9c6b4a",
+    "backgroundColor": "#f5f1e8",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/homework/index",
+        "text": "作业",
+        "iconPath": "images/icons/home.png",
+        "selectedIconPath": "images/icons/home-active.png"
+      },
+      {
+        "pagePath": "pages/activity/index",
+        "text": "活动",
+        "iconPath": "images/icons/goods.png",
+        "selectedIconPath": "images/icons/goods-active.png"
+      },
+      {
+        "pagePath": "pages/forum/index",
+        "text": "交流",
+        "iconPath": "images/icons/examples.png",
+        "selectedIconPath": "images/icons/examples-active.png"
+      },
+      {
+        "pagePath": "pages/sign/index",
+        "text": "签到",
+        "iconPath": "images/icons/business.png",
+        "selectedIconPath": "images/icons/business-active.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "images/icons/usercenter.png",
+        "selectedIconPath": "images/icons/usercenter-active.png"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}
