@@ -1,32 +1,27 @@
 // 入斋登记：首次登录注册（姓名、学号、班级、职位），亦支持修改资料
 const app = getApp();
-const { POSITIONS, validateProfile, saveProfile } = require("../../utils/profile");
+const { validateProfile, saveProfile, getPositionFor, DEFAULT_CLASS } = require("../../utils/profile");
 
 Page({
   data: {
     editMode: false,
-    positions: POSITIONS,
     name: "",
     studentId: "",
-    className: "",
+    className: DEFAULT_CLASS,
     position: "",
-    positionIndex: 0,
     submitting: false,
   },
 
   onLoad(options) {
     const editMode = options.edit === "1";
-    this.setData({ editMode });
+    this.setData({ editMode, className: DEFAULT_CLASS });
     if (editMode) {
       wx.setNavigationBarTitle({ title: "修改资料" });
       const u = app.globalData.userInfo || {};
-      const idx = Math.max(0, POSITIONS.indexOf(u.position));
       this.setData({
         name: u.name || "",
         studentId: u.studentId || "",
-        className: u.className || "",
-        position: u.position || "",
-        positionIndex: idx,
+        position: getPositionFor(u.studentId),
       });
     }
   },
@@ -35,16 +30,12 @@ Page({
     this.setData({ name: e.detail.value });
   },
   onStudentId(e) {
-    this.setData({ studentId: e.detail.value });
+    // 职务由名单字典根据学号自动匹配
+    this.setData({
+      studentId: e.detail.value,
+      position: getPositionFor(e.detail.value),
+    });
   },
-  onClassName(e) {
-    this.setData({ className: e.detail.value });
-  },
-  onPosition(e) {
-    const idx = Number(e.detail.value);
-    this.setData({ positionIndex: idx, position: POSITIONS[idx] });
-  },
-
   submit() {
     const form = {
       name: this.data.name,

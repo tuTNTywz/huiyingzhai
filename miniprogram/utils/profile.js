@@ -1,8 +1,9 @@
 // 学籍登记共用逻辑：登记页与「我的」弹窗复用
-const POSITIONS = [
-  "普通同学", "班长", "副班长", "团支书", "学习委员", "生活委员",
-  "文艺委员", "体育委员", "组织委员", "宣传委员", "纪律委员",
-];
+// 职位与角色均由名单字典（roster.js）根据学号自动确定
+const { POSITIONS, getPositionFor } = require("./roster");
+
+// 班级固定为本班，无需手动填写
+const DEFAULT_CLASS = "人工智能26A3班";
 
 function validateProfile(form = {}) {
   if (!String(form.name || "").trim()) return "请填写姓名";
@@ -24,7 +25,7 @@ function saveProfile(form) {
           studentId: String(form.studentId).trim(),
           className: String(form.className).trim(),
           position: form.position,
-          // 课代表由班长在课程设置中统一指定，登记时不可自选
+          // 课代表由管理员在课程设置中统一指定，登记时不可自选
         },
       },
     })
@@ -36,4 +37,4 @@ function saveProfile(form) {
     });
 }
 
-module.exports = { POSITIONS, validateProfile, saveProfile };
+module.exports = { POSITIONS, getPositionFor, DEFAULT_CLASS, validateProfile, saveProfile };

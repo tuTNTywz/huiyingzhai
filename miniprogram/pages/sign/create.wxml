@@ -1,11 +1,11 @@
 <view class="card">
   <view class="form-item">
-    <view class="form-label">签到主题</view>
-    <input class="form-input" placeholder="如：周五晚自习签到" value="{{title}}" bindinput="onTitle" />
+    <view class="form-label">志愿活动主题</view>
+    <input class="form-input" placeholder="如：敬老院慰问服务" value="{{title}}" bindinput="onTitle" />
   </view>
 
   <view class="form-item">
-    <view class="form-label">签到截止时间</view>
+    <view class="form-label">报名截止时间</view>
     <view class="picker-row">
       <picker mode="date" value="{{date}}" start="{{minDate}}" bindchange="onDate">
         <view class="picker-value {{date ? '' : 'picker-placeholder'}}">
@@ -22,5 +22,5 @@
     class="{{submitting ? 'btn-disabled' : 'btn-primary'}}"
     disabled="{{submitting}}"
     bindtap="submit"
-  >发起签到</button>
+  >发布志愿活动</button>
 </view>

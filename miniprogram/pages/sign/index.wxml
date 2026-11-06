@@ -1,13 +1,13 @@
 <view class="page-header">
-  <view class="page-title">签到簿</view>
-  <view class="page-sub">「 学而时习之 」</view>
+  <view class="page-title">志愿活动</view>
+  <view class="page-sub">「 赠人玫瑰，手有余香 」</view>
 </view>
 
-<block wx:if="{{isCommittee}}">
-  <view class="btn-primary create-btn" bindtap="goCreate">＋ 发起签到</view>
+<block wx:if="{{canCreate}}">
+  <view class="btn-primary create-btn" bindtap="goCreate">＋ 发布志愿活动</view>
 </block>
 
-<view wx:if="{{!loading && list.length === 0}}" class="empty">暂无签到任务</view>
+<view wx:if="{{!loading && list.length === 0}}" class="empty">暂无志愿活动</view>
 
 <view
   class="card sign-item"

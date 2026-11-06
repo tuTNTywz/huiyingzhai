@@ -15,7 +15,7 @@
   <view class="cell"><view class="cell-label">学　　分</view><view class="cell-value">{{creditText}}</view></view>
   <view class="cell"><view class="cell-label">课程安排</view><view class="cell-value">{{settings.schedule || '待设置'}}</view></view>
   <view class="cell"><view class="cell-label">课　代表</view><view class="cell-value">{{settings.repName || fallbackRep}}</view></view>
-  <button wx:if="{{isMonitor}}" class="btn-plain setting-btn" bindtap="openSettings">编辑课程设置（班长）</button>
+  <button wx:if="{{isMonitor}}" class="btn-plain setting-btn" bindtap="openSettings">编辑课程设置（管理员）</button>
 </view>
 
 <view wx:if="{{canManage}}" class="btn-primary publish-btn" bindtap="openPublish">＋ 发布任务通知</view>
@@ -47,11 +47,11 @@
   <view class="task-toggle">{{expandedId === item._id ? '收起 ▲' : '展开全文 ▼'}}</view>
 </view>
 
-<!-- 课程设置编辑窗口（班长） -->
+<!-- 课程设置编辑窗口（管理员） -->
 <view class="modal-mask" wx:if="{{showSettings}}" bindtap="closeSettings">
   <view class="modal-card" catchtap="noop">
     <view class="modal-title">课程设置</view>
-    <view class="modal-sub">{{subjectName}} · 仅班长可编辑</view>
+    <view class="modal-sub">{{subjectName}} · 仅管理员可编辑</view>
 
     <view class="form-item">
       <view class="form-label">任课老师</view>

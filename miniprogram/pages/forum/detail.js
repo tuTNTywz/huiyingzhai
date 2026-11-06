@@ -43,7 +43,7 @@ Page({
             ...p,
             timeText: formatTime(toDateMs(p.createTime)),
             avatarText: (p.nickname || "同").charAt(0),
-            isCommittee: p.role === "committee",
+            isCommittee: p.role === "committee" || p.role === "admin",
           },
         });
         return db

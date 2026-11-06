@@ -3,34 +3,34 @@
     <view class="detail-title">{{task.title}}</view>
     <view class="detail-meta">
       <text class="tag {{status === 'active' ? 'tag-green' : 'tag-gray'}}">
-        {{status === 'active' ? '签到进行中' : '签到已结束'}}
+        {{status === 'active' ? '报名进行中' : '报名已截止'}}
       </text>
       <text class="subtitle">截止：{{task.endText}}</text>
     </view>
-    <view class="subtitle detail-creator">发起人：{{task.creatorName}} · {{countText}}</view>
+    <view class="subtitle detail-creator">发布人：{{task.creatorName}} · {{countText}}</view>
 
-    <!-- 已签到状态 -->
+    <!-- 已报名状态 -->
     <view wx:if="{{myRecord}}" class="signed-box">
       <view class="signed-icon">✓</view>
-      <view>您已签到</view>
+      <view>您已报名</view>
       <view class="subtitle">{{myRecord.timeText}}</view>
     </view>
 
-    <!-- 签到按钮 -->
+    <!-- 报名按钮 -->
     <button
       wx:elif="{{status === 'active'}}"
       class="{{signing ? 'btn-disabled' : 'btn-primary'}} sign-btn"
       disabled="{{signing}}"
       bindtap="doSign"
-    >{{signing ? '签 到 中…' : '签 到'}}</button>
+    >{{signing ? '报 名 中…' : '报 名'}}</button>
 
-    <view wx:else class="btn-disabled sign-btn" style="text-align:center;">签到已截止</view>
+    <view wx:else class="btn-disabled sign-btn" style="text-align:center;">报名已截止</view>
   </view>
 
-  <!-- 签到记录（班委与同学均可查看） -->
+  <!-- 报名记录（所有人可查看） -->
   <view class="card">
-    <view class="section-title">签到记录</view>
-    <view wx:if="{{records.length === 0}}" class="empty-sm">尚无人签到</view>
+    <view class="section-title">报名记录</view>
+    <view wx:if="{{records.length === 0}}" class="empty-sm">尚无人报名</view>
     <view class="cell record-row" wx:for="{{records}}" wx:key="_openid">
       <view class="record-name">{{index + 1}}. {{item.nickname}}</view>
       <view class="subtitle">{{item.timeText}}</view>
