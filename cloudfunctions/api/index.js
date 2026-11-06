@@ -11,6 +11,12 @@ const POSITIONS = [
 ];
 const COMMITTEE_POSITIONS = POSITIONS.filter((p) => p !== "普通同学");
 
+// 学科板块白名单（与小程序端 utils/subjects.js 保持一致）
+const SUBJECT_KEYS = [
+  "english", "math", "psychology", "ai", "physics",
+  "defense", "ideology", "pe", "career",
+];
+
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   const { action, data = {} } = event;
@@ -53,6 +59,8 @@ exports.main = async (event) => {
         const studentId = String(data.studentId || "").trim();
         const className = String(data.className || "").trim();
         const position = String(data.position || "").trim();
+        // 课代表由班长在课程设置中统一指定，登记时不可自行选择
+        const subject = user.subject || "";
         if (!name || !studentId || !className || !position) {
           return { ok: false, msg: "请完整填写姓名、学号、班级与职位" };
         }
@@ -69,6 +77,7 @@ exports.main = async (event) => {
             studentId,
             className,
             position,
+            subject,
             role,
             nickname: name,
             registered: true,
@@ -78,12 +87,91 @@ exports.main = async (event) => {
         return {
           ok: true,
           registered: true,
-          user: { ...user, name, studentId, className, position, role, nickname: name, registered: true },
+          user: { ...user, name, studentId, className, position, subject, role, nickname: name, registered: true },
         };
       }
 
       case "setNickname": {
         await usersCol.doc(user._id).update({ data: { nickname: data.nickname } });
+        return { ok: true };
+      }
+
+      // ===== 课程设置：仅班长统一编辑 =====
+      case "saveSubjectSettings": {
+        if (user.position !== "班长") return { ok: false, msg: "仅班长可编辑课程设置" };
+        const key = String(data.subject || "");
+        if (!SUBJECT_KEYS.includes(key)) return { ok: false, msg: "板块不存在" };
+        const teacher = String(data.teacher || "").trim();
+        const credit = String(data.credit || "").trim();
+        const schedule = String(data.schedule || "").trim();
+        const repOpenid = String(data.repOpenid || "").trim();
+        let repName = "";
+        let rep = null;
+
+        if (repOpenid) {
+          const repRes = await usersCol.where({ _openid: repOpenid, registered: true }).get();
+          rep = repRes.data[0];
+          if (!rep) return { ok: false, msg: "所选课代表不存在" };
+          repName = rep.name || rep.nickname;
+        }
+        // 先清除该科目原课代表，再指定新任
+        await usersCol.where({ subject: key }).update({ data: { subject: "" } });
+        if (rep) await usersCol.doc(rep._id).update({ data: { subject: key } });
+
+        const payload = {
+          subject: key,
+          teacher,
+          credit,
+          schedule,
+          repOpenid,
+          repName,
+          updaterName: user.nickname,
+          updateTime: db.serverDate(),
+        };
+        const settingsCol = db.collection("subject_settings");
+        const exist = await settingsCol.where({ subject: key }).get();
+        if (exist.data.length) {
+          await settingsCol.doc(exist.data[0]._id).update({ data: payload });
+        } else {
+          await settingsCol.add({ data: payload });
+        }
+        return { ok: true, settings: payload };
+      }
+
+      // ===== 学科板块：课程设置指定的课代表（或班委）发布任务通知 =====
+      case "publishSubjectTask": {
+        if (!SUBJECT_KEYS.includes(data.subject)) return { ok: false, msg: "板块不存在" };
+        const settingsRes = await db.collection("subject_settings").where({ subject: data.subject }).get();
+        const settings = settingsRes.data[0];
+        // 兼容班长尚未设置课代表的情况
+        const isRep = settings ? settings.repOpenid === OPENID : user.subject === data.subject;
+        if (!isRep && user.role !== "committee") {
+          return { ok: false, msg: "仅该科目课代表或班委可发布任务通知" };
+        }
+        const title = String(data.title || "").trim();
+        if (!title) return { ok: false, msg: "请填写任务通知标题" };
+        const res = await db.collection("subject_tasks").add({
+          data: {
+            subject: data.subject,
+            title,
+            content: String(data.content || "").trim(),
+            deadline: data.deadline || 0, // 时间戳(ms)，0 表示不设截止
+            creatorOpenid: OPENID,
+            creatorName: user.nickname,
+            createTime: db.serverDate(),
+          },
+        });
+        return { ok: true, id: res._id };
+      }
+
+      case "deleteSubjectTask": {
+        const taskRes = await db.collection("subject_tasks").doc(data.id).get();
+        const task = taskRes.data;
+        if (!task) return { ok: false, msg: "任务通知不存在" };
+        if (task.creatorOpenid !== OPENID && user.subject !== task.subject && user.role !== "committee") {
+          return { ok: false, msg: "无权删除该任务通知" };
+        }
+        await db.collection("subject_tasks").doc(data.id).remove();
         return { ok: true };
       }
 

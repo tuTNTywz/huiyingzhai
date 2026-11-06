@@ -24,6 +24,7 @@ function saveProfile(form) {
           studentId: String(form.studentId).trim(),
           className: String(form.className).trim(),
           position: form.position,
+          // 课代表由班长在课程设置中统一指定，登记时不可自选
         },
       },
     })

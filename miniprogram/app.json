@@ -12,7 +12,8 @@
     "pages/forum/detail",
     "pages/sign/create",
     "pages/sign/detail",
-    "pages/register/index"
+    "pages/register/index",
+    "pages/subject/index"
   ],
   "window": {
     "backgroundColor": "#f5f1e8",

@@ -45,6 +45,20 @@ App({
     });
   },
 
+  // 重新拉取最新用户资料（班长指定课代表后同步展示）
+  refreshUser() {
+    return wx.cloud
+      .callFunction({ name: "api", data: { action: "login" } })
+      .then((res) => {
+        if (res.result && res.result.ok) {
+          this.globalData.userInfo = res.result.user;
+          this.globalData.registered = !!res.result.registered;
+        }
+        return this.globalData.userInfo;
+      })
+      .catch(() => this.globalData.userInfo);
+  },
+
   // 登记 / 修改资料成功后更新全局用户信息
   updateUser(user) {
     this.globalData.userInfo = user;
@@ -56,5 +70,11 @@ App({
   // 判断是否班委
   isCommittee() {
     return this.globalData.userInfo && this.globalData.userInfo.role === "committee";
+  },
+
+  // 判断是否为某学科课代表（或班委）
+  canManageSubject(key) {
+    const u = this.globalData.userInfo;
+    return !!(u && (u.role === "committee" || u.subject === key));
   },
 });
