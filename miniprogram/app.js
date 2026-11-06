@@ -45,7 +45,7 @@ App({
     });
   },
 
-  // 重新拉取最新用户资料（班长指定课代表后同步展示）
+  // 重新拉取最新用户资料（管理员指定课代表后同步展示）
   refreshUser() {
     return wx.cloud
       .callFunction({ name: "api", data: { action: "login" } })
@@ -67,14 +67,26 @@ App({
     if (this.userReadyCallback) this.userReadyCallback(user);
   },
 
-  // 判断是否班委
+  // 判断是否班委（管理员同样具备班委权限）
   isCommittee() {
-    return this.globalData.userInfo && this.globalData.userInfo.role === "committee";
+    const r = this.globalData.userInfo && this.globalData.userInfo.role;
+    return r === "committee" || r === "admin";
   },
 
-  // 判断是否为某学科课代表（或班委）
+  // 判断是否管理员
+  isAdmin() {
+    return this.globalData.userInfo && this.globalData.userInfo.role === "admin";
+  },
+
+  // 判断是否可发布志愿活动（宣传委员或管理员）
+  canCreateVolunteer() {
+    const u = this.globalData.userInfo;
+    return !!u && (u.role === "admin" || u.position === "宣传委员");
+  },
+
+  // 判断是否为某学科课代表（或班委/管理员）
   canManageSubject(key) {
     const u = this.globalData.userInfo;
-    return !!(u && (u.role === "committee" || u.subject === key));
+    return !!(u && (u.role === "committee" || u.role === "admin" || u.subject === key));
   },
 });

@@ -1,4 +1,4 @@
-// 签到任务列表
+// 志愿活动列表
 const app = getApp();
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
@@ -7,12 +7,12 @@ Page({
   data: {
     list: [],
     loading: true,
-    isCommittee: false,
+    canCreate: false,
   },
 
   onShow() {
     if (!requireRegistered()) return;
-    const refresh = () => this.setData({ isCommittee: app.isCommittee() });
+    const refresh = () => this.setData({ canCreate: app.canCreateVolunteer() });
     if (app.globalData.userInfo) refresh();
     else app.userReadyCallback = refresh;
     this.fetchList();

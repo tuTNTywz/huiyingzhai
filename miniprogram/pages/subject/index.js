@@ -1,4 +1,4 @@
-// 学科板块页：课程设置（班长编辑） + 课代表发布任务通知
+// 学科板块页：课程设置（管理员编辑） + 课代表发布任务通知
 const app = getApp();
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
@@ -56,7 +56,7 @@ Page({
     requireRegistered();
     const ready = () => {
       const u = app.globalData.userInfo || {};
-      this.setData({ isMonitor: u.position === "班长" });
+      this.setData({ isMonitor: u.role === "admin" });
       this.updateCanManage();
     };
     if (app.globalData.userInfo) ready();
@@ -101,7 +101,7 @@ Page({
       .catch(() => {});
   },
 
-  // 兼容班长尚未设置课代表时，按登记资料查询
+  // 兼容管理员尚未设置课代表时，按登记资料查询
   fetchRep() {
     wx.cloud
       .database()
@@ -150,7 +150,7 @@ Page({
     this.setData({ expandedId: this.data.expandedId === id ? "" : id });
   },
 
-  // ===== 课程设置（班长） =====
+  // ===== 课程设置（管理员） =====
   openSettings() {
     if (!this.data.isMonitor) return;
     const s = this.data.settings;

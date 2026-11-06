@@ -1,15 +1,14 @@
-// 云函数 api：统一处理写操作，服务端校验班委权限
+// 云函数 api：统一处理写操作，服务端校验权限
 const cloud = require("wx-server-sdk");
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
-// 职位列表：除「普通同学」外均为班委职务，注册时据此确定角色
-const POSITIONS = [
-  "普通同学", "班长", "副班长", "团支书", "学习委员", "生活委员",
-  "文艺委员", "体育委员", "组织委员", "宣传委员", "纪律委员",
-];
-const COMMITTEE_POSITIONS = POSITIONS.filter((p) => p !== "普通同学");
+// 学号 → 职务名单字典（管理员/班委/普通同学均以名单为准）
+const { ROSTER, ADMIN_IDS } = require("./roster");
+
+// 班委或管理员均视为管理角色（可发布/删除作业、活动等）
+const isManager = (u) => u.role === "committee" || u.role === "admin";
 
 // 学科板块白名单（与小程序端 utils/subjects.js 保持一致）
 const SUBJECT_KEYS = [
@@ -58,19 +57,25 @@ exports.main = async (event) => {
         const name = String(data.name || "").trim();
         const studentId = String(data.studentId || "").trim();
         const className = String(data.className || "").trim();
-        const position = String(data.position || "").trim();
-        // 课代表由班长在课程设置中统一指定，登记时不可自行选择
-        const subject = user.subject || "";
-        if (!name || !studentId || !className || !position) {
-          return { ok: false, msg: "请完整填写姓名、学号、班级与职位" };
+        if (!name || !studentId || !className) {
+          return { ok: false, msg: "请完整填写姓名、学号与班级" };
         }
-        if (!POSITIONS.includes(position)) return { ok: false, msg: "职位无效" };
+        // 课代表由管理员在课程设置中统一指定，登记时不可自行选择
+        const subject = user.subject || "";
         // 学号唯一，防止冒用他人学籍
         const dup = await usersCol.where({ studentId }).get();
         if (dup.data.some((u) => u._openid !== OPENID)) {
           return { ok: false, msg: "该学号已被注册" };
         }
-        const role = COMMITTEE_POSITIONS.includes(position) ? "committee" : "student";
+        // 职务以名单字典为准：学号命中则取字典职务，否则为普通同学
+        const position = ROSTER[studentId] || "普通同学";
+        // 管理员学号或管理员职务 → admin；其余班委职务 → committee
+        const role =
+          position === "管理员" || ADMIN_IDS.includes(studentId)
+            ? "admin"
+            : position === "普通同学"
+              ? "student"
+              : "committee";
         await usersCol.doc(user._id).update({
           data: {
             name,
@@ -96,9 +101,9 @@ exports.main = async (event) => {
         return { ok: true };
       }
 
-      // ===== 课程设置：仅班长统一编辑 =====
+      // ===== 课程设置：仅管理员统一编辑（原班长权限，班长职务已移除） =====
       case "saveSubjectSettings": {
-        if (user.position !== "班长") return { ok: false, msg: "仅班长可编辑课程设置" };
+        if (user.role !== "admin") return { ok: false, msg: "仅管理员可编辑课程设置" };
         const key = String(data.subject || "");
         if (!SUBJECT_KEYS.includes(key)) return { ok: false, msg: "板块不存在" };
         const teacher = String(data.teacher || "").trim();
@@ -143,10 +148,10 @@ exports.main = async (event) => {
         if (!SUBJECT_KEYS.includes(data.subject)) return { ok: false, msg: "板块不存在" };
         const settingsRes = await db.collection("subject_settings").where({ subject: data.subject }).get();
         const settings = settingsRes.data[0];
-        // 兼容班长尚未设置课代表的情况
+        // 兼容管理员尚未设置课代表的情况
         const isRep = settings ? settings.repOpenid === OPENID : user.subject === data.subject;
-        if (!isRep && user.role !== "committee") {
-          return { ok: false, msg: "仅该科目课代表或班委可发布任务通知" };
+        if (!isRep && !isManager(user)) {
+          return { ok: false, msg: "仅该科目课代表、班委或管理员可发布任务通知" };
         }
         const title = String(data.title || "").trim();
         if (!title) return { ok: false, msg: "请填写任务通知标题" };
@@ -168,7 +173,7 @@ exports.main = async (event) => {
         const taskRes = await db.collection("subject_tasks").doc(data.id).get();
         const task = taskRes.data;
         if (!task) return { ok: false, msg: "任务通知不存在" };
-        if (task.creatorOpenid !== OPENID && user.subject !== task.subject && user.role !== "committee") {
+        if (task.creatorOpenid !== OPENID && user.subject !== task.subject && !isManager(user)) {
           return { ok: false, msg: "无权删除该任务通知" };
         }
         await db.collection("subject_tasks").doc(data.id).remove();
@@ -176,7 +181,7 @@ exports.main = async (event) => {
       }
 
       case "publishHomework": {
-        if (user.role !== "committee") return { ok: false, msg: "仅班委可发布作业" };
+        if (!isManager(user)) return { ok: false, msg: "仅班委或管理员可发布作业" };
         if (!data.title || !data.deadline) return { ok: false, msg: "缺少标题或截止时间" };
         const res = await db.collection("homeworks").add({
           data: {
@@ -196,7 +201,7 @@ exports.main = async (event) => {
         const hwRes = await db.collection("homeworks").doc(data.id).get();
         const hw = hwRes.data;
         if (!hw) return { ok: false, msg: "作业不存在" };
-        if (user.role !== "committee") return { ok: false, msg: "仅班委可删除作业" };
+        if (!isManager(user)) return { ok: false, msg: "仅班委或管理员可删除作业" };
         await db.collection("homeworks").doc(data.id).remove();
         // 删除云存储附件
         const fileIDs = (hw.attachments || []).map((a) => a.fileID).filter(Boolean);
@@ -204,14 +209,17 @@ exports.main = async (event) => {
         return { ok: true };
       }
 
-      case "createSignTask": {
-        if (user.role !== "committee") return { ok: false, msg: "仅班委可发起签到" };
-        if (!data.title || !data.endTime) return { ok: false, msg: "缺少签到主题或截止时间" };
+      // ===== 志愿活动栏目：仅宣传委员（或管理员）可发布 =====
+      case "createVolunteer": {
+        if (user.position !== "宣传委员" && user.role !== "admin") {
+          return { ok: false, msg: "仅宣传委员可发布志愿活动" };
+        }
+        if (!data.title || !data.endTime) return { ok: false, msg: "缺少志愿活动主题或报名截止时间" };
         const res = await db.collection("sign_tasks").add({
           data: {
             title: data.title,
             startTime: data.startTime || Date.now(),
-            endTime: data.endTime, // 时间戳(ms)
+            endTime: data.endTime, // 报名截止时间戳(ms)
             creatorOpenid: OPENID,
             creatorName: user.nickname,
             createTime: db.serverDate(),
@@ -220,36 +228,36 @@ exports.main = async (event) => {
         return { ok: true, id: res._id };
       }
 
-      case "signIn": {
-        if (!data.taskId) return { ok: false, msg: "缺少签到任务" };
+      case "joinVolunteer": {
+        if (!data.taskId) return { ok: false, msg: "缺少志愿活动" };
         const taskRes = await db.collection("sign_tasks").doc(data.taskId).get();
         const task = taskRes.data;
-        if (!task) return { ok: false, msg: "签到任务不存在" };
+        if (!task) return { ok: false, msg: "志愿活动不存在" };
         const now = Date.now();
-        if (now < task.startTime) return { ok: false, msg: "签到尚未开始" };
-        if (now > task.endTime) return { ok: false, msg: "签到已截止" };
+        if (now < task.startTime) return { ok: false, msg: "报名尚未开始" };
+        if (now > task.endTime) return { ok: false, msg: "报名已截止" };
         const dup = await db
           .collection("sign_records")
           .where({ taskId: data.taskId, _openid: OPENID })
           .get();
-        if (dup.data.length) return { ok: false, msg: "您已签到，无需重复操作" };
+        if (dup.data.length) return { ok: false, msg: "您已报名，无需重复操作" };
         await db.collection("sign_records").add({
           data: {
             taskId: data.taskId,
             taskTitle: task.title,
             _openid: OPENID,
             nickname: user.nickname,
-            signTime: db.serverDate(), // 云端记录签到时间
+            signTime: db.serverDate(), // 云端记录报名时间
             onTime: true,
             createTime: db.serverDate(),
           },
         });
-        return { ok: true, msg: "签到成功" };
+        return { ok: true, msg: "报名成功" };
       }
 
-      // ===== 活动栏目：仅班委发布 =====
+      // ===== 活动栏目：班委或管理员发布 =====
       case "publishActivity": {
-        if (user.role !== "committee") return { ok: false, msg: "仅班委可发布活动" };
+        if (!isManager(user)) return { ok: false, msg: "仅班委或管理员可发布活动" };
         if (!data.title || !data.activityTime) return { ok: false, msg: "缺少活动标题或时间" };
         const res = await db.collection("activities").add({
           data: {
@@ -266,7 +274,7 @@ exports.main = async (event) => {
       }
 
       case "deleteActivity": {
-        if (user.role !== "committee") return { ok: false, msg: "仅班委可删除活动" };
+        if (!isManager(user)) return { ok: false, msg: "仅班委或管理员可删除活动" };
         await db.collection("activities").doc(data.id).remove();
         return { ok: true };
       }
@@ -315,7 +323,7 @@ exports.main = async (event) => {
         const postRes = await db.collection("posts").doc(data.id).get();
         const post = postRes.data;
         if (!post) return { ok: false, msg: "帖子不存在" };
-        if (post._openid !== OPENID && user.role !== "committee") {
+        if (post._openid !== OPENID && !isManager(user)) {
           return { ok: false, msg: "只能删除自己的帖子" };
         }
         await db.collection("posts").doc(data.id).remove();

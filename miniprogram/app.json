@@ -48,7 +48,7 @@
       },
       {
         "pagePath": "pages/sign/index",
-        "text": "签到",
+        "text": "志愿活动",
         "iconPath": "images/icons/business.png",
         "selectedIconPath": "images/icons/business-active.png"
       },

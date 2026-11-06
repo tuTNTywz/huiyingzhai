@@ -1,4 +1,4 @@
-// 签到详情：同学在线签到，班委查看签到记录
+// 志愿活动详情：同学在线报名，查看报名记录
 const app = getApp();
 const { formatTime, toDateMs } = require("../../utils/util");
 
@@ -42,7 +42,7 @@ Page({
           task: { ...t, endText: formatTime(end) },
           status,
         });
-        // 查询签到记录（所有用户可读）
+        // 查询报名记录（所有用户可读）
         return db
           .collection("sign_records")
           .where({ taskId: this.id })
@@ -59,28 +59,28 @@ Page({
             this.setData({
               records,
               myRecord,
-              countText: `共 ${records.length} 人签到`,
+              countText: `共 ${records.length} 人报名`,
             });
           });
       })
-      .catch(() => wx.showToast({ title: "签到任务不存在", icon: "none" }));
+      .catch(() => wx.showToast({ title: "志愿活动不存在", icon: "none" }));
   },
 
-  // 同学在线签到
+  // 同学在线报名
   doSign() {
     if (this.data.signing) return;
     this.setData({ signing: true });
     wx.cloud
       .callFunction({
         name: "api",
-        data: { action: "signIn", data: { taskId: this.id } },
+        data: { action: "joinVolunteer", data: { taskId: this.id } },
       })
       .then((res) => {
         if (res.result.ok) {
-          wx.showToast({ title: "签到成功", icon: "success" });
+          wx.showToast({ title: "报名成功", icon: "success" });
           this.fetchAll();
         } else {
-          wx.showModal({ title: "签到失败", content: res.result.msg, showCancel: false });
+          wx.showModal({ title: "报名失败", content: res.result.msg, showCancel: false });
         }
       })
       .catch(() => wx.showToast({ title: "网络异常", icon: "none" }))

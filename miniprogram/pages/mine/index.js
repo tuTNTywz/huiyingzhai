@@ -1,21 +1,20 @@
 // 我的：个人信息 + 页内登记/修改资料弹窗
 const app = getApp();
 const { requireRegistered } = require("../../utils/guard");
-const { POSITIONS, validateProfile, saveProfile } = require("../../utils/profile");
+const { validateProfile, saveProfile, getPositionFor, DEFAULT_CLASS } = require("../../utils/profile");
 const { subjectName } = require("../../utils/subjects");
 
-const emptyForm = () => ({ name: "", studentId: "", className: "", position: "" });
+const emptyForm = () => ({ name: "", studentId: "", className: DEFAULT_CLASS, position: "" });
 
 Page({
   data: {
     user: null,
     isCommittee: false,
+    isAdmin: false,
     initial: "同",
     registered: false,
     subjectDisplayName: "—",
     showModal: false,
-    positions: POSITIONS,
-    positionIndex: 0,
     form: emptyForm(),
     submitting: false,
     submitText: "保 存",
@@ -32,7 +31,7 @@ Page({
     };
     if (app.globalData.userInfo) ready();
     else app.userReadyCallback = ready;
-    // 班长指定课代表后，刷新最新资料用于个人信息展示
+    // 管理员指定课代表后，刷新最新资料用于个人信息展示
     app.refreshUser().then(() => this.refresh());
   },
 
@@ -41,7 +40,8 @@ Page({
     if (!u) return;
     this.setData({
       user: u,
-      isCommittee: u.role === "committee",
+      isCommittee: u.role === "committee" || u.role === "admin",
+      isAdmin: u.role === "admin",
       registered: !!u.registered,
       subjectDisplayName: subjectName(u.subject) || "—",
       submitText: u.registered ? "保 存" : "登 记 入 斋",
@@ -49,18 +49,16 @@ Page({
     });
   },
 
-  // 打开注册窗口，已登记时预填个人信息
+  // 打开注册窗口，已登记时预填个人信息（职务按名单字典自动匹配）
   openRegister() {
     const u = app.globalData.userInfo || {};
-    const posIdx = Math.max(0, POSITIONS.indexOf(u.position));
     this.setData({
       showModal: true,
-      positionIndex: posIdx,
       form: {
         name: u.name || "",
         studentId: u.studentId || "",
-        className: u.className || "",
-        position: u.position || "",
+        className: DEFAULT_CLASS,
+        position: getPositionFor(u.studentId),
       },
     });
   },
@@ -78,12 +76,10 @@ Page({
 
   onField(e) {
     const field = e.currentTarget.dataset.field;
-    this.setData({ [`form.${field}`]: e.detail.value });
-  },
-
-  onPosition(e) {
-    const idx = Number(e.detail.value);
-    this.setData({ positionIndex: idx, "form.position": POSITIONS[idx] });
+    const patch = { [`form.${field}`]: e.detail.value };
+    // 职务由名单字典根据学号自动匹配
+    if (field === "studentId") patch["form.position"] = getPositionFor(e.detail.value);
+    this.setData(patch);
   },
 
   submit() {
