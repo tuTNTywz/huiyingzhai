@@ -25,7 +25,7 @@
     <picker mode="selector" range="{{positions}}" value="{{positionIndex}}" bindchange="onPosition">
       <view class="picker-value {{position ? '' : 'picker-placeholder'}}">{{position || '请选择职位'}}</view>
     </picker>
-    <view class="position-tip">选择班委职务（班长、学习委员等）即具备发布作业、活动与发起签到的权限</view>
+    <view class="position-tip">班委职务（班长、学习委员等）可发布作业、活动与发起签到；各学科课代表由班长在课程设置中指定</view>
   </view>
 
   <button
