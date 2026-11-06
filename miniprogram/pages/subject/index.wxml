@@ -1,0 +1,119 @@
+<view class="board-header">
+  <view class="board-ordinal">{{ordinal}}</view>
+  <view class="board-name">{{subjectName}}</view>
+  <view class="board-sub">「 课业所在，各有专司 」</view>
+  <view class="board-rep">
+    <text class="tag tag-gold">课代表</text>
+    <text class="subtitle">{{settings.repName || fallbackRep}}</text>
+  </view>
+</view>
+
+<!-- 课程设置 -->
+<view class="card settings-card">
+  <view class="section-title">课程设置</view>
+  <view class="cell"><view class="cell-label">任课老师</view><view class="cell-value">{{settings.teacher || '待设置'}}</view></view>
+  <view class="cell"><view class="cell-label">学　　分</view><view class="cell-value">{{creditText}}</view></view>
+  <view class="cell"><view class="cell-label">课程安排</view><view class="cell-value">{{settings.schedule || '待设置'}}</view></view>
+  <view class="cell"><view class="cell-label">课　代表</view><view class="cell-value">{{settings.repName || fallbackRep}}</view></view>
+  <button wx:if="{{isMonitor}}" class="btn-plain setting-btn" bindtap="openSettings">编辑课程设置（班长）</button>
+</view>
+
+<view wx:if="{{canManage}}" class="btn-primary publish-btn" bindtap="openPublish">＋ 发布任务通知</view>
+
+<view wx:if="{{!loading && list.length === 0}}" class="empty">本科目暂无任务通知</view>
+
+<view
+  class="card task-item"
+  wx:for="{{list}}"
+  wx:key="_id"
+  data-id="{{item._id}}"
+  bindtap="toggleExpand"
+  bindlongpress="onDelete"
+>
+  <view class="task-top">
+    <view class="title">{{item.title}}</view>
+    <text wx:if="{{item.deadlineText}}" class="tag {{item.expired ? 'tag-gray' : 'tag-green'}}">
+      {{item.expired ? '已截止' : '进行中'}}
+    </text>
+    <text wx:else class="tag tag-gold">通知</text>
+  </view>
+
+  <view class="task-content {{expandedId === item._id ? 'expanded' : ''}}">{{item.content || '（无详细内容）'}}</view>
+
+  <view class="task-meta">
+    <text class="subtitle" wx:if="{{item.deadlineText}}">截止：{{item.deadlineText}}</text>
+    <text class="subtitle">发布：{{item.creatorName}} · {{item.createTimeText}}</text>
+  </view>
+  <view class="task-toggle">{{expandedId === item._id ? '收起 ▲' : '展开全文 ▼'}}</view>
+</view>
+
+<!-- 课程设置编辑窗口（班长） -->
+<view class="modal-mask" wx:if="{{showSettings}}" bindtap="closeSettings">
+  <view class="modal-card" catchtap="noop">
+    <view class="modal-title">课程设置</view>
+    <view class="modal-sub">{{subjectName}} · 仅班长可编辑</view>
+
+    <view class="form-item">
+      <view class="form-label">任课老师</view>
+      <input class="form-input" placeholder="填写任课老师姓名" value="{{settingsForm.teacher}}" data-field="teacher" bindinput="onSettingsField" maxlength="20" />
+    </view>
+
+    <view class="form-item">
+      <view class="form-label">学分</view>
+      <input class="form-input" type="digit" placeholder="如：3.0" value="{{settingsForm.credit}}" data-field="credit" bindinput="onSettingsField" maxlength="6" />
+    </view>
+
+    <view class="form-item">
+      <view class="form-label">课程安排</view>
+      <textarea class="form-textarea" placeholder="如：周一 3-4 节 · 教三 201" value="{{settingsForm.schedule}}" data-field="schedule" bindinput="onSettingsField" maxlength="200" />
+    </view>
+
+    <view class="form-item">
+      <view class="form-label">课代表</view>
+      <picker mode="selector" range="{{userOptions}}" range-key="label" value="{{repIndex}}" bindchange="onRepChange">
+        <view class="picker-value">{{repLabel}}</view>
+      </picker>
+      <view class="position-tip">从已登记同学中指定，每科目限一位；课代表可在本板块发布任务通知</view>
+    </view>
+
+    <view class="modal-actions">
+      <button class="btn-plain" bindtap="closeSettings">取 消</button>
+      <button class="{{savingSettings ? 'btn-disabled' : 'btn-primary'}}" disabled="{{savingSettings}}" bindtap="saveSettings">{{savingSettings ? '保存中…' : '保 存'}}</button>
+    </view>
+  </view>
+</view>
+
+<!-- 发布任务通知弹窗 -->
+<view class="modal-mask" wx:if="{{showPublish}}" bindtap="closePublish">
+  <view class="modal-card" catchtap="noop">
+    <view class="modal-title">发布任务通知</view>
+    <view class="modal-sub">{{subjectName}} · 课代表发布</view>
+
+    <view class="form-item">
+      <view class="form-label">标题</view>
+      <input class="form-input" placeholder="如：第三单元作业提交提醒" value="{{form.title}}" data-field="title" bindinput="onField" maxlength="50" />
+    </view>
+
+    <view class="form-item">
+      <view class="form-label">通知内容</view>
+      <textarea class="form-textarea" placeholder="填写任务要求、提交方式等…" value="{{form.content}}" data-field="content" bindinput="onField" maxlength="500" />
+    </view>
+
+    <view class="form-item">
+      <view class="form-label">截止时间（选填）</view>
+      <view class="picker-row">
+        <picker mode="date" value="{{form.date}}" start="{{minDate}}" bindchange="onDate">
+          <view class="picker-value {{form.date ? '' : 'picker-placeholder'}}">{{form.date || '不设截止'}}</view>
+        </picker>
+        <picker mode="time" value="{{form.time}}" bindchange="onTime">
+          <view class="picker-value">{{form.time}}</view>
+        </picker>
+      </view>
+    </view>
+
+    <view class="modal-actions">
+      <button class="btn-plain" bindtap="closePublish">取 消</button>
+      <button class="{{submitting ? 'btn-disabled' : 'btn-primary'}}" disabled="{{submitting}}" bindtap="publish">{{submitting ? '发布中…' : '发 布'}}</button>
+    </view>
+  </view>
+</view>

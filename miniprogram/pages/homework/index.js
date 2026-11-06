@@ -1,10 +1,12 @@
-// 作业列表页
+// 作业首页：九个学科板块入口 + 班级作业列表
 const app = getApp();
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
+const { SUBJECTS } = require("../../utils/subjects");
 
 Page({
   data: {
+    subjects: SUBJECTS,
     list: [],
     loading: true,
     isCommittee: false,
@@ -27,6 +29,12 @@ Page({
 
   onUnload() {
     clearInterval(this.timer);
+  },
+
+  goSubject(e) {
+    wx.navigateTo({
+      url: `/pages/subject/index?key=${e.currentTarget.dataset.key}`,
+    });
   },
 
   fetchList() {

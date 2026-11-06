@@ -24,13 +24,14 @@
   <view class="cell"><view class="cell-label">班　级</view><view class="cell-value">{{user.className || '—'}}</view></view>
   <view class="cell"><view class="cell-label">职　位</view><view class="cell-value">{{user.position || '—'}}</view></view>
   <view class="cell"><view class="cell-label">身　份</view><view class="cell-value">{{isCommittee ? '班委' : '普通同学'}}</view></view>
+  <view class="cell"><view class="cell-label">负责科目</view><view class="cell-value">{{subjectDisplayName}}</view></view>
 
   <button class="btn-primary edit-btn" bindtap="openRegister">{{registered ? '登记 / 修改资料' : '立即登记'}}</button>
 </view>
 
 <view class="card tip-card">
   <view class="section-title">说明</view>
-  <view class="tip-text">· 首次登录需登记姓名、学号、班级与职位\n· 也可随时在此处打开登记窗口修改个人信息\n· 班委职位（班长、学习委员等）可发布作业、活动并发起签到\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
+  <view class="tip-text">· 首次登录需登记姓名、学号、班级与职位\n· 班委职位可发布作业、活动并发起签到；班长可编辑课程设置\n· 任课老师、学分、课程安排与课代表由班长在各学科板块统一设置\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
 </view>
 
 <!-- 注册窗口 -->
@@ -60,7 +61,7 @@
       <picker mode="selector" range="{{positions}}" value="{{positionIndex}}" bindchange="onPosition">
         <view class="picker-value {{form.position ? '' : 'picker-placeholder'}}">{{form.position || '请选择职位'}}</view>
       </picker>
-      <view class="position-tip">班委职务可发布作业、活动与发起签到；职位变更会同步更新身份</view>
+      <view class="position-tip">班委职务可发布作业、活动与发起签到；课代表由班长指定</view>
     </view>
 
     <view class="modal-actions">

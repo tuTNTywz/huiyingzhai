@@ -2,6 +2,7 @@
 const app = getApp();
 const { requireRegistered } = require("../../utils/guard");
 const { POSITIONS, validateProfile, saveProfile } = require("../../utils/profile");
+const { subjectName } = require("../../utils/subjects");
 
 const emptyForm = () => ({ name: "", studentId: "", className: "", position: "" });
 
@@ -11,6 +12,7 @@ Page({
     isCommittee: false,
     initial: "同",
     registered: false,
+    subjectDisplayName: "—",
     showModal: false,
     positions: POSITIONS,
     positionIndex: 0,
@@ -30,6 +32,8 @@ Page({
     };
     if (app.globalData.userInfo) ready();
     else app.userReadyCallback = ready;
+    // 班长指定课代表后，刷新最新资料用于个人信息展示
+    app.refreshUser().then(() => this.refresh());
   },
 
   refresh() {
@@ -39,6 +43,7 @@ Page({
       user: u,
       isCommittee: u.role === "committee",
       registered: !!u.registered,
+      subjectDisplayName: subjectName(u.subject) || "—",
       submitText: u.registered ? "保 存" : "登 记 入 斋",
       initial: (u.name || u.nickname || "同").charAt(0),
     });
@@ -47,10 +52,10 @@ Page({
   // 打开注册窗口，已登记时预填个人信息
   openRegister() {
     const u = app.globalData.userInfo || {};
-    const idx = Math.max(0, POSITIONS.indexOf(u.position));
+    const posIdx = Math.max(0, POSITIONS.indexOf(u.position));
     this.setData({
       showModal: true,
-      positionIndex: idx,
+      positionIndex: posIdx,
       form: {
         name: u.name || "",
         studentId: u.studentId || "",

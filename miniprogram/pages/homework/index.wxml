@@ -3,12 +3,32 @@
   <view class="page-sub">「 业精于勤，荒于嬉 」</view>
 </view>
 
+<view class="section-head">学科板块</view>
+<view class="subject-grid">
+  <view
+    class="subject-cell"
+    wx:for="{{subjects}}"
+    wx:key="key"
+    data-key="{{item.key}}"
+    bindtap="goSubject"
+  >
+    <view class="subject-inner">
+      <view class="subject-top">
+        <view class="subject-ordinal">{{item.ordinal}}</view>
+        <view class="subject-arrow">进入 ›</view>
+      </view>
+      <view class="subject-name">{{item.name}}</view>
+    </view>
+  </view>
+</view>
+
+<view class="section-head class-hw-head">班级作业</view>
 <block wx:if="{{isCommittee}}">
   <view class="btn-primary create-btn" bindtap="goCreate">＋ 发布作业</view>
 </block>
 
 <view wx:if="{{!loading && list.length === 0}}" class="empty">
-  暂无作业，静候先生布置
+  暂无班级作业，静候先生布置
 </view>
 
 <view
