@@ -9,6 +9,16 @@ const _ = db.command;
 // 班委或管理员均视为管理角色（可发布/删除作业、活动等）
 const isManager = (u) => u.role === "committee" || u.role === "admin";
 
+// 判断是否某科目课代表：名单 roster 集合中该学号的 repSubjects 包含该科目
+async function isRepOf(studentId, subjectKey) {
+  if (!studentId || !subjectKey) return false;
+  const res = await db
+    .collection("roster")
+    .where({ studentId, repSubjects: subjectKey })
+    .get();
+  return res.data.length > 0;
+}
+
 // 学科板块白名单（与小程序端 utils/subjects.js 保持一致）
 const SUBJECT_KEYS = [
   "english", "math", "psychology", "ai", "physics",
@@ -115,8 +125,6 @@ exports.main = async (event) => {
         if (!name || !studentId || !className) {
           return { ok: false, msg: "请完整填写姓名、学号与班级" };
         }
-        // 课代表由管理员在课程设置中统一指定，登记时不可自行选择
-        const subject = user.subject || "";
         // 学号唯一，防止冒用他人学籍
         const dup = await usersCol.where({ studentId }).get();
         if (dup.data.some((u) => u._openid !== OPENID)) {
@@ -138,7 +146,6 @@ exports.main = async (event) => {
             studentId,
             className,
             position,
-            subject,
             role,
             nickname: name,
             registered: true,
@@ -148,7 +155,7 @@ exports.main = async (event) => {
         return {
           ok: true,
           registered: true,
-          user: { ...user, name, studentId, className, position, subject, role, nickname: name, registered: true },
+          user: { ...user, name, studentId, className, position, role, nickname: name, registered: true },
         };
       }
 
@@ -157,7 +164,7 @@ exports.main = async (event) => {
         return { ok: true };
       }
 
-      // ===== 课程设置：仅管理员统一编辑（原班长权限，班长职务已移除） =====
+      // ===== 课程设置：仅管理员统一编辑（课代表由名单 roster 集合的 repSubjects 字段决定） =====
       case "saveSubjectSettings": {
         if (user.role !== "admin") return { ok: false, msg: "仅管理员可编辑课程设置" };
         const key = String(data.subject || "");
@@ -165,27 +172,12 @@ exports.main = async (event) => {
         const teacher = String(data.teacher || "").trim();
         const credit = String(data.credit || "").trim();
         const schedule = String(data.schedule || "").trim();
-        const repOpenid = String(data.repOpenid || "").trim();
-        let repName = "";
-        let rep = null;
-
-        if (repOpenid) {
-          const repRes = await usersCol.where({ _openid: repOpenid, registered: true }).get();
-          rep = repRes.data[0];
-          if (!rep) return { ok: false, msg: "所选课代表不存在" };
-          repName = rep.name || rep.nickname;
-        }
-        // 先清除该科目原课代表，再指定新任
-        await usersCol.where({ subject: key }).update({ data: { subject: "" } });
-        if (rep) await usersCol.doc(rep._id).update({ data: { subject: key } });
 
         const payload = {
           subject: key,
           teacher,
           credit,
           schedule,
-          repOpenid,
-          repName,
           updaterName: user.nickname,
           updateTime: db.serverDate(),
         };
@@ -199,13 +191,10 @@ exports.main = async (event) => {
         return { ok: true, settings: payload };
       }
 
-      // ===== 学科板块：课程设置指定的课代表（或班委）发布任务通知 =====
+      // ===== 学科板块：名单指定的课代表（或班委/管理员）发布任务通知 =====
       case "publishSubjectTask": {
         if (!SUBJECT_KEYS.includes(data.subject)) return { ok: false, msg: "板块不存在" };
-        const settingsRes = await db.collection("subject_settings").where({ subject: data.subject }).get();
-        const settings = settingsRes.data[0];
-        // 兼容管理员尚未设置课代表的情况
-        const isRep = settings ? settings.repOpenid === OPENID : user.subject === data.subject;
+        const isRep = await isRepOf(user.studentId, data.subject);
         if (!isRep && !isManager(user)) {
           return { ok: false, msg: "仅该科目课代表、班委或管理员可发布任务通知" };
         }
@@ -228,7 +217,8 @@ exports.main = async (event) => {
       case "deleteSubjectTask": {
         const task = await getDocOrNull("subject_tasks", data.id);
         if (!task) return { ok: false, msg: "任务通知不存在" };
-        if (task.creatorOpenid !== OPENID && user.subject !== task.subject && !isManager(user)) {
+        const isRep = task.creatorOpenid === OPENID || (await isRepOf(user.studentId, task.subject));
+        if (!isRep && !isManager(user)) {
           return { ok: false, msg: "无权删除该任务通知" };
         }
         await db.collection("subject_tasks").doc(data.id).remove();

@@ -1,7 +1,7 @@
 // 我的：个人信息 + 页内登记/修改资料弹窗
 const app = getApp();
 const { requireRegistered } = require("../../utils/guard");
-const { validateProfile, saveProfile, matchPosition, DEFAULT_CLASS } = require("../../utils/profile");
+const { validateProfile, saveProfile, matchPosition, loadRoster, getRepSubjects, DEFAULT_CLASS } = require("../../utils/profile");
 const { subjectName } = require("../../utils/subjects");
 
 const emptyForm = () => ({ name: "", studentId: "", className: DEFAULT_CLASS, position: "" });
@@ -43,13 +43,19 @@ Page({
       isCommittee: u.role === "committee" || u.role === "admin",
       isAdmin: u.role === "admin",
       registered: !!u.registered,
-      subjectDisplayName: subjectName(u.subject) || "—",
       submitText: u.registered ? "保 存" : "登 记 入 斋",
       initial: (u.name || u.nickname || "同").charAt(0),
     });
+    // 负责科目从名单 roster 集合的 repSubjects 字段读取
+    loadRoster().then(() => {
+      const names = getRepSubjects(u.studentId)
+        .map((k) => subjectName(k))
+        .filter(Boolean);
+      this.setData({ subjectDisplayName: names.join("、") || "—" });
+    });
   },
 
-  // 打开注册窗口，已登记时预填个人信息（职务按名单字典自动匹配）
+  // 打开注册窗口，已登记时预填个人信息（职务按名单自动匹配）
   openRegister() {
     const u = app.globalData.userInfo || {};
     this.setData({

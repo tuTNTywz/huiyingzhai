@@ -4,7 +4,7 @@
   <view class="board-sub">「 课业所在，各有专司 」</view>
   <view class="board-rep">
     <text class="tag tag-gold">课代表</text>
-    <text class="subtitle">{{settings.repName || fallbackRep}}</text>
+    <text class="subtitle">{{fallbackRep}}</text>
   </view>
 </view>
 
@@ -14,7 +14,7 @@
   <view class="cell"><view class="cell-label">任课老师</view><view class="cell-value">{{settings.teacher || '待设置'}}</view></view>
   <view class="cell"><view class="cell-label">学　　分</view><view class="cell-value">{{creditText}}</view></view>
   <view class="cell"><view class="cell-label">课程安排</view><view class="cell-value">{{settings.schedule || '待设置'}}</view></view>
-  <view class="cell"><view class="cell-label">课　代表</view><view class="cell-value">{{settings.repName || fallbackRep}}</view></view>
+  <view class="cell"><view class="cell-label">课　代表</view><view class="cell-value">{{fallbackRep}}</view></view>
   <button wx:if="{{isMonitor}}" class="btn-plain setting-btn" bindtap="openSettings">编辑课程设置（管理员）</button>
 </view>
 
@@ -68,13 +68,7 @@
       <textarea class="form-textarea" placeholder="如：周一 3-4 节 · 教三 201" value="{{settingsForm.schedule}}" data-field="schedule" bindinput="onSettingsField" maxlength="200" />
     </view>
 
-    <view class="form-item">
-      <view class="form-label">课代表</view>
-      <picker mode="selector" range="{{userOptions}}" range-key="label" value="{{repIndex}}" bindchange="onRepChange">
-        <view class="picker-value">{{repLabel}}</view>
-      </picker>
-      <view class="position-tip">从已登记同学中指定，每科目限一位；课代表可在本板块发布任务通知</view>
-    </view>
+    <view class="position-tip">课代表由班级名单（数据库 roster 集合）指定，如需调整请联系管理员修改名单</view>
 
     <view class="modal-actions">
       <button class="btn-plain" bindtap="closeSettings">取 消</button>

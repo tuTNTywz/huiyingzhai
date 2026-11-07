@@ -1,11 +1,13 @@
 // 学科板块页：课程设置（管理员编辑） + 课代表发布任务通知
+// 课代表由名单 roster 集合的 repSubjects 字段指定
 const app = getApp();
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 const { getSubject } = require("../../utils/subjects");
+const { isSubjectRep } = require("../../utils/profile");
 
 const emptyTaskForm = () => ({ title: "", content: "", date: "", time: "23:59" });
-const emptySettingsForm = () => ({ teacher: "", credit: "", schedule: "", repOpenid: "" });
+const emptySettingsForm = () => ({ teacher: "", credit: "", schedule: "" });
 
 Page({
   data: {
@@ -27,9 +29,6 @@ Page({
     submitting: false,
     showSettings: false,
     settingsForm: emptySettingsForm(),
-    userOptions: [],
-    repIndex: 0,
-    repLabel: "暂不设置",
     savingSettings: false,
   },
 
@@ -73,13 +72,12 @@ Page({
     wx.stopPullDownRefresh();
   },
 
-  // 课程设置指定的课代表（或班委）可发布任务通知
+  // 名单指定的课代表（或班委/管理员）可发布任务通知
   updateCanManage() {
     const u = app.globalData.userInfo || {};
-    const canManage = this.data.hasSettings
-      ? this.data.settings.repOpenid === u._openid
-      : app.canManageSubject(this.data.key);
-    this.setData({ canManage: app.isCommittee() || canManage });
+    isSubjectRep(this.data.key).then((isRep) => {
+      this.setData({ canManage: app.isCommittee() || isRep });
+    });
   },
 
   fetchSettings() {
@@ -101,17 +99,17 @@ Page({
       .catch(() => {});
   },
 
-  // 兼容管理员尚未设置课代表时，按登记资料查询
+  // 从名单 roster 集合查询该科目课代表姓名
   fetchRep() {
     wx.cloud
       .database()
-      .collection("users")
-      .where({ subject: this.data.key, registered: true })
+      .collection("roster")
+      .where({ repSubjects: this.data.key })
       .limit(1)
       .get()
       .then((res) => {
         const rep = res.data[0];
-        this.setData({ fallbackRep: rep ? rep.name || rep.nickname : "暂未设置" });
+        this.setData({ fallbackRep: rep ? rep.name || rep.studentId : "暂未设置" });
       })
       .catch(() => {});
   },
@@ -160,51 +158,17 @@ Page({
         teacher: s.teacher || "",
         credit: s.credit || "",
         schedule: s.schedule || "",
-        repOpenid: s.repOpenid || "",
       },
-      repLabel: s.repName || "暂不设置",
-      repIndex: 0,
     });
-    this.fetchUsers();
   },
 
   closeSettings() {
     this.setData({ showSettings: false });
   },
 
-  fetchUsers() {
-    return wx.cloud
-      .database()
-      .collection("users")
-      .where({ registered: true })
-      .limit(100)
-      .get()
-      .then((res) => {
-        const opts = [{ _openid: "", label: "暂不设置" }].concat(
-          res.data.map((u) => ({
-            _openid: u._openid,
-            label: `${u.name || u.nickname}（${u.studentId || "—"}）`,
-          }))
-        );
-        const idx = Math.max(0, opts.findIndex((o) => o._openid === this.data.settingsForm.repOpenid));
-        this.setData({ userOptions: opts, repIndex: idx, repLabel: opts[idx].label });
-      })
-      .catch(() => {});
-  },
-
   onSettingsField(e) {
     const field = e.currentTarget.dataset.field;
     this.setData({ [`settingsForm.${field}`]: e.detail.value });
-  },
-
-  onRepChange(e) {
-    const idx = Number(e.detail.value);
-    const opt = this.data.userOptions[idx] || { _openid: "", label: "暂不设置" };
-    this.setData({
-      repIndex: idx,
-      repLabel: opt.label,
-      "settingsForm.repOpenid": opt._openid,
-    });
   },
 
   saveSettings() {

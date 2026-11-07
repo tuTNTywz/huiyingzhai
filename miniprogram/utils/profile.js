@@ -6,6 +6,8 @@ const DEFAULT_CLASS = "人工智能26A3班";
 
 // 名单缓存：学号 → 职务（首次使用时从数据库 roster 集合拉取）
 let rosterCache = null;
+// 原始名单记录（含 repSubjects 课代表科目）
+let rosterRecords = [];
 
 function loadRoster() {
   if (rosterCache) return Promise.resolve(rosterCache);
@@ -15,13 +17,27 @@ function loadRoster() {
     .limit(100)
     .get()
     .then((res) => {
+      rosterRecords = res.data || [];
       rosterCache = {};
-      (res.data || []).forEach((r) => {
+      rosterRecords.forEach((r) => {
         if (r.studentId) rosterCache[String(r.studentId)] = r.position || "普通同学";
       });
       return rosterCache;
     })
     .catch(() => (rosterCache = rosterCache || {}));
+}
+
+// 取某学号担任课代表的科目 key 列表（需先 loadRoster）
+function getRepSubjects(studentId) {
+  const id = String(studentId || "").trim();
+  const rec = rosterRecords.find((r) => String(r.studentId) === id);
+  return rec && Array.isArray(rec.repSubjects) ? rec.repSubjects : [];
+}
+
+// 当前登录用户是否为某科目课代表
+function isSubjectRep(subjectKey) {
+  const u = getApp().globalData.userInfo || {};
+  return loadRoster().then(() => getRepSubjects(u.studentId).includes(subjectKey));
 }
 
 // 同步取职务：读取已缓存名单，未加载或未命中时返回普通同学
@@ -67,4 +83,13 @@ function saveProfile(form) {
     });
 }
 
-module.exports = { DEFAULT_CLASS, loadRoster, getPositionFor, matchPosition, validateProfile, saveProfile };
+module.exports = {
+  DEFAULT_CLASS,
+  loadRoster,
+  getPositionFor,
+  matchPosition,
+  getRepSubjects,
+  isSubjectRep,
+  validateProfile,
+  saveProfile,
+};
