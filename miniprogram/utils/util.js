@@ -22,6 +22,14 @@ function formatTimeRange(startTs, endTs) {
   return `${start} 至 ${end}`;
 }
 
+// 文件大小展示
+function formatSize(bytes) {
+  const b = Number(bytes) || 0;
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
 // 从云函数 serverDate 返回的时间对象中取毫秒时间戳
 function toDateMs(v) {
   if (!v) return 0;
@@ -32,4 +40,4 @@ function toDateMs(v) {
   return new Date(v).getTime() || 0;
 }
 
-module.exports = { formatTime, formatTimeRange, toDateMs };
+module.exports = { formatTime, formatTimeRange, formatSize, toDateMs };

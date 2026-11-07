@@ -200,12 +200,22 @@ exports.main = async (event) => {
         }
         const title = String(data.title || "").trim();
         if (!title) return { ok: false, msg: "请填写任务通知标题" };
+        const attachments = (Array.isArray(data.attachments) ? data.attachments : [])
+          .slice(0, 5)
+          .filter((a) => a && a.fileID)
+          .map((a) => ({
+            fileID: String(a.fileID),
+            name: String(a.name || "附件"),
+            type: a.type === "image" ? "image" : "file",
+            size: Number(a.size) || 0,
+          }));
         const res = await db.collection("subject_tasks").add({
           data: {
             subject: data.subject,
             title,
             content: String(data.content || "").trim(),
             deadline: data.deadline || 0, // 时间戳(ms)，0 表示不设截止
+            attachments, // [{ fileID, name, type, size }]
             creatorOpenid: OPENID,
             creatorName: user.nickname,
             createTime: db.serverDate(),
@@ -221,19 +231,36 @@ exports.main = async (event) => {
         if (!isRep && !isManager(user)) {
           return { ok: false, msg: "无权删除该任务通知" };
         }
+        const fileIDs = (task.attachments || []).map((a) => a.fileID).filter(Boolean);
         await db.collection("subject_tasks").doc(data.id).remove();
+        // 一并清理云存储中的附件
+        if (fileIDs.length) {
+          try {
+            await cloud.deleteFile({ fileList: fileIDs });
+          } catch (e) {}
+        }
         return { ok: true };
       }
 
       case "publishHomework": {
         if (!isManager(user)) return { ok: false, msg: "仅班委或管理员可发布作业" };
         if (!data.title || !data.deadline) return { ok: false, msg: "缺少标题或截止时间" };
+        // 服务端规范化附件，避免客户端写入任意字段或超限
+        const attachments = (Array.isArray(data.attachments) ? data.attachments : [])
+          .slice(0, 5)
+          .filter((a) => a && a.fileID)
+          .map((a) => ({
+            fileID: String(a.fileID),
+            name: String(a.name || "附件"),
+            type: a.type === "image" ? "image" : "file",
+            size: Number(a.size) || 0,
+          }));
         const res = await db.collection("homeworks").add({
           data: {
             title: data.title,
             desc: data.desc || "",
             deadline: data.deadline, // 时间戳(ms)
-            attachments: data.attachments || [], // [{ fileID, name }]
+            attachments, // [{ fileID, name, type, size }]
             creatorOpenid: OPENID,
             creatorName: user.nickname,
             createTime: db.serverDate(),
