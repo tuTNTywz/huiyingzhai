@@ -1,7 +1,7 @@
 // 我的：个人信息 + 页内登记/修改资料弹窗
 const app = getApp();
 const { requireRegistered } = require("../../utils/guard");
-const { validateProfile, saveProfile, getPositionFor, DEFAULT_CLASS } = require("../../utils/profile");
+const { validateProfile, saveProfile, matchPosition, DEFAULT_CLASS } = require("../../utils/profile");
 const { subjectName } = require("../../utils/subjects");
 
 const emptyForm = () => ({ name: "", studentId: "", className: DEFAULT_CLASS, position: "" });
@@ -58,9 +58,11 @@ Page({
         name: u.name || "",
         studentId: u.studentId || "",
         className: DEFAULT_CLASS,
-        position: getPositionFor(u.studentId),
+        position: "",
       },
     });
+    // 职务由数据库名单根据学号自动匹配
+    matchPosition(u.studentId).then((p) => this.setData({ "form.position": p }));
   },
 
   closeRegister() {
@@ -77,9 +79,11 @@ Page({
   onField(e) {
     const field = e.currentTarget.dataset.field;
     const patch = { [`form.${field}`]: e.detail.value };
-    // 职务由名单字典根据学号自动匹配
-    if (field === "studentId") patch["form.position"] = getPositionFor(e.detail.value);
     this.setData(patch);
+    // 职务由数据库名单根据学号自动匹配
+    if (field === "studentId") {
+      matchPosition(e.detail.value).then((p) => this.setData({ "form.position": p }));
+    }
   },
 
   submit() {
