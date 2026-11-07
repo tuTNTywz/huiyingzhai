@@ -2,8 +2,15 @@
 Page({
   data: {
     title: "",
-    date: "",
-    time: "23:59",
+    content: "",
+    place: "",
+    activityDate: "",
+    activityStart: "09:00",
+    activityEnd: "11:00",
+    signupMethod: "小程序内报名",
+    methodOptions: ["小程序内报名", "群内接龙", "现场登记", "联系负责人"],
+    date: "", // 报名截止日期
+    time: "23:59", // 报名截止时间
     minDate: "",
     submitting: false,
   },
@@ -19,6 +26,27 @@ Page({
   onTitle(e) {
     this.setData({ title: e.detail.value });
   },
+  onContent(e) {
+    this.setData({ content: e.detail.value });
+  },
+  onPlace(e) {
+    this.setData({ place: e.detail.value });
+  },
+  onActivityDate(e) {
+    this.setData({ activityDate: e.detail.value });
+  },
+  onActivityStart(e) {
+    this.setData({ activityStart: e.detail.value });
+  },
+  onActivityEnd(e) {
+    this.setData({ activityEnd: e.detail.value });
+  },
+  onSignupMethod(e) {
+    this.setData({ signupMethod: e.detail.value });
+  },
+  onMethodChip(e) {
+    this.setData({ signupMethod: e.currentTarget.dataset.value });
+  },
   onDate(e) {
     this.setData({ date: e.detail.value });
   },
@@ -31,14 +59,42 @@ Page({
       wx.showToast({ title: "请填写志愿活动主题", icon: "none" });
       return;
     }
-    if (!this.data.date) {
-      wx.showToast({ title: "请选择截止时间", icon: "none" });
+    if (!this.data.content.trim()) {
+      wx.showToast({ title: "请填写志愿活动内容", icon: "none" });
       return;
     }
+    if (!this.data.place.trim()) {
+      wx.showToast({ title: "请填写志愿活动地点", icon: "none" });
+      return;
+    }
+    if (!this.data.activityDate) {
+      wx.showToast({ title: "请选择志愿活动日期", icon: "none" });
+      return;
+    }
+    if (this.data.activityEnd <= this.data.activityStart) {
+      wx.showToast({ title: "结束时间需晚于开始时间", icon: "none" });
+      return;
+    }
+    if (!this.data.signupMethod.trim()) {
+      wx.showToast({ title: "请填写报名方式", icon: "none" });
+      return;
+    }
+    if (!this.data.date) {
+      wx.showToast({ title: "请选择报名截止时间", icon: "none" });
+      return;
+    }
+
     this.setData({ submitting: true });
     wx.showLoading({ title: "发布中…", mask: true });
 
+    const activityStartTime = new Date(
+      `${this.data.activityDate}T${this.data.activityStart}:00`
+    ).getTime();
+    const activityEndTime = new Date(
+      `${this.data.activityDate}T${this.data.activityEnd}:00`
+    ).getTime();
     const endTime = new Date(`${this.data.date}T${this.data.time}:00`).getTime();
+
     wx.cloud
       .callFunction({
         name: "api",
@@ -46,6 +102,11 @@ Page({
           action: "createVolunteer",
           data: {
             title: this.data.title.trim(),
+            content: this.data.content.trim(),
+            place: this.data.place.trim(),
+            activityStartTime,
+            activityEndTime,
+            signupMethod: this.data.signupMethod.trim(),
             startTime: Date.now(),
             endTime,
           },

@@ -22,6 +22,9 @@
       {{item.status === 'active' ? '进行中' : item.status === 'pending' ? '未开始' : '已结束'}}
     </text>
   </view>
-  <view class="subtitle sign-meta">截止：{{item.endText}}</view>
+  <view wx:if="{{item.activityText}}" class="subtitle sign-meta">活动时间：{{item.activityText}}</view>
+  <view wx:if="{{item.place}}" class="subtitle sign-meta">活动地点：{{item.place}}</view>
+  <view class="subtitle sign-meta">报名方式：{{item.signupMethod}}</view>
+  <view class="subtitle sign-meta">报名截止：{{item.endText}}</view>
   <view class="subtitle">发起人：{{item.creatorName}}</view>
 </view>

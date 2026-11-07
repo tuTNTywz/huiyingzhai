@@ -1,7 +1,51 @@
 <view class="card">
   <view class="form-item">
     <view class="form-label">志愿活动主题</view>
-    <input class="form-input" placeholder="如：敬老院慰问服务" value="{{title}}" bindinput="onTitle" />
+    <input class="form-input" placeholder="如：敬老院慰问服务" value="{{title}}" bindinput="onTitle" maxlength="50" />
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">志愿活动内容</view>
+    <textarea class="form-textarea" placeholder="填写服务内容、工作安排与注意事项…" value="{{content}}" bindinput="onContent" maxlength="500" />
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">志愿活动地点</view>
+    <input class="form-input" placeholder="如：城东敬老院（南门集合）" value="{{place}}" bindinput="onPlace" maxlength="60" />
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">志愿活动时间</view>
+    <picker mode="date" value="{{activityDate}}" start="{{minDate}}" bindchange="onActivityDate">
+      <view class="picker-value {{activityDate ? '' : 'picker-placeholder'}}">
+        {{activityDate || '选择活动日期'}}
+      </view>
+    </picker>
+    <view class="picker-row time-row">
+      <picker mode="time" value="{{activityStart}}" bindchange="onActivityStart">
+        <view class="picker-value">{{activityStart}}</view>
+      </picker>
+      <text class="time-sep">至</text>
+      <picker mode="time" value="{{activityEnd}}" bindchange="onActivityEnd">
+        <view class="picker-value">{{activityEnd}}</view>
+      </picker>
+    </view>
+    <view class="form-tip">开始与结束时间均可自由选择，结束时间需晚于开始时间</view>
+  </view>
+
+  <view class="form-item">
+    <view class="form-label">报名方式</view>
+    <input class="form-input" placeholder="填写报名方式" value="{{signupMethod}}" bindinput="onSignupMethod" maxlength="60" />
+    <view class="method-chips">
+      <text
+        class="method-chip {{signupMethod === item ? 'active' : ''}}"
+        wx:for="{{methodOptions}}"
+        wx:key="*this"
+        data-value="{{item}}"
+        bindtap="onMethodChip"
+      >{{item}}</text>
+    </view>
+    <view class="form-tip">可点击快捷方式，也可自行填写，如：扫码加群后接龙</view>
   </view>
 
   <view class="form-item">
@@ -16,6 +60,7 @@
         <view class="picker-value">{{time}}</view>
       </picker>
     </view>
+    <view class="form-tip">报名截止时间为同学可报名的最后期限，与活动时间段不同</view>
   </view>
 
   <button
