@@ -1,4 +1,4 @@
-<view class="detail-page" wx:if="{{post}}">
+<view class="detail-page {{showAttachPanel ? 'with-panel' : ''}}" wx:if="{{post}}">
   <view class="card">
     <view class="post-head">
       <view class="post-author">
@@ -8,7 +8,24 @@
       </view>
       <text class="subtitle">{{post.timeText}}</text>
     </view>
-    <view class="post-content">{{post.content}}</view>
+    <view wx:if="{{post.content}}" class="post-content">{{post.content}}</view>
+
+    <view wx:if="{{post.attachments.length}}" class="attach-list">
+      <view class="attach-summary">📎 {{post.attachments.length}} 个附件（点击查看）</view>
+      <view
+        class="attach-row"
+        wx:for="{{post.attachments}}"
+        wx:for-item="att"
+        wx:key="fileID"
+        data-fileid="{{att.fileID}}"
+        data-name="{{att.name}}"
+        data-type="{{att.type}}"
+        catchtap="openAttachment"
+      >
+        <text class="attach-name">{{att.type === 'image' ? '🖼' : '📄'}} {{att.name}}</text>
+        <text class="attach-size">{{att.sizeText}}</text>
+      </view>
+    </view>
   </view>
 
   <view class="card">
@@ -22,20 +39,57 @@
         </view>
         <text class="subtitle">{{item.timeText}}</text>
       </view>
-      <view class="reply-content">{{item.content}}</view>
+      <view wx:if="{{item.content}}" class="reply-content">{{item.content}}</view>
+
+      <view wx:if="{{item.attachments.length}}" class="attach-list reply-attach-list">
+        <view
+          class="attach-row"
+          wx:for="{{item.attachments}}"
+          wx:for-item="att"
+          wx:key="fileID"
+          data-fileid="{{att.fileID}}"
+          data-name="{{att.name}}"
+          data-type="{{att.type}}"
+          catchtap="openAttachment"
+        >
+          <text class="attach-name">{{att.type === 'image' ? '🖼' : '📄'}} {{att.name}}</text>
+          <text class="attach-size">{{att.sizeText}}</text>
+        </view>
+      </view>
     </view>
   </view>
 </view>
 
 <view class="reply-bar">
-  <input
-    class="reply-input"
-    placeholder="回复 {{nickname}}…"
-    value="{{content}}"
-    bindinput="onInput"
-    confirm-type="send"
-    bindconfirm="sendReply"
-    maxlength="500"
-  />
-  <view class="reply-send {{sending ? 'sending' : ''}}" bindtap="sendReply">发送</view>
+  <view wx:if="{{showAttachPanel}}" class="attach-panel">
+    <view class="attach-actions">
+      <view class="btn-plain attach-btn" bindtap="chooseFile">＋ 文件</view>
+      <view class="btn-plain attach-btn" bindtap="chooseImage">＋ 照片</view>
+    </view>
+    <view class="form-tip">文件从微信聊天记录选择；照片可相册或拍照，最多 5 个、单个不超过 20MB</view>
+    <view class="file-item" wx:for="{{attachments}}" wx:key="tempPath">
+      <view class="file-name">{{item.type === 'image' ? '🖼' : '📄'}} {{item.name}}
+        <text class="file-size">{{item.sizeText}}</text>
+      </view>
+      <view class="file-del" data-index="{{index}}" catchtap="removeFile">移除</view>
+    </view>
+  </view>
+
+  <view wx:if="{{uploadText}}" class="upload-hint">{{uploadText}}</view>
+
+  <view class="reply-row">
+    <view class="reply-add {{attachBadge ? 'has-files' : ''}}" bindtap="toggleAttachPanel">
+      📎<text wx:if="{{attachBadge}}" class="attach-badge">{{attachBadge}}</text>
+    </view>
+    <input
+      class="reply-input"
+      placeholder="回复 {{nickname}}…"
+      value="{{content}}"
+      bindinput="onInput"
+      confirm-type="send"
+      bindconfirm="sendReply"
+      maxlength="500"
+    />
+    <view class="reply-send {{sending ? 'sending' : ''}}" bindtap="sendReply">发送</view>
+  </view>
 </view>

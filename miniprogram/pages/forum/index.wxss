@@ -66,3 +66,87 @@
   border-top: 1rpx solid #eee8da;
   padding-top: 14rpx;
 }
+
+/* 附件：选择区 */
+.attach-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+.attach-btn {
+  flex: 1;
+  text-align: center;
+  padding: 14rpx 0;
+  background: #f6f1e4;
+}
+.form-tip {
+  font-size: 22rpx;
+  color: #8a8478;
+  margin-top: 12rpx;
+  line-height: 1.5;
+}
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f6f1e4;
+  border-radius: 10rpx;
+  padding: 14rpx 18rpx;
+  margin-top: 12rpx;
+}
+.file-name {
+  flex: 1;
+  font-size: 25rpx;
+  color: #6f6858;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-size {
+  font-size: 22rpx;
+  color: #a49a86;
+  margin-left: 12rpx;
+}
+.file-del {
+  font-size: 24rpx;
+  color: #b5543c;
+  padding-left: 20rpx;
+}
+.upload-hint {
+  font-size: 24rpx;
+  color: #9c6b4a;
+  margin-top: 14rpx;
+}
+
+/* 帖子列表中的附件 */
+.attach-list {
+  background: #f6f1e4;
+  border-radius: 10rpx;
+  padding: 12rpx 18rpx;
+  margin: 6rpx 0 16rpx;
+}
+.attach-summary {
+  font-size: 23rpx;
+  color: #6f6858;
+  margin-bottom: 6rpx;
+}
+.attach-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10rpx 0;
+  border-top: 1rpx solid #e8e0cd;
+}
+.attach-name {
+  flex: 1;
+  font-size: 25rpx;
+  color: #4a463e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attach-size {
+  font-size: 22rpx;
+  color: #a49a86;
+  margin-left: 12rpx;
+}
