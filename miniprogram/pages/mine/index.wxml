@@ -31,7 +31,7 @@
 
 <view class="card tip-card">
   <view class="section-title">说明</view>
-  <view class="tip-text">· 首次登录只需登记姓名与学号，班级和职位自动填好\n· 也可随时在此处打开登记窗口修改个人信息\n· 班委可发布作业与活动，宣传委员可发布志愿活动，管理员拥有全部权限并负责课程设置\n· 各学科课代表由管理员在学科板块的课程设置中指定\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
+  <view class="tip-text">· 首次登录只需登记姓名与学号，班级和职位自动填好\n· 也可随时在此处打开登记窗口修改个人信息\n· 班委可发布作业与活动，宣传委员可发布志愿活动，管理员拥有全部权限并负责课程设置\n· 各学科课代表由班级名单（roster 集合）指定\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
 </view>
 
 <!-- 注册窗口 -->
@@ -59,7 +59,7 @@
     <view class="form-item">
       <view class="form-label">职位</view>
       <view class="picker-value {{form.position ? '' : 'picker-placeholder'}}">{{form.position || '填写学号后自动匹配'}}</view>
-      <view class="position-tip">职位由学号自动匹配班级名单字典；班委可发布作业与活动，宣传委员可发布志愿活动，课代表由管理员指定</view>
+      <view class="position-tip">职位由学号自动匹配班级名单；班委可发布作业与活动，宣传委员可发布志愿活动，课代表由名单指定</view>
     </view>
 
     <view class="modal-actions">

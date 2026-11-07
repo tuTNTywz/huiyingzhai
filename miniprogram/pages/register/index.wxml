@@ -23,7 +23,7 @@
   <view class="form-item">
     <view class="form-label">职位</view>
     <view class="picker-value {{position ? '' : 'picker-placeholder'}}">{{position || '填写学号后自动匹配'}}</view>
-    <view class="position-tip">职位由学号自动匹配班级名单字典；管理员可管理全部内容，班委可发布作业与活动，宣传委员可发布志愿活动，课代表由管理员指定</view>
+    <view class="position-tip">职位由学号自动匹配班级名单；管理员可管理全部内容，班委可发布作业与活动，宣传委员可发布志愿活动，课代表由名单指定</view>
   </view>
 
   <button

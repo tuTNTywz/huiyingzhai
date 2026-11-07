@@ -49,7 +49,7 @@ App({
     });
   },
 
-  // 重新拉取最新用户资料（管理员指定课代表后同步展示）
+  // 重新拉取最新用户资料（重新登记后同步展示）
   refreshUser() {
     return wx.cloud
       .callFunction({ name: "api", data: { action: "login" } })
@@ -86,11 +86,5 @@ App({
   canCreateVolunteer() {
     const u = this.globalData.userInfo;
     return !!u && (u.role === "admin" || u.position === "宣传委员");
-  },
-
-  // 判断是否为某学科课代表（或班委/管理员）
-  canManageSubject(key) {
-    const u = this.globalData.userInfo;
-    return !!(u && (u.role === "committee" || u.role === "admin" || u.subject === key));
   },
 });
