@@ -4,7 +4,7 @@ App({
     // env 参数决定小程序发起的云开发调用请求到哪个云环境
     // 请填入环境 ID（微信开发者工具 -> 云开发 -> 环境设置 中查看）
     // 留空则使用默认环境
-    env: "",
+    env: "cloud1-d6ghclqds0c2bf34d",
     userInfo: null, // { _id, _openid, name, studentId, className, position, nickname, role, registered }
     registered: null, // null=登录中 / false=未注册 / true=已注册
     needRegisterModal: false, // 首次登录自动在「我的」弹出注册窗口
@@ -15,10 +15,14 @@ App({
       console.error("请使用 2.2.3 或以上的基础库以使用云能力");
       return;
     }
-    wx.cloud.init({
-      env: this.globalData.env,
-      traceUser: true,
-    });
+    // env 为空时不传该参数，使用云开发的默认环境（单环境项目可留空）
+    const cloudOptions = { traceUser: true };
+    if (this.globalData.env) cloudOptions.env = this.globalData.env;
+    try {
+      wx.cloud.init(cloudOptions);
+    } catch (e) {
+      console.error("云开发初始化失败，请检查环境 ID", e);
+    }
     this.ensureUser();
   },
 

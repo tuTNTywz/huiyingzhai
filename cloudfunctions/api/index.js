@@ -16,17 +16,67 @@ const SUBJECT_KEYS = [
   "defense", "ideology", "pe", "career",
 ];
 
+// 业务用到的全部集合：冷启动时自动创建，避免「集合不存在」导致登录/写入失败
+const COLLECTIONS = [
+  "users",
+  "homeworks",
+  "sign_tasks",
+  "sign_records",
+  "activities",
+  "posts",
+  "post_replies",
+  "subject_settings",
+  "subject_tasks",
+];
+let collectionsReady = null;
+
+function ensureCollections() {
+  if (!collectionsReady) {
+    // 并行创建以缩短冷启动耗时；已存在的集合会抛错，忽略即可
+    collectionsReady = Promise.all(
+      COLLECTIONS.map((name) => db.createCollection(name).catch(() => {}))
+    );
+  }
+  return collectionsReady;
+}
+
+// 判断是否为「集合不存在」错误（兼容不同 SDK 版本的错误码/文案）
+function isCollectionNotExist(e) {
+  if (!e) return false;
+  return e.errCode === -502005 || /collection.*not.*exist/i.test(e.errMsg || "");
+}
+
+// 读取单个文档：不存在或读取失败时返回 null，避免直接抛错
+async function getDocOrNull(collection, id) {
+  if (!id) return null;
+  try {
+    const res = await db.collection(collection).doc(String(id)).get();
+    return res.data || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   const { action, data = {} } = event;
-  const usersCol = db.collection("users");
 
   try {
+    await ensureCollections();
+    const usersCol = db.collection("users");
+
     // 首次登录仅建立未注册档案，需完成登记后方可使用
-    const uRes = await usersCol.where({ _openid: OPENID }).get();
-    let user = uRes.data[0];
+    let user = null;
+    try {
+      const uRes = await usersCol.where({ _openid: OPENID }).limit(1).get();
+      user = uRes.data[0];
+    } catch (e) {
+      if (!isCollectionNotExist(e)) throw e;
+      await db.createCollection("users").catch(() => {});
+    }
+
     if (!user) {
-      const addRes = await usersCol.add({
+      await usersCol.add({
         data: {
           _openid: OPENID,
           nickname: "同窗",
@@ -35,13 +85,19 @@ exports.main = async (event) => {
           createTime: db.serverDate(),
         },
       });
-      user = {
-        _id: addRes._id,
-        _openid: OPENID,
-        nickname: "同窗",
-        role: "student",
-        registered: false,
-      };
+      // 重新读取以拿到真实 _id；并发首次登录时取最早创建的档案
+      const uRes = await usersCol
+        .where({ _openid: OPENID })
+        .orderBy("createTime", "asc")
+        .limit(1)
+        .get();
+      user = uRes.data[0];
+      if (!user) return { ok: false, msg: "账号档案创建失败，请重试" };
+    }
+
+    // 部署自检：小程序端可用 { action: "ping" } 验证云函数是否正常
+    if (action === "ping") {
+      return { ok: true, pong: true, openid: OPENID, time: Date.now() };
     }
 
     // 除登录、登记外的所有操作均要求已注册
@@ -170,8 +226,7 @@ exports.main = async (event) => {
       }
 
       case "deleteSubjectTask": {
-        const taskRes = await db.collection("subject_tasks").doc(data.id).get();
-        const task = taskRes.data;
+        const task = await getDocOrNull("subject_tasks", data.id);
         if (!task) return { ok: false, msg: "任务通知不存在" };
         if (task.creatorOpenid !== OPENID && user.subject !== task.subject && !isManager(user)) {
           return { ok: false, msg: "无权删除该任务通知" };
@@ -198,8 +253,7 @@ exports.main = async (event) => {
       }
 
       case "deleteHomework": {
-        const hwRes = await db.collection("homeworks").doc(data.id).get();
-        const hw = hwRes.data;
+        const hw = await getDocOrNull("homeworks", data.id);
         if (!hw) return { ok: false, msg: "作业不存在" };
         if (!isManager(user)) return { ok: false, msg: "仅班委或管理员可删除作业" };
         await db.collection("homeworks").doc(data.id).remove();
@@ -301,8 +355,8 @@ exports.main = async (event) => {
         const content = (data.content || "").trim();
         if (!content) return { ok: false, msg: "回复不能为空" };
         if (content.length > 500) return { ok: false, msg: "回复过长" };
-        const postRes = await db.collection("posts").doc(data.postId).get();
-        if (!postRes.data) return { ok: false, msg: "帖子不存在" };
+        const post = await getDocOrNull("posts", data.postId);
+        if (!post) return { ok: false, msg: "帖子不存在" };
         await db.collection("post_replies").add({
           data: {
             postId: data.postId,
@@ -320,8 +374,7 @@ exports.main = async (event) => {
       }
 
       case "deletePost": {
-        const postRes = await db.collection("posts").doc(data.id).get();
-        const post = postRes.data;
+        const post = await getDocOrNull("posts", data.id);
         if (!post) return { ok: false, msg: "帖子不存在" };
         if (post._openid !== OPENID && !isManager(user)) {
           return { ok: false, msg: "只能删除自己的帖子" };
@@ -335,7 +388,14 @@ exports.main = async (event) => {
         return { ok: false, msg: "未知操作" };
     }
   } catch (e) {
-    console.error(e);
-    return { ok: false, msg: e.errMsg || "服务异常" };
+    console.error("api error", action, e);
+    if (isCollectionNotExist(e)) {
+      return { ok: false, msg: "数据库集合不存在，请稍后重试（首次使用会自动创建）" };
+    }
+    const raw = (e && (e.errMsg || e.message)) || "";
+    if (/permission|denied/i.test(raw)) {
+      return { ok: false, msg: "数据库权限不足，请检查集合权限设置" };
+    }
+    return { ok: false, msg: raw || "服务异常，请稍后重试" };
   }
 };
