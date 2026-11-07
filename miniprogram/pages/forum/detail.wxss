@@ -1,6 +1,9 @@
 .detail-page {
   padding-bottom: 130rpx;
 }
+.detail-page.with-panel {
+  padding-bottom: 420rpx;
+}
 .post-head {
   display: flex;
   align-items: center;
@@ -55,17 +58,84 @@
   padding: 30rpx 0;
 }
 
+/* 帖子与回复中的附件 */
+.attach-list {
+  background: #f6f1e4;
+  border-radius: 10rpx;
+  padding: 12rpx 18rpx;
+  margin-top: 18rpx;
+}
+.reply-attach-list {
+  margin: 12rpx 0 0 66rpx;
+}
+.attach-summary {
+  font-size: 23rpx;
+  color: #6f6858;
+  margin-bottom: 6rpx;
+}
+.attach-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10rpx 0;
+  border-top: 1rpx solid #e8e0cd;
+}
+.attach-name {
+  flex: 1;
+  font-size: 25rpx;
+  color: #4a463e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attach-size {
+  font-size: 22rpx;
+  color: #a49a86;
+  margin-left: 12rpx;
+}
+
+/* 底部回复栏 */
 .reply-bar {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
   padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
   background: #fdfbf6;
   border-top: 1rpx solid #e4dccb;
+}
+.reply-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+.reply-add {
+  position: relative;
+  flex: none;
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 50%;
+  background: #f6f1e4;
+  color: #9c6b4a;
+  font-size: 30rpx;
+  line-height: 68rpx;
+  text-align: center;
+}
+.reply-add.has-files {
+  background: #e8dcc6;
+}
+.attach-badge {
+  position: absolute;
+  top: -6rpx;
+  right: -6rpx;
+  min-width: 30rpx;
+  height: 30rpx;
+  line-height: 30rpx;
+  border-radius: 15rpx;
+  background: #b5543c;
+  color: #fdfbf6;
+  font-size: 20rpx;
+  text-align: center;
 }
 .reply-input {
   flex: 1;
@@ -83,4 +153,57 @@
 }
 .reply-send.sending {
   background: #cfc7b6;
+}
+
+/* 附件展开面板 */
+.attach-panel {
+  padding-bottom: 16rpx;
+}
+.attach-actions {
+  display: flex;
+  gap: 16rpx;
+}
+.attach-btn {
+  flex: 1;
+  text-align: center;
+  padding: 14rpx 0;
+  background: #f6f1e4;
+}
+.form-tip {
+  font-size: 22rpx;
+  color: #8a8478;
+  margin-top: 12rpx;
+  line-height: 1.5;
+}
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f6f1e4;
+  border-radius: 10rpx;
+  padding: 14rpx 18rpx;
+  margin-top: 12rpx;
+}
+.file-name {
+  flex: 1;
+  font-size: 25rpx;
+  color: #6f6858;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-size {
+  font-size: 22rpx;
+  color: #a49a86;
+  margin-left: 12rpx;
+}
+.file-del {
+  font-size: 24rpx;
+  color: #b5543c;
+  padding-left: 20rpx;
+}
+.upload-hint {
+  font-size: 24rpx;
+  color: #9c6b4a;
+  padding-bottom: 12rpx;
 }

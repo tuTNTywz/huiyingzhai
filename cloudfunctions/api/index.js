@@ -66,6 +66,33 @@ async function getDocOrNull(collection, id) {
   }
 }
 
+// 交流栏目附件：服务端规范化，限制数量并剔除无效 fileID
+function normalizeAttachments(values) {
+  return (Array.isArray(values) ? values : [])
+    .slice(0, 5)
+    .filter((a) => a && a.fileID)
+    .map((a) => ({
+      fileID: String(a.fileID),
+      name: String(a.name || "附件"),
+      type: a.type === "image" ? "image" : "file",
+      size: Number(a.size) || 0,
+    }));
+}
+
+// 删除文档后清理云存储附件，失败不影响主流程
+async function removeCloudFiles(records) {
+  const fileIDs = [];
+  (records || []).forEach((r) => {
+    (r.attachments || []).forEach((a) => {
+      if (a && a.fileID) fileIDs.push(a.fileID);
+    });
+  });
+  if (!fileIDs.length) return;
+  try {
+    await cloud.deleteFile({ fileList: fileIDs });
+  } catch (e) {}
+}
+
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
   const { action, data = {} } = event;
@@ -364,14 +391,16 @@ exports.main = async (event) => {
         return { ok: true };
       }
 
-      // ===== 交流栏目：所有人可自由发帖、回复 =====
+      // ===== 交流栏目：所有人可自由发帖、回复（可带文件 / 照片） =====
       case "createPost": {
         const content = (data.content || "").trim();
-        if (!content) return { ok: false, msg: "内容不能为空" };
+        const attachments = normalizeAttachments(data.attachments);
+        if (!content && !attachments.length) return { ok: false, msg: "请填写内容或添加附件" };
         if (content.length > 1000) return { ok: false, msg: "内容过长" };
         const res = await db.collection("posts").add({
           data: {
             content,
+            attachments, // [{ fileID, name, type, size }]
             _openid: OPENID,
             nickname: user.nickname,
             role: user.role,
@@ -384,7 +413,8 @@ exports.main = async (event) => {
 
       case "createReply": {
         const content = (data.content || "").trim();
-        if (!content) return { ok: false, msg: "回复不能为空" };
+        const attachments = normalizeAttachments(data.attachments);
+        if (!content && !attachments.length) return { ok: false, msg: "请填写回复或添加附件" };
         if (content.length > 500) return { ok: false, msg: "回复过长" };
         const post = await getDocOrNull("posts", data.postId);
         if (!post) return { ok: false, msg: "帖子不存在" };
@@ -392,6 +422,7 @@ exports.main = async (event) => {
           data: {
             postId: data.postId,
             content,
+            attachments, // [{ fileID, name, type, size }]
             _openid: OPENID,
             nickname: user.nickname,
             role: user.role,
@@ -410,8 +441,15 @@ exports.main = async (event) => {
         if (post._openid !== OPENID && !isManager(user)) {
           return { ok: false, msg: "只能删除自己的帖子" };
         }
+        const replies = await db
+          .collection("post_replies")
+          .where({ postId: data.id })
+          .limit(1000)
+          .get();
         await db.collection("posts").doc(data.id).remove();
         await db.collection("post_replies").where({ postId: data.id }).remove();
+        // 帖子与全部回复的附件一并从云存储清理
+        await removeCloudFiles([post, ...(replies.data || [])]);
         return { ok: true };
       }
 
