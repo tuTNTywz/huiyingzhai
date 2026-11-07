@@ -1,0 +1,34 @@
+<view class="page-header">
+  <view class="page-title">通知</view>
+  <view class="page-sub">「 新作业，先知先觉 」</view>
+</view>
+
+<view class="card push-card">
+  <view class="section-title">作业提醒</view>
+  <view class="push-desc">开启后，班委发布新作业时会在微信服务通知里收到提醒。订阅消息为一次性授权，可随时再次点击续订。</view>
+  <button class="btn-plain push-btn" disabled="{{subscribing}}" bindtap="enablePush">{{subscribing ? '开启中…' : '开启作业提醒'}}</button>
+  <view wx:if="{{!pushEnabled}}" class="push-tip">当前未配置订阅消息模板 ID，站内通知仍可正常使用</view>
+</view>
+
+<view wx:if="{{!loading && list.length === 0}}" class="empty">暂无通知，新作业发布后会显示在这里</view>
+
+<view
+  class="card notice-item {{item.unread ? 'unread' : ''}}"
+  wx:for="{{list}}"
+  wx:key="_id"
+  data-id="{{item.homeworkId}}"
+  bindtap="openNotice"
+>
+  <view class="notice-top">
+    <text class="tag tag-gold">新作业</text>
+    <text wx:if="{{item.unread}}" class="tag tag-red">未读</text>
+    <text class="subtitle">{{item.timeText}}</text>
+  </view>
+  <view class="notice-title">{{item.title}}</view>
+  <view class="notice-desc">{{item.content}}</view>
+  <view class="notice-foot">
+    <text class="subtitle" wx:if="{{item.deadlineText}}">截止：{{item.deadlineText}}</text>
+    <text class="subtitle">布置人：{{item.creatorName}}</text>
+  </view>
+  <view class="notice-arrow">查看作业 ›</view>
+</view>

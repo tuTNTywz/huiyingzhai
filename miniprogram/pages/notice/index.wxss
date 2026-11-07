@@ -1,0 +1,76 @@
+.page-header {
+  padding: 40rpx 32rpx 8rpx;
+}
+.page-title {
+  font-size: 44rpx;
+  font-weight: bold;
+  letter-spacing: 4rpx;
+}
+.page-sub {
+  font-size: 24rpx;
+  color: #8a8478;
+  margin-top: 8rpx;
+}
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #9c6b4a;
+  margin-bottom: 12rpx;
+}
+.push-desc {
+  font-size: 25rpx;
+  color: #6f6858;
+  line-height: 1.6;
+}
+.push-btn {
+  margin-top: 20rpx;
+  font-size: 27rpx;
+}
+.push-tip {
+  font-size: 22rpx;
+  color: #a49a86;
+  margin-top: 14rpx;
+  line-height: 1.5;
+}
+
+.notice-item {
+  border-left: 6rpx solid transparent;
+}
+.notice-item.unread {
+  border-left-color: #9c6b4a;
+  background: #fdf8ee;
+}
+.notice-item:active {
+  background: #f6f0e2;
+}
+.notice-top {
+  display: flex;
+  align-items: center;
+}
+.notice-top .subtitle {
+  margin-left: auto;
+}
+.notice-title {
+  font-size: 31rpx;
+  font-weight: bold;
+  color: #3d3a34;
+  margin: 16rpx 0 10rpx;
+}
+.notice-desc {
+  font-size: 26rpx;
+  color: #6f6858;
+  white-space: pre-wrap;
+}
+.notice-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16rpx;
+}
+.notice-arrow {
+  text-align: right;
+  font-size: 24rpx;
+  color: #9c6b4a;
+  border-top: 1rpx solid #eee8da;
+  padding-top: 14rpx;
+  margin-top: 16rpx;
+}

@@ -25,6 +25,10 @@ const SUBJECT_KEYS = [
   "defense", "ideology", "pe", "career",
 ];
 
+// 微信订阅消息模板 ID：在公众平台「订阅消息」申请「新作业提醒」类模板后填入
+// 留空时只写站内通知，不影响作业发布
+const HOMEWORK_TMPL_ID = "";
+
 // 业务用到的全部集合：冷启动时自动创建，避免「集合不存在」导致登录/写入失败
 const COLLECTIONS = [
   "users",
@@ -36,6 +40,8 @@ const COLLECTIONS = [
   "post_replies",
   "subject_settings",
   "subject_tasks",
+  "notifications",
+  "subscriptions",
 ];
 let collectionsReady = null;
 
@@ -90,6 +96,50 @@ async function removeCloudFiles(records) {
   if (!fileIDs.length) return;
   try {
     await cloud.deleteFile({ fileList: fileIDs });
+  } catch (e) {}
+}
+
+// 订阅消息要求的日期格式：yyyy-MM-dd HH:mm
+function noticeTimeText(ts) {
+  const d = new Date(Number(ts) || Date.now());
+  const p = (n) => (n < 10 ? "0" + n : "" + n);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// 给已订阅的同学推送微信服务通知；单个用户失败不影响其它人
+// 模板字段 thing1 / time2 / thing3 需按实际申请的模板调整
+async function pushHomeworkNotice({ homeworkId, title, deadline, creatorName }) {
+  if (!HOMEWORK_TMPL_ID) return;
+  try {
+    const subs = await db
+      .collection("subscriptions")
+      .where({ remain: _.gt(0) })
+      .limit(1000)
+      .get();
+    const payload = {
+      templateId: HOMEWORK_TMPL_ID,
+      page: `pages/homework/detail?id=${homeworkId}`,
+      // 开发调试阶段可改为 "developer"，体验版用 "trial"，正式发布用 "formal"
+      miniprogramState: "formal",
+      lang: "zh_CN",
+      data: {
+        thing1: { value: String(title || "新作业").slice(0, 20) },
+        time2: { value: noticeTimeText(deadline) },
+        thing3: { value: String(creatorName || "班委").slice(0, 20) },
+      },
+    };
+    await Promise.all(
+      subs.data.map(async (s) => {
+        try {
+          await cloud.openapi.subscribeMessage.send({ ...payload, touser: s._openid });
+          await db.collection("subscriptions").doc(s._id).update({
+            data: { remain: _.inc(-1), updateTime: db.serverDate() },
+          });
+        } catch (e) {
+          // 订阅次数用完 / 用户拒收，跳过即可
+        }
+      })
+    );
   } catch (e) {}
 }
 
@@ -293,7 +343,47 @@ exports.main = async (event) => {
             createTime: db.serverDate(),
           },
         });
+
+        // 通知失败不影响作业发布成功本身
+        try {
+          // 发布成功后生成一条站内通知，全体同学进入通知中心即可看到
+          await db.collection("notifications").add({
+            data: {
+              type: "homework",
+              homeworkId: res._id,
+              title: String(data.title),
+              content: String(data.desc || "").trim().slice(0, 100) || "新作业已发布，点击查看详情",
+              deadline: data.deadline,
+              creatorName: user.nickname,
+              createTime: db.serverDate(),
+            },
+          });
+          // 微信服务通知：配置了模板 ID 且同学已订阅时推送
+          await pushHomeworkNotice({
+            homeworkId: res._id,
+            title: data.title,
+            deadline: data.deadline,
+            creatorName: user.nickname,
+          });
+        } catch (e) {}
         return { ok: true, id: res._id };
+      }
+
+      // 同学点击「开启作业提醒」授权后，登记一次可推送次数
+      case "subscribeHomework": {
+        if (!HOMEWORK_TMPL_ID) return { ok: false, msg: "尚未配置订阅消息模板 ID" };
+        const col = db.collection("subscriptions");
+        const exist = await col.where({ _openid: OPENID }).limit(1).get();
+        if (exist.data.length) {
+          await col.doc(exist.data[0]._id).update({
+            data: { remain: _.inc(1), updateTime: db.serverDate() },
+          });
+        } else {
+          await col.add({
+            data: { _openid: OPENID, remain: 1, createTime: db.serverDate() },
+          });
+        }
+        return { ok: true };
       }
 
       case "deleteHomework": {
@@ -301,9 +391,17 @@ exports.main = async (event) => {
         if (!hw) return { ok: false, msg: "作业不存在" };
         if (!isManager(user)) return { ok: false, msg: "仅班委或管理员可删除作业" };
         await db.collection("homeworks").doc(data.id).remove();
+        // 同步移除该作业产生的通知
+        try {
+          await db.collection("notifications").where({ homeworkId: data.id }).remove();
+        } catch (e) {}
         // 删除云存储附件
         const fileIDs = (hw.attachments || []).map((a) => a.fileID).filter(Boolean);
-        if (fileIDs.length) await cloud.deleteFile({ fileList: fileIDs });
+        if (fileIDs.length) {
+          try {
+            await cloud.deleteFile({ fileList: fileIDs });
+          } catch (e) {}
+        }
         return { ok: true };
       }
 

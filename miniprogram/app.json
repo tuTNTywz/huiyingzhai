@@ -13,7 +13,8 @@
     "pages/sign/create",
     "pages/sign/detail",
     "pages/register/index",
-    "pages/subject/index"
+    "pages/subject/index",
+    "pages/notice/index"
   ],
   "window": {
     "backgroundColor": "#f5f1e8",
