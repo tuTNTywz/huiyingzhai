@@ -4,8 +4,7 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
-// 学号 → 职务名单字典（管理员/班委/普通同学均以名单为准）
-const { ROSTER, ADMIN_IDS } = require("./roster");
+// 职务与角色以数据库 roster 集合（学号名单）为准：命中取库内职务，否则为普通同学
 
 // 班委或管理员均视为管理角色（可发布/删除作业、活动等）
 const isManager = (u) => u.role === "committee" || u.role === "admin";
@@ -123,11 +122,12 @@ exports.main = async (event) => {
         if (dup.data.some((u) => u._openid !== OPENID)) {
           return { ok: false, msg: "该学号已被注册" };
         }
-        // 职务以名单字典为准：学号命中则取字典职务，否则为普通同学
-        const position = ROSTER[studentId] || "普通同学";
-        // 管理员学号或管理员职务 → admin；其余班委职务 → committee
+        // 职务以数据库 roster 集合为准：学号命中则取库内职务，否则为普通同学
+        const rosterRes = await db.collection("roster").where({ studentId }).get();
+        const position = rosterRes.data[0] ? rosterRes.data[0].position : "普通同学";
+        // 管理员职务 → admin；其余班委职务 → committee
         const role =
-          position === "管理员" || ADMIN_IDS.includes(studentId)
+          position === "管理员"
             ? "admin"
             : position === "普通同学"
               ? "student"

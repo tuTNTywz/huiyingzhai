@@ -1,6 +1,6 @@
 // 入斋登记：首次登录注册（姓名、学号、班级、职位），亦支持修改资料
 const app = getApp();
-const { validateProfile, saveProfile, getPositionFor, DEFAULT_CLASS } = require("../../utils/profile");
+const { validateProfile, saveProfile, matchPosition, DEFAULT_CLASS } = require("../../utils/profile");
 
 Page({
   data: {
@@ -21,8 +21,9 @@ Page({
       this.setData({
         name: u.name || "",
         studentId: u.studentId || "",
-        position: getPositionFor(u.studentId),
       });
+      // 职务由数据库名单根据学号自动匹配
+      matchPosition(u.studentId).then((p) => this.setData({ position: p }));
     }
   },
 
@@ -30,11 +31,9 @@ Page({
     this.setData({ name: e.detail.value });
   },
   onStudentId(e) {
-    // 职务由名单字典根据学号自动匹配
-    this.setData({
-      studentId: e.detail.value,
-      position: getPositionFor(e.detail.value),
-    });
+    // 职务由数据库名单根据学号自动匹配
+    this.setData({ studentId: e.detail.value });
+    matchPosition(e.detail.value).then((p) => this.setData({ position: p }));
   },
   submit() {
     const form = {

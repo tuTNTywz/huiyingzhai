@@ -1,9 +1,39 @@
 // 学籍登记共用逻辑：登记页与「我的」弹窗复用
-// 职位与角色均由名单字典（roster.js）根据学号自动确定
-const { POSITIONS, getPositionFor } = require("./roster");
+// 职务与角色以数据库 roster 集合（学号名单）为准，自动根据学号确定
 
 // 班级固定为本班，无需手动填写
 const DEFAULT_CLASS = "人工智能26A3班";
+
+// 名单缓存：学号 → 职务（首次使用时从数据库 roster 集合拉取）
+let rosterCache = null;
+
+function loadRoster() {
+  if (rosterCache) return Promise.resolve(rosterCache);
+  return wx.cloud
+    .database()
+    .collection("roster")
+    .limit(100)
+    .get()
+    .then((res) => {
+      rosterCache = {};
+      (res.data || []).forEach((r) => {
+        if (r.studentId) rosterCache[String(r.studentId)] = r.position || "普通同学";
+      });
+      return rosterCache;
+    })
+    .catch(() => (rosterCache = rosterCache || {}));
+}
+
+// 同步取职务：读取已缓存名单，未加载或未命中时返回普通同学
+function getPositionFor(studentId) {
+  return (rosterCache && rosterCache[String(studentId || "").trim()]) || "普通同学";
+}
+
+// 异步取职务：确保名单已加载后再匹配
+function matchPosition(studentId) {
+  const id = String(studentId || "").trim();
+  return loadRoster().then(() => getPositionFor(id));
+}
 
 function validateProfile(form = {}) {
   if (!String(form.name || "").trim()) return "请填写姓名";
@@ -37,4 +67,4 @@ function saveProfile(form) {
     });
 }
 
-module.exports = { POSITIONS, getPositionFor, DEFAULT_CLASS, validateProfile, saveProfile };
+module.exports = { DEFAULT_CLASS, loadRoster, getPositionFor, matchPosition, validateProfile, saveProfile };
