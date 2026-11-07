@@ -1,13 +1,21 @@
-// 发布作业（班委）
+// 发布作业（班委 / 管理员）：支持上传文档与图片附件
+const app = getApp();
+const { formatSize } = require("../../utils/util");
+
+const MAX_FILES = 5;
+const MAX_SIZE = 20 * 1024 * 1024;
+const DOC_EXT = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"];
+
 Page({
   data: {
     title: "",
     desc: "",
     date: "",
     time: "23:59",
-    attachments: [], // [{ name, size, tempPath }]
+    attachments: [], // [{ name, size, sizeText, tempPath, type }]
     minDate: "",
     submitting: false,
+    uploadText: "",
   },
 
   onLoad() {
@@ -16,6 +24,19 @@ Page({
     this.setData({
       minDate: `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`,
     });
+
+    // 仅班委 / 管理员可进入发布页
+    const check = () => {
+      if (app.isCommittee()) return;
+      wx.showModal({
+        title: "权限不足",
+        content: "仅班委或管理员可发布作业",
+        showCancel: false,
+        success: () => wx.navigateBack(),
+      });
+    };
+    if (app.globalData.userInfo) check();
+    else app.userReadyCallback = check;
   },
 
   onTitle(e) {
@@ -31,19 +52,70 @@ Page({
     this.setData({ time: e.detail.value });
   },
 
-  // 从聊天记录中选择 PDF / Word 等文件
+  getRemain() {
+    return MAX_FILES - this.data.attachments.length;
+  },
+
+  addFiles(files) {
+    const list = this.data.attachments.slice();
+    files.forEach((f) => {
+      if (list.length >= MAX_FILES) return;
+      if (f.size > MAX_SIZE) {
+        wx.showToast({ title: `${f.name} 超过 20MB`, icon: "none" });
+        return;
+      }
+      list.push({ ...f, sizeText: formatSize(f.size) });
+    });
+    if (files.length && list.length === this.data.attachments.length) {
+      wx.showToast({ title: "未添加，请检查数量或大小", icon: "none" });
+    }
+    this.setData({ attachments: list });
+  },
+
+  // 从微信聊天记录选择 PDF / Word 等文档
   chooseFile() {
+    const remain = this.getRemain();
+    if (remain <= 0) {
+      wx.showToast({ title: `最多添加 ${MAX_FILES} 个附件`, icon: "none" });
+      return;
+    }
     wx.chooseMessageFile({
-      count: 5,
+      count: remain,
       type: "file",
-      extension: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"],
+      extension: DOC_EXT,
       success: (res) => {
-        const files = res.tempFiles.map((f) => ({
-          name: f.name,
-          size: f.size,
-          tempPath: f.path,
-        }));
-        this.setData({ attachments: this.data.attachments.concat(files) });
+        this.addFiles(
+          res.tempFiles.map((f) => ({
+            name: f.name,
+            size: f.size,
+            tempPath: f.path,
+            type: "file",
+          }))
+        );
+      },
+    });
+  },
+
+  // 从相册或拍照添加图片附件
+  chooseImage() {
+    const remain = this.getRemain();
+    if (remain <= 0) {
+      wx.showToast({ title: `最多添加 ${MAX_FILES} 个附件`, icon: "none" });
+      return;
+    }
+    wx.chooseMedia({
+      count: remain,
+      mediaType: ["image"],
+      sourceType: ["album", "camera"],
+      success: (res) => {
+        this.addFiles(
+          res.tempFiles.map((f, i) => ({
+            name: `图片_${Date.now()}_${i + 1}.jpg`,
+            size: f.size,
+            tempPath: f.tempFilePath,
+            type: "image",
+          }))
+        );
       },
     });
   },
@@ -67,27 +139,49 @@ Page({
     return true;
   },
 
-  // 逐个上传附件到云存储
+  // 顺序上传附件到云存储；中途失败则清理已上传文件
   uploadAttachments() {
-    const tasks = this.data.attachments.map((f, i) => {
+    const files = this.data.attachments;
+    const uploaded = [];
+    const run = (i) => {
+      if (i >= files.length) return Promise.resolve(uploaded);
+      const f = files[i];
+      this.setData({ uploadText: `正在上传附件 ${i + 1}/${files.length}` });
       const cloudPath = `homework/${Date.now()}_${i}_${f.name}`;
       return wx.cloud
         .uploadFile({ cloudPath, filePath: f.tempPath })
-        .then((res) => ({ fileID: res.fileID, name: f.name }));
-    });
-    return Promise.all(tasks).catch((err) => {
-      console.error(err);
-      return Promise.reject("附件上传失败");
-    });
+        .then((res) => {
+          uploaded.push(res.fileID);
+          return run(i + 1);
+        });
+    };
+    return run(0)
+      .then((fileIDs) =>
+        files.map((f, i) => ({
+          fileID: fileIDs[i],
+          name: f.name,
+          type: f.type,
+          size: f.size,
+        }))
+      )
+      .catch((err) => {
+        console.error(err);
+        if (uploaded.length) {
+          try {
+            wx.cloud.deleteFile({ fileList: uploaded }).catch(() => {});
+          } catch (e) {}
+        }
+        return Promise.reject("附件上传失败，请重试");
+      });
   },
 
   submit() {
     if (!this.validate()) return;
-    this.setData({ submitting: true });
-    wx.showLoading({ title: "发布中…", mask: true });
+    this.setData({ submitting: true, uploadText: "准备上传…" });
 
     this.uploadAttachments()
       .then((attachments) => {
+        this.setData({ uploadText: "正在发布…" });
         const deadline = new Date(`${this.data.date}T${this.data.time}:00`).getTime();
         return wx.cloud.callFunction({
           name: "api",
@@ -103,7 +197,6 @@ Page({
         });
       })
       .then((res) => {
-        wx.hideLoading();
         if (res.result.ok) {
           wx.showToast({ title: "发布成功" });
           setTimeout(() => wx.navigateBack(), 800);
@@ -112,9 +205,8 @@ Page({
         }
       })
       .catch((msg) => {
-        wx.hideLoading();
         wx.showToast({ title: typeof msg === "string" ? msg : "发布失败", icon: "none" });
       })
-      .finally(() => this.setData({ submitting: false }));
+      .finally(() => this.setData({ submitting: false, uploadText: "" }));
   },
 });

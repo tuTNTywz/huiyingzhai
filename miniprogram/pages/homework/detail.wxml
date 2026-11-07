@@ -13,17 +13,20 @@
 
   <block wx:if="{{homework.attachments.length}}">
     <view class="divider"></view>
-    <view class="section-title">附件列表</view>
+    <view class="section-title">附件列表（{{homework.attachments.length}}）</view>
     <view
       class="cell file-row"
       wx:for="{{homework.attachments}}"
       wx:key="fileID"
       data-fileid="{{item.fileID}}"
       data-name="{{item.name}}"
+      data-type="{{item.type}}"
       bindtap="downloadFile"
     >
-      <view class="file-name">📄 {{item.name}}</view>
-      <view class="file-action">{{downloading === item.fileID ? '下载中…' : '查看'}}</view>
+      <view class="file-name">{{item.type === 'image' ? '🖼' : '📄'}} {{item.name}}
+        <text wx:if="{{item.sizeText}}" class="file-size">{{item.sizeText}}</text>
+      </view>
+      <view class="file-action">{{downloading === item.fileID ? '加载中…' : (item.type === 'image' ? '预览' : '查看')}}</view>
     </view>
   </block>
 </view>

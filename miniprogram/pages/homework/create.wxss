@@ -6,10 +6,21 @@
   flex: 1;
 }
 
+.attach-row {
+  display: flex;
+  gap: 16rpx;
+}
 .attach-btn {
+  flex: 1;
   text-align: center;
   padding: 18rpx 0;
   background: #f6f1e4;
+}
+.form-tip {
+  font-size: 22rpx;
+  color: #8a8478;
+  margin-top: 12rpx;
+  line-height: 1.5;
 }
 
 .file-item {
@@ -29,8 +40,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.file-size {
+  font-size: 22rpx;
+  color: #a49a86;
+  margin-left: 12rpx;
+}
 .file-del {
   font-size: 24rpx;
   color: #b5543c;
   padding-left: 20rpx;
+}
+.upload-hint {
+  font-size: 24rpx;
+  color: #9c6b4a;
+  margin-top: 16rpx;
 }

@@ -40,6 +40,24 @@
 
   <view class="task-content {{expandedId === item._id ? 'expanded' : ''}}">{{item.content || '（无详细内容）'}}</view>
 
+  <!-- 任务通知附件 -->
+  <view wx:if="{{item.attachments.length}}" class="task-attach" catchtap="noop">
+    <view class="attach-summary">📎 附件 {{item.attachments.length}} 个（点击查看）</view>
+    <view
+      class="attach-row-item"
+      wx:for="{{item.attachments}}"
+      wx:for-item="att"
+      wx:key="fileID"
+      data-fileid="{{att.fileID}}"
+      data-name="{{att.name}}"
+      data-type="{{att.type}}"
+      catchtap="downloadAttachment"
+    >
+      <text class="attach-name">{{att.type === 'image' ? '🖼' : '📄'}} {{att.name}}</text>
+      <text class="attach-size">{{att.sizeText}}</text>
+    </view>
+  </view>
+
   <view class="task-meta">
     <text class="subtitle" wx:if="{{item.deadlineText}}">截止：{{item.deadlineText}}</text>
     <text class="subtitle">发布：{{item.creatorName}} · {{item.createTimeText}}</text>
@@ -105,9 +123,26 @@
       </view>
     </view>
 
+    <view class="form-item">
+      <view class="form-label">附件（最多 5 个，单个不超过 20MB）</view>
+      <view class="attach-actions">
+        <view class="btn-plain attach-btn" catchtap="chooseTaskFile">＋ 文件</view>
+        <view class="btn-plain attach-btn" catchtap="chooseTaskImage">＋ 照片</view>
+      </view>
+      <view class="position-tip">文件从微信聊天记录选择（PDF / Word / Excel / PPT / TXT）；照片可从相册或拍照添加</view>
+
+      <view class="file-item" wx:for="{{taskAttachments}}" wx:key="tempPath">
+        <view class="file-name">{{item.type === 'image' ? '🖼' : '📄'}} {{item.name}}
+          <text class="file-size">{{item.sizeText}}</text>
+        </view>
+        <view class="file-del" data-index="{{index}}" catchtap="removeTaskFile">移除</view>
+      </view>
+      <view wx:if="{{uploadText}}" class="upload-hint">{{uploadText}}</view>
+    </view>
+
     <view class="modal-actions">
       <button class="btn-plain" bindtap="closePublish">取 消</button>
-      <button class="{{submitting ? 'btn-disabled' : 'btn-primary'}}" disabled="{{submitting}}" bindtap="publish">{{submitting ? '发布中…' : '发 布'}}</button>
+      <button class="{{submitting ? 'btn-disabled' : 'btn-primary'}}" disabled="{{submitting}}" bindtap="publish">{{submitting ? '发 布 中…' : '发 布'}}</button>
     </view>
   </view>
 </view>

@@ -24,17 +24,26 @@
   </view>
 
   <view class="form-item">
-    <view class="form-label">附件（支持 PDF、Word、Excel、PPT 等）</view>
-    <view class="btn-plain attach-btn" bindtap="chooseFile">＋ 添加附件</view>
+    <view class="form-label">作业附件（最多 5 个，单个不超过 20MB）</view>
+    <view class="attach-row">
+      <view class="btn-plain attach-btn" bindtap="chooseFile">＋ 文档附件</view>
+      <view class="btn-plain attach-btn" bindtap="chooseImage">＋ 图片 / 拍照</view>
+    </view>
+    <view class="form-tip">文档从微信聊天记录选择（PDF / Word / Excel / PPT / TXT）；图片可从相册或拍照添加</view>
+
     <view class="file-item" wx:for="{{attachments}}" wx:key="tempPath">
-      <view class="file-name">📄 {{item.name}}</view>
+      <view class="file-name">{{item.type === 'image' ? '🖼' : '📄'}} {{item.name}}
+        <text class="file-size">{{item.sizeText}}</text>
+      </view>
       <view class="file-del" data-index="{{index}}" catchtap="removeFile">移除</view>
     </view>
+
+    <view wx:if="{{uploadText}}" class="upload-hint">{{uploadText}}</view>
   </view>
 
   <button
     class="{{submitting ? 'btn-disabled' : 'btn-primary'}}"
     disabled="{{submitting}}"
     bindtap="submit"
-  >发 布</button>
+  >{{submitting ? '发 布 中…' : '发 布'}}</button>
 </view>

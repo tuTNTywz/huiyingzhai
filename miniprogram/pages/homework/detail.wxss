@@ -33,6 +33,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.file-size {
+  font-size: 22rpx;
+  color: #a49a86;
+  margin-left: 12rpx;
+}
 .file-action {
   font-size: 26rpx;
   color: #9c6b4a;
