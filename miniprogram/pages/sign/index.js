@@ -1,6 +1,6 @@
 // 志愿活动列表
 const app = getApp();
-const { formatTime, toDateMs } = require("../../utils/util");
+const { formatTime, formatTimeRange, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 
 Page({
@@ -32,10 +32,18 @@ Page({
           const start = toDateMs(t.startTime) || t.startTime;
           const end = toDateMs(t.endTime) || t.endTime;
           const status = now < start ? "pending" : now <= end ? "active" : "ended";
+          const legacyMs = toDateMs(t.activityTime) || t.activityTime || 0;
+          const startMs = toDateMs(t.activityStartTime) || t.activityStartTime || legacyMs;
+          const endMs = toDateMs(t.activityEndTime) || t.activityEndTime || 0;
+          const activityText = endMs
+            ? formatTimeRange(startMs, endMs)
+            : startMs ? formatTime(startMs) : "";
           return {
             ...t,
             status,
             endText: formatTime(end),
+            activityText,
+            signupMethod: t.signupMethod || "小程序内报名",
           };
         });
         this.setData({ list, loading: false });

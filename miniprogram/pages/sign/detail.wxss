@@ -30,6 +30,23 @@
   color: #6b7d5f;
 }
 
+.info-row {
+  display: flex;
+  font-size: 28rpx;
+  color: #4a463e;
+  margin-bottom: 16rpx;
+}
+.info-label {
+  color: #8a8478;
+  margin-right: 24rpx;
+  white-space: nowrap;
+}
+.activity-content {
+  font-size: 28rpx;
+  color: #4a463e;
+  white-space: pre-wrap;
+}
+
 .section-title {
   font-size: 30rpx;
   font-weight: bold;

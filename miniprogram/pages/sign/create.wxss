@@ -5,3 +5,36 @@
 .picker-row picker {
   flex: 1;
 }
+.time-row {
+  margin-top: 16rpx;
+  align-items: center;
+}
+.time-sep {
+  font-size: 26rpx;
+  color: #8a8478;
+}
+.method-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+.method-chip {
+  font-size: 24rpx;
+  color: #6f6858;
+  background: #f6f1e4;
+  border: 1rpx solid #e4dccb;
+  border-radius: 24rpx;
+  padding: 8rpx 22rpx;
+}
+.method-chip.active {
+  background: #9c6b4a;
+  border-color: #9c6b4a;
+  color: #fdfbf6;
+}
+.form-tip {
+  font-size: 22rpx;
+  color: #8a8478;
+  margin-top: 12rpx;
+  line-height: 1.5;
+}

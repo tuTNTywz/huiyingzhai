@@ -258,10 +258,24 @@ exports.main = async (event) => {
         if (user.position !== "宣传委员" && user.role !== "admin") {
           return { ok: false, msg: "仅宣传委员可发布志愿活动" };
         }
+        const content = String(data.content || "").trim();
+        const place = String(data.place || "").trim();
+        const signupMethod = String(data.signupMethod || "小程序内报名").trim() || "小程序内报名";
+        const activityStartTime = Number(data.activityStartTime) || 0;
+        const activityEndTime = Number(data.activityEndTime) || 0;
         if (!data.title || !data.endTime) return { ok: false, msg: "缺少志愿活动主题或报名截止时间" };
+        if (!content || !place || !activityStartTime || !activityEndTime || activityEndTime <= activityStartTime) {
+          return { ok: false, msg: "请选择有效的志愿活动时间段" };
+        }
         const res = await db.collection("sign_tasks").add({
           data: {
             title: data.title,
+            content,
+            place,
+            activityStartTime, // 活动开始时间戳(ms)
+            activityEndTime, // 活动结束时间戳(ms)
+            activityTime: activityStartTime, // 兼容旧的按开始时间读取/排序
+            signupMethod, // 报名方式
             startTime: data.startTime || Date.now(),
             endTime: data.endTime, // 报名截止时间戳(ms)
             creatorOpenid: OPENID,

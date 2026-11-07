@@ -1,6 +1,6 @@
 // 志愿活动详情：同学在线报名，查看报名记录
 const app = getApp();
-const { formatTime, toDateMs } = require("../../utils/util");
+const { formatTime, formatTimeRange, toDateMs } = require("../../utils/util");
 
 Page({
   data: {
@@ -38,8 +38,19 @@ Page({
         const t = res.data;
         const end = toDateMs(t.endTime) || t.endTime;
         const status = Date.now() <= end ? "active" : "ended";
+        const legacyMs = toDateMs(t.activityTime) || t.activityTime || 0;
+        const startMs = toDateMs(t.activityStartTime) || t.activityStartTime || legacyMs;
+        const endMs = toDateMs(t.activityEndTime) || t.activityEndTime || 0;
+        const activityText = endMs
+          ? formatTimeRange(startMs, endMs)
+          : startMs ? formatTime(startMs) : "";
         this.setData({
-          task: { ...t, endText: formatTime(end) },
+          task: {
+            ...t,
+            endText: formatTime(end),
+            activityText,
+            signupMethod: t.signupMethod || "小程序内报名",
+          },
           status,
         });
         // 查询报名记录（所有用户可读）
