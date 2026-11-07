@@ -27,7 +27,7 @@ const SUBJECT_KEYS = [
 
 // 微信订阅消息模板 ID：在公众平台「订阅消息」申请「新作业提醒」类模板后填入
 // 留空时只写站内通知，不影响作业发布
-const HOMEWORK_TMPL_ID = "";
+const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hXIrvAOeoJCK_Uwc9XVsiVg";
 
 // 业务用到的全部集合：冷启动时自动创建，避免「集合不存在」导致登录/写入失败
 const COLLECTIONS = [

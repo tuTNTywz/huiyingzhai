@@ -3,7 +3,7 @@ const { formatTime, toDateMs } = require("./util");
 
 // 在微信公众平台「订阅消息」申请「新作业提醒」类模板后填入模板 ID
 // 留空时只使用站内通知，不影响作业发布与查看
-const HOMEWORK_TMPL_ID = "";
+const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hXIrvAOeoJCK_Uwc9XVsiVg";
 
 const LAST_READ_KEY = "notice_last_read";
 
