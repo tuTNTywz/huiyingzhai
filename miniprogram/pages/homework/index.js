@@ -1,8 +1,9 @@
-// 作业首页：九个学科板块入口 + 班级作业列表
+// 作业首页：九个学科板块入口 + 班级作业列表 + 通知入口
 const app = getApp();
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 const { SUBJECTS } = require("../../utils/subjects");
+const { getUnreadCount } = require("../../utils/notice");
 
 Page({
   data: {
@@ -11,6 +12,7 @@ Page({
     loading: true,
     isCommittee: false,
     now: 0,
+    unread: 0,
   },
 
   onShow() {
@@ -19,6 +21,7 @@ Page({
     if (app.globalData.userInfo) refresh();
     else app.userReadyCallback = refresh;
     this.fetchList();
+    this.refreshUnread();
     this.timer = setInterval(() => this.setData({ now: Date.now() }), 30000);
     this.setData({ now: Date.now() });
   },
@@ -29,6 +32,14 @@ Page({
 
   onUnload() {
     clearInterval(this.timer);
+  },
+
+  refreshUnread() {
+    getUnreadCount().then((count) => this.setData({ unread: count }));
+  },
+
+  goNotice() {
+    wx.navigateTo({ url: "/pages/notice/index" });
   },
 
   goSubject(e) {
@@ -62,6 +73,7 @@ Page({
 
   onPullDownRefresh() {
     this.fetchList();
+    this.refreshUnread();
     wx.stopPullDownRefresh();
   },
 

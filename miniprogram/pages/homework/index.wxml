@@ -1,6 +1,13 @@
 <view class="page-header">
-  <view class="page-title">作业簿</view>
-  <view class="page-sub">「 业精于勤，荒于嬉 」</view>
+  <view class="header-text">
+    <view class="page-title">作业簿</view>
+    <view class="page-sub">「 业精于勤，荒于嬉 」</view>
+  </view>
+  <view class="notice-entry" bindtap="goNotice">
+    <text class="notice-icon">🔔</text>
+    <text class="notice-label">通知</text>
+    <text wx:if="{{unread}}" class="notice-badge">{{unread > 99 ? '99+' : unread}}</text>
+  </view>
 </view>
 
 <view class="section-head">学科板块</view>
