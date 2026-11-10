@@ -3,7 +3,7 @@ const app = getApp();
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 const { SUBJECTS } = require("../../utils/subjects");
-const { getUnreadCount } = require("../../utils/notice");
+const { getUnreadCount, isPushEnabled, renewPushOnEntry } = require("../../utils/notice");
 
 Page({
   data: {
@@ -39,6 +39,11 @@ Page({
   },
 
   goNotice() {
+    // 提醒开关保持开启：进入通知中心时同步发起一次续订
+    // （授权弹窗勾选过「总是保持以上选择」的用户全程无感）
+    if (isPushEnabled()) {
+      renewPushOnEntry().catch(() => {});
+    }
     wx.navigateTo({ url: "/pages/notice/index" });
   },
 

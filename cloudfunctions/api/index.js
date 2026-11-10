@@ -186,22 +186,22 @@ async function pushSubscribeMessage({ page, title, time, remark }) {
   }
 }
 
-// 班级作业推送：点击进入作业详情
+// 班级作业推送：作业名称栏显示「班级作业：标题」，点击进入作业详情
 const pushHomeworkNotice = ({ homeworkId, title, deadline, content }) =>
   pushSubscribeMessage({
     page: `pages/homework/detail?id=${homeworkId}`,
-    title,
+    title: `班级作业：${title || ""}`,
     time: deadline,
     remark: content,
   });
 
-// 学科任务推送：备注带科目名，点击进入对应学科板块
+// 学科任务推送：作业名称栏显示「科目名：标题」，点击进入对应学科板块
 const pushSubjectTaskNotice = ({ subject, taskId, title, deadline, content }) =>
   pushSubscribeMessage({
     page: `pages/subject/index?key=${subject}`,
-    title,
+    title: `${SUBJECT_NAMES[subject] || "科目任务"}：${title || ""}`,
     time: deadline || Date.now(),
-    remark: `${SUBJECT_NAMES[subject] || "科目任务"}：${content || ""}`,
+    remark: content,
   });
 
 exports.main = async (event) => {
@@ -508,7 +508,14 @@ exports.main = async (event) => {
           createMs: toMs(n.createTime),
           deadlineMs: toMs(n.deadline),
         }));
-        return { ok: true, list };
+        // 返回当前用户剩余推送额度，供小程序端在额度不足时自动续订
+        const subRes = await db
+          .collection("subscriptions")
+          .where({ _openid: OPENID })
+          .limit(1)
+          .get();
+        const pushRemain = subRes.data[0] ? subRes.data[0].remain || 0 : 0;
+        return { ok: true, list, pushRemain };
       }
 
       case "deleteHomework": {
