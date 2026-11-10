@@ -4,19 +4,23 @@ const {
   HOMEWORK_TMPL_ID,
   fetchNotices,
   markAllRead,
+  isPushEnabled,
   requestHomeworkPush,
+  disableHomeworkPush,
 } = require("../../utils/notice");
 
 Page({
   data: {
     list: [],
     loading: true,
-    pushEnabled: !!HOMEWORK_TMPL_ID,
+    pushEnabled: false,
+    pushSupported: !!HOMEWORK_TMPL_ID,
     subscribing: false,
   },
 
   onShow() {
     if (!requireRegistered()) return;
+    this.setData({ pushEnabled: isPushEnabled() });
     this.load();
   },
 
@@ -42,14 +46,24 @@ Page({
     if (id) wx.navigateTo({ url: `/pages/homework/detail?id=${id}` });
   },
 
-  enablePush() {
-    if (this.data.subscribing) return;
-    this.setData({ subscribing: true });
-    requestHomeworkPush()
-      .then(() => wx.showToast({ title: "已开启，新作业将推送提醒" }))
+  // 提醒开关：开启时请求授权并登记一次推送额度；关闭时云端清零额度
+  onPushToggle(e) {
+    if (this.data.subscribing || !this.data.pushSupported) {
+      this.setData({ pushEnabled: false });
+      return;
+    }
+    const on = e.detail.value;
+    this.setData({ subscribing: true, pushEnabled: on });
+    const task = on ? requestHomeworkPush() : disableHomeworkPush();
+    task
+      .then(() =>
+        wx.showToast({ title: on ? "已开启，新作业将推送提醒" : "已关闭提醒" })
+      )
       .catch((msg) => {
+        // 授权被拒或关闭失败：开关回退到关闭状态
+        this.setData({ pushEnabled: false });
         wx.showToast({
-          title: typeof msg === "string" ? msg : "开启失败",
+          title: typeof msg === "string" ? msg : (msg && msg.errMsg) || "操作失败",
           icon: "none",
         });
       })

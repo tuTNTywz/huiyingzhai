@@ -32,18 +32,25 @@ App({
       name: "api",
       data: { action: "login" },
       success: (res) => {
-        if (res.result && res.result.ok) {
-          this.globalData.userInfo = res.result.user;
-          this.globalData.registered = !!res.result.registered;
-          if (!res.result.registered) this.globalData.needRegisterModal = true;
-          if (this.userReadyCallback) this.userReadyCallback(res.result.user);
-          if (!res.result.registered) {
+        const r = res.result || {};
+        if (r.ok) {
+          this.globalData.userInfo = r.user;
+          this.globalData.registered = !!r.registered;
+          if (!r.registered) this.globalData.needRegisterModal = true;
+          if (this.userReadyCallback) this.userReadyCallback(r.user);
+          if (!r.registered) {
             wx.switchTab({ url: "/pages/mine/index" });
           }
+        } else {
+          // 云函数返回业务错误时不再静默（否则界面会一直停在「未登录」状态）
+          console.error("登录失败", r.msg);
+          wx.showToast({ title: r.msg || "登录失败，请稍后重试", icon: "none" });
+          if (this.userReadyCallback) this.userReadyCallback(null);
         }
       },
       fail: (err) => {
         console.error("登录失败", err);
+        wx.showToast({ title: "登录失败，请检查网络或云函数是否已部署", icon: "none" });
         if (this.userReadyCallback) this.userReadyCallback(null);
       },
     });

@@ -22,9 +22,14 @@
   color: #6f6858;
   line-height: 1.6;
 }
-.push-btn {
-  margin-top: 20rpx;
-  font-size: 27rpx;
+.push-row {
+  display: flex;
+  align-items: center;
+}
+.push-main {
+  flex: 1;
+  min-width: 0;
+  padding-right: 16rpx;
 }
 .push-tip {
   font-size: 22rpx;
