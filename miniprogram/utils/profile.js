@@ -4,51 +4,55 @@
 // 班级固定为本班，无需手动填写
 const DEFAULT_CLASS = "人工智能26A3班";
 
-// 名单缓存：学号 → 职务（首次使用时从数据库 roster 集合拉取）
-let rosterCache = null;
-// 原始名单记录（含 repSubjects 课代表科目）
-let rosterRecords = [];
+// 名单缓存：学号 → 记录（按学号从数据库 roster 集合按需查询）
+// 注意：小程序端单次 get 最多返回 20 条，因此不能整表拉取，须按学号逐条查询
+const rosterCache = {}; // studentId -> 记录对象或 null（null 表示查询过但未命中）
 
-function loadRoster() {
-  if (rosterCache) return Promise.resolve(rosterCache);
+function loadStudent(studentId) {
+  const id = String(studentId || "").trim();
+  if (!id) return Promise.resolve(null);
+  if (id in rosterCache) return Promise.resolve(rosterCache[id]);
   return wx.cloud
     .database()
     .collection("roster")
-    .limit(100)
+    .where({ studentId: id })
+    .limit(1)
     .get()
     .then((res) => {
-      rosterRecords = res.data || [];
-      rosterCache = {};
-      rosterRecords.forEach((r) => {
-        if (r.studentId) rosterCache[String(r.studentId)] = r.position || "普通同学";
-      });
-      return rosterCache;
+      rosterCache[id] = res.data[0] || null;
+      return rosterCache[id];
     })
-    .catch(() => (rosterCache = rosterCache || {}));
+    .catch(() => (rosterCache[id] = null));
 }
 
-// 取某学号担任课代表的科目 key 列表（需先 loadRoster）
-function getRepSubjects(studentId) {
+// 同步取职务：读取已缓存记录，未加载或未命中时返回普通同学
+function getPositionFor(studentId) {
+  const rec = rosterCache[String(studentId || "").trim()];
+  return (rec && rec.position) || "普通同学";
+}
+
+// 异步取职务：确保该学号记录已加载后再匹配
+function matchPosition(studentId) {
   const id = String(studentId || "").trim();
-  const rec = rosterRecords.find((r) => String(r.studentId) === id);
+  return loadStudent(id).then(() => getPositionFor(id));
+}
+
+// 取某学号担任课代表的科目 key 列表（同步，需先 loadStudent/matchPosition 等）
+function getRepSubjects(studentId) {
+  const rec = rosterCache[String(studentId || "").trim()];
   return rec && Array.isArray(rec.repSubjects) ? rec.repSubjects : [];
+}
+
+// 异步取课代表科目：确保该学号记录已加载后返回
+function matchRepSubjects(studentId) {
+  const id = String(studentId || "").trim();
+  return loadStudent(id).then(() => getRepSubjects(id));
 }
 
 // 当前登录用户是否为某科目课代表
 function isSubjectRep(subjectKey) {
   const u = getApp().globalData.userInfo || {};
-  return loadRoster().then(() => getRepSubjects(u.studentId).includes(subjectKey));
-}
-
-// 同步取职务：读取已缓存名单，未加载或未命中时返回普通同学
-function getPositionFor(studentId) {
-  return (rosterCache && rosterCache[String(studentId || "").trim()]) || "普通同学";
-}
-
-// 异步取职务：确保名单已加载后再匹配
-function matchPosition(studentId) {
-  const id = String(studentId || "").trim();
-  return loadRoster().then(() => getPositionFor(id));
+  return loadStudent(u.studentId).then(() => getRepSubjects(u.studentId).includes(subjectKey));
 }
 
 function validateProfile(form = {}) {
@@ -85,10 +89,11 @@ function saveProfile(form) {
 
 module.exports = {
   DEFAULT_CLASS,
-  loadRoster,
+  loadStudent,
   getPositionFor,
   matchPosition,
   getRepSubjects,
+  matchRepSubjects,
   isSubjectRep,
   validateProfile,
   saveProfile,
