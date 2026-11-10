@@ -1,7 +1,7 @@
 // 我的：个人信息 + 页内登记/修改资料弹窗
 const app = getApp();
 const { requireRegistered } = require("../../utils/guard");
-const { validateProfile, saveProfile, matchPosition, loadRoster, getRepSubjects, DEFAULT_CLASS } = require("../../utils/profile");
+const { validateProfile, saveProfile, matchPosition, matchRepSubjects, DEFAULT_CLASS } = require("../../utils/profile");
 const { subjectName } = require("../../utils/subjects");
 
 const emptyForm = () => ({ name: "", studentId: "", className: DEFAULT_CLASS, position: "" });
@@ -46,9 +46,9 @@ Page({
       submitText: u.registered ? "保 存" : "登 记 入 斋",
       initial: (u.name || u.nickname || "同").charAt(0),
     });
-    // 负责科目从名单 roster 集合的 repSubjects 字段读取
-    loadRoster().then(() => {
-      const names = getRepSubjects(u.studentId)
+    // 负责科目从名单 roster 集合的 repSubjects 字段读取（按学号查询）
+    matchRepSubjects(u.studentId).then((keys) => {
+      const names = keys
         .map((k) => subjectName(k))
         .filter(Boolean);
       this.setData({ subjectDisplayName: names.join("、") || "—" });

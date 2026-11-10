@@ -27,7 +27,11 @@ const SUBJECT_KEYS = [
 
 // 微信订阅消息模板 ID：在公众平台「订阅消息」申请「新作业提醒」类模板后填入
 // 留空时只写站内通知，不影响作业发布
-const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hXIrvAOeoJCK_Uwc9XVsiVg";
+const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hQDn0X0VWmuQs0rcdbN5FgM";
+
+// 推送目标的小程序版本：开发版 "developer" / 体验版 "trial" / 正式版 "formal"
+// 与当前实际使用的版本不一致时，服务通知将无法送达或无法跳转；发布正式版后改为 "formal"
+const PUSH_MINIPROGRAM_STATE = "trial";
 
 // 业务用到的全部集合：冷启动时自动创建，避免「集合不存在」导致登录/写入失败
 const COLLECTIONS = [
@@ -106,9 +110,17 @@ function noticeTimeText(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// 时间值统一转毫秒时间戳（兼容 Date / ISO 字符串 / 数字）
+function toMs(v) {
+  if (!v) return 0;
+  if (typeof v === "number") return v;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
 // 给已订阅的同学推送微信服务通知；单个用户失败不影响其它人
-// 模板字段 thing1 / time2 / thing3 需按实际申请的模板调整
-async function pushHomeworkNotice({ homeworkId, title, deadline, creatorName }) {
+// 模板字段：thing1=作业名，time4=结束时间，thing5=备注（与公众平台申请的模板一致）
+async function pushHomeworkNotice({ homeworkId, title, deadline, content }) {
   if (!HOMEWORK_TMPL_ID) return;
   try {
     const subs = await db
@@ -119,13 +131,14 @@ async function pushHomeworkNotice({ homeworkId, title, deadline, creatorName }) 
     const payload = {
       templateId: HOMEWORK_TMPL_ID,
       page: `pages/homework/detail?id=${homeworkId}`,
-      // 开发调试阶段可改为 "developer"，体验版用 "trial"，正式发布用 "formal"
-      miniprogramState: "formal",
+      miniprogramState: PUSH_MINIPROGRAM_STATE,
       lang: "zh_CN",
       data: {
         thing1: { value: String(title || "新作业").slice(0, 20) },
-        time2: { value: noticeTimeText(deadline) },
-        thing3: { value: String(creatorName || "班委").slice(0, 20) },
+        time4: { value: noticeTimeText(deadline) },
+        thing5: {
+          value: (String(content || "").trim().slice(0, 20)) || "点击查看详情",
+        },
       },
     };
     await Promise.all(
@@ -136,11 +149,21 @@ async function pushHomeworkNotice({ homeworkId, title, deadline, creatorName }) 
             data: { remain: _.inc(-1), updateTime: db.serverDate() },
           });
         } catch (e) {
-          // 订阅次数用完 / 用户拒收，跳过即可
+          // 43101 = 订阅次数已用完或用户拒收，把剩余次数归零并跳过
+          console.error("推送失败", s._openid, e.errCode || e.errMsg || e.message);
+          if (e.errCode === 43101 || /43101/.test(JSON.stringify(e))) {
+            await db
+              .collection("subscriptions")
+              .doc(s._id)
+              .update({ data: { remain: 0, updateTime: db.serverDate() } })
+              .catch(() => {});
+          }
         }
       })
     );
-  } catch (e) {}
+  } catch (e) {
+    console.error("推送流程异常", e.errMsg || e.message || e);
+  }
 }
 
 exports.main = async (event) => {
@@ -210,9 +233,9 @@ exports.main = async (event) => {
         // 职务以数据库 roster 集合为准：学号命中则取库内职务，否则为普通同学
         const rosterRes = await db.collection("roster").where({ studentId }).get();
         const position = rosterRes.data[0] ? rosterRes.data[0].position : "普通同学";
-        // 管理员职务 → admin；其余班委职务 → committee
+        // 管理员/班长职务 → admin；其余班委职务 → committee
         const role =
-          position === "管理员"
+          position === "管理员" || position === "班长"
             ? "admin"
             : position === "普通同学"
               ? "student"
@@ -363,7 +386,7 @@ exports.main = async (event) => {
             homeworkId: res._id,
             title: data.title,
             deadline: data.deadline,
-            creatorName: user.nickname,
+            content: data.desc,
           });
         } catch (e) {}
         return { ok: true, id: res._id };
@@ -384,6 +407,23 @@ exports.main = async (event) => {
           });
         }
         return { ok: true };
+      }
+
+      // 通知中心：站内通知统一走云函数读取
+      // （notifications 集合由云函数自动创建，默认「仅创建者可读写」，
+      //   小程序端直接读会因权限被拒，故改为服务端返回）
+      case "fetchHomeworkNotices": {
+        const res = await db
+          .collection("notifications")
+          .orderBy("createTime", "desc")
+          .limit(50)
+          .get();
+        const list = (res.data || []).map((n) => ({
+          ...n,
+          createMs: toMs(n.createTime),
+          deadlineMs: toMs(n.deadline),
+        }));
+        return { ok: true, list };
       }
 
       case "deleteHomework": {

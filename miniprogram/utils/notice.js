@@ -1,9 +1,9 @@
 // 通知中心：站内通知读取、未读计算、微信订阅消息授权
-const { formatTime, toDateMs } = require("./util");
+const { formatTime } = require("./util");
 
 // 在微信公众平台「订阅消息」申请「新作业提醒」类模板后填入模板 ID
 // 留空时只使用站内通知，不影响作业发布与查看
-const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hXIrvAOeoJCK_Uwc9XVsiVg";
+const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hQDn0X0VWmuQs0rcdbN5FgM";
 
 const LAST_READ_KEY = "notice_last_read";
 
@@ -12,22 +12,20 @@ function getLastRead() {
 }
 
 // 广播式通知：所有同学读同一份记录，未读状态按本机「上次阅读时间」计算
+// 通过云函数读取（notifications 集合默认权限仅创建者可读写，小程序端直读会被拒）
 function fetchNotices() {
   return wx.cloud
-    .database()
-    .collection("notifications")
-    .orderBy("createTime", "desc")
-    .limit(50)
-    .get()
-    .then((res) => {
+    .callFunction({ name: "api", data: { action: "fetchHomeworkNotices" } })
+    .then((r) => {
+      const res = r.result || {};
+      if (!res.ok) throw new Error(res.msg || "通知加载失败");
       const last = getLastRead();
-      const list = (res.data || []).map((n) => {
-        const ms = toDateMs(n.createTime);
-        const deadlineMs = toDateMs(n.deadline) || n.deadline || 0;
+      const list = (res.list || []).map((n) => {
+        const ms = n.createMs || 0;
+        const deadlineMs = n.deadlineMs || 0;
         return {
           ...n,
-          createMs: ms,
-          timeText: formatTime(ms),
+          timeText: ms ? formatTime(ms) : "",
           deadlineText: deadlineMs ? formatTime(deadlineMs) : "",
           unread: ms > last,
         };
