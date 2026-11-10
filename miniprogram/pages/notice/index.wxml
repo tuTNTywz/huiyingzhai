@@ -7,7 +7,7 @@
   <view class="push-row">
     <view class="push-main">
       <view class="section-title">作业提醒</view>
-      <view class="push-desc">开启后，班委发布新作业时会在微信服务通知里收到提醒。额度用完后可关闭再重新开启续订。</view>
+      <view class="push-desc">开启后即持续生效：额度不足时会自动续订。首次授权弹窗建议勾选「总是保持以上选择」，之后全程无感提醒。</view>
     </view>
     <switch
       checked="{{pushEnabled}}"

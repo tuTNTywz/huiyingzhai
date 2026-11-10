@@ -97,6 +97,34 @@ function disableHomeworkPush() {
     });
 }
 
+// 进入通知中心时顺手续订一次额度（开关保持开启即自动续）
+// 关键：必须在用户点击回调内「同步」发起 requestSubscribeMessage，
+// 若先异步查询再请求会丢失点击上下文导致静默失败。
+// 用户勾选过「总是保持以上选择」则全程无感；未勾选则每次进入会弹一次授权。
+function renewPushOnEntry() {
+  if (!HOMEWORK_TMPL_ID) return Promise.reject("未配置模板");
+  return new Promise((resolve) => {
+    wx.requestSubscribeMessage({
+      tmplIds: [HOMEWORK_TMPL_ID],
+      success: (res) => {
+        if (res[HOMEWORK_TMPL_ID] !== "accept") return resolve("declined");
+        wx.cloud
+          .callFunction({ name: "api", data: { action: "subscribeHomework" } })
+          .then((r) => {
+            if (r.result && r.result.ok) {
+              setPushEnabled(true);
+              resolve("renewed");
+            } else {
+              resolve("error");
+            }
+          })
+          .catch(() => resolve("error"));
+      },
+      fail: () => resolve("declined"),
+    });
+  });
+}
+
 module.exports = {
   HOMEWORK_TMPL_ID,
   fetchNotices,
@@ -105,4 +133,5 @@ module.exports = {
   isPushEnabled,
   requestHomeworkPush,
   disableHomeworkPush,
+  renewPushOnEntry,
 };
