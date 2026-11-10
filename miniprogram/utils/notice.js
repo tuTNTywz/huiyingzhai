@@ -6,6 +6,16 @@ const { formatTime } = require("./util");
 const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hQDn0X0VWmuQs0rcdbN5FgM";
 
 const LAST_READ_KEY = "notice_last_read";
+// 提醒开关状态（本机记录）：开启时云端 subscriptions.remain 记录剩余推送次数
+const PUSH_ENABLED_KEY = "notice_push_enabled";
+
+function isPushEnabled() {
+  return !!wx.getStorageSync(PUSH_ENABLED_KEY);
+}
+
+function setPushEnabled(enabled) {
+  enabled ? wx.setStorageSync(PUSH_ENABLED_KEY, true) : wx.removeStorageSync(PUSH_ENABLED_KEY);
+}
 
 function getLastRead() {
   return Number(wx.getStorageSync(LAST_READ_KEY)) || 0;
@@ -59,9 +69,14 @@ function requestHomeworkPush() {
         if (res[HOMEWORK_TMPL_ID] !== "accept") return reject("未开启提醒");
         wx.cloud
           .callFunction({ name: "api", data: { action: "subscribeHomework" } })
-          .then((r) =>
-            r.result && r.result.ok ? resolve() : reject((r.result && r.result.msg) || "登记提醒失败")
-          )
+          .then((r) => {
+            if (r.result && r.result.ok) {
+              setPushEnabled(true);
+              resolve();
+            } else {
+              reject((r.result && r.result.msg) || "登记提醒失败");
+            }
+          })
           .catch(() => reject("登记提醒失败"));
       },
       fail: () => reject("授权未完成"),
@@ -69,10 +84,22 @@ function requestHomeworkPush() {
   });
 }
 
+// 关闭提醒：云端清零剩余推送次数（微信侧授权无法撤销）
+function disableHomeworkPush() {
+  setPushEnabled(false);
+  return wx.cloud
+    .callFunction({ name: "api", data: { action: "unsubscribeHomework" } })
+    .then((r) => {
+      if (!(r.result && r.result.ok)) throw new Error("关闭失败");
+    });
+}
+
 module.exports = {
   HOMEWORK_TMPL_ID,
   fetchNotices,
   markAllRead,
   getUnreadCount,
+  isPushEnabled,
   requestHomeworkPush,
+  disableHomeworkPush,
 };

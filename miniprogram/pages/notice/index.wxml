@@ -4,10 +4,19 @@
 </view>
 
 <view class="card push-card">
-  <view class="section-title">作业提醒</view>
-  <view class="push-desc">开启后，班委发布新作业时会在微信服务通知里收到提醒。订阅消息为一次性授权，可随时再次点击续订。</view>
-  <button class="btn-plain push-btn" disabled="{{subscribing}}" bindtap="enablePush">{{subscribing ? '开启中…' : '开启作业提醒'}}</button>
-  <view wx:if="{{!pushEnabled}}" class="push-tip">当前未配置订阅消息模板 ID，站内通知仍可正常使用</view>
+  <view class="push-row">
+    <view class="push-main">
+      <view class="section-title">作业提醒</view>
+      <view class="push-desc">开启后，班委发布新作业时会在微信服务通知里收到提醒。额度用完后可关闭再重新开启续订。</view>
+    </view>
+    <switch
+      checked="{{pushEnabled}}"
+      disabled="{{subscribing || !pushSupported}}"
+      bindchange="onPushToggle"
+      color="#9c6b4a"
+    />
+  </view>
+  <view wx:if="{{!pushSupported}}" class="push-tip">当前未配置订阅消息模板 ID，站内通知仍可正常使用</view>
 </view>
 
 <view wx:if="{{!loading && list.length === 0}}" class="empty">暂无通知，新作业发布后会显示在这里</view>

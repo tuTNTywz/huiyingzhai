@@ -36,6 +36,7 @@ const PUSH_MINIPROGRAM_STATE = "trial";
 // 业务用到的全部集合：冷启动时自动创建，避免「集合不存在」导致登录/写入失败
 const COLLECTIONS = [
   "users",
+  "roster",
   "homeworks",
   "sign_tasks",
   "sign_records",
@@ -52,9 +53,15 @@ let collectionsReady = null;
 function ensureCollections() {
   if (!collectionsReady) {
     // 并行创建以缩短冷启动耗时；已存在的集合会抛错，忽略即可
-    collectionsReady = Promise.all(
-      COLLECTIONS.map((name) => db.createCollection(name).catch(() => {}))
-    );
+    // 整体再兜底 catch：自动建集合失败绝不能连带登录/其它操作一起失败
+    try {
+      collectionsReady = Promise.all(
+        COLLECTIONS.map((name) => db.createCollection(name).catch(() => {}))
+      ).catch(() => {});
+    } catch (e) {
+      console.error("自动创建集合失败", e);
+      collectionsReady = Promise.resolve();
+    }
   }
   return collectionsReady;
 }
@@ -231,8 +238,14 @@ exports.main = async (event) => {
           return { ok: false, msg: "该学号已被注册" };
         }
         // 职务以数据库 roster 集合为准：学号命中则取库内职务，否则为普通同学
-        const rosterRes = await db.collection("roster").where({ studentId }).get();
-        const position = rosterRes.data[0] ? rosterRes.data[0].position : "普通同学";
+        let position = "普通同学";
+        try {
+          const rosterRes = await db.collection("roster").where({ studentId }).get();
+          if (rosterRes.data[0]) position = rosterRes.data[0].position || "普通同学";
+        } catch (e) {
+          console.error("读取名单失败", e);
+          return { ok: false, msg: "名单读取失败，请检查数据库 roster 集合是否已创建" };
+        }
         // 管理员/班长职务 → admin；其余班委职务 → committee
         const role =
           position === "管理员" || position === "班长"
@@ -404,6 +417,18 @@ exports.main = async (event) => {
         } else {
           await col.add({
             data: { _openid: OPENID, remain: 1, createTime: db.serverDate() },
+          });
+        }
+        return { ok: true };
+      }
+
+      // 关闭作业提醒：剩余推送次数清零（微信侧授权无法撤销，仅云端不再推送）
+      case "unsubscribeHomework": {
+        const col = db.collection("subscriptions");
+        const exist = await col.where({ _openid: OPENID }).limit(1).get();
+        if (exist.data.length) {
+          await col.doc(exist.data[0]._id).update({
+            data: { remain: 0, updateTime: db.serverDate() },
           });
         }
         return { ok: true };
