@@ -139,8 +139,9 @@ function toMs(v) {
 }
 
 // 给已订阅的同学推送微信服务通知；单个用户失败不影响其它人
+// excludeOpenid 为发布者本人，不向其推送
 // 模板字段：thing1=作业/任务名，time4=结束时间，thing5=备注（作业与学科任务共用同一模板）
-async function pushSubscribeMessage({ page, title, time, remark }) {
+async function pushSubscribeMessage({ page, title, time, remark, excludeOpenid }) {
   if (!HOMEWORK_TMPL_ID) return;
   try {
     const subs = await db
@@ -161,8 +162,10 @@ async function pushSubscribeMessage({ page, title, time, remark }) {
         },
       },
     };
+    // 排除发布者本人
+    const targets = subs.data.filter((s) => s._openid !== excludeOpenid);
     await Promise.all(
-      subs.data.map(async (s) => {
+      targets.map(async (s) => {
         try {
           await cloud.openapi.subscribeMessage.send({ ...payload, touser: s._openid });
           await db.collection("subscriptions").doc(s._id).update({
@@ -187,21 +190,23 @@ async function pushSubscribeMessage({ page, title, time, remark }) {
 }
 
 // 班级作业推送：作业名称栏显示「班级作业：标题」，点击进入作业详情
-const pushHomeworkNotice = ({ homeworkId, title, deadline, content }) =>
+const pushHomeworkNotice = ({ homeworkId, title, deadline, content, publisherOpenid }) =>
   pushSubscribeMessage({
     page: `pages/homework/detail?id=${homeworkId}`,
     title: `班级作业：${title || ""}`,
     time: deadline,
     remark: content,
+    excludeOpenid: publisherOpenid,
   });
 
 // 学科任务推送：作业名称栏显示「科目名：标题」，点击进入对应学科板块
-const pushSubjectTaskNotice = ({ subject, taskId, title, deadline, content }) =>
+const pushSubjectTaskNotice = ({ subject, taskId, title, deadline, content, publisherOpenid }) =>
   pushSubscribeMessage({
     page: `pages/subject/index?key=${subject}`,
     title: `${SUBJECT_NAMES[subject] || "科目任务"}：${title || ""}`,
     time: deadline || Date.now(),
     remark: content,
+    excludeOpenid: publisherOpenid,
   });
 
 exports.main = async (event) => {
@@ -376,19 +381,21 @@ exports.main = async (event) => {
               content: String(data.content || "").trim().slice(0, 100) || "新任务已发布，点击查看详情",
               deadline: data.deadline || 0,
               creatorName: user.nickname,
+              publisherOpenid: OPENID, // 发布者本人不在通知中心展示此条
               createTime: db.serverDate(),
             },
           });
         } catch (e) {
           console.error("学科任务站内通知写入失败", e.errMsg || e.message || e);
         }
-        // 微信服务通知：已订阅的同学收到学科任务提醒
+        // 微信服务通知：已订阅的同学收到学科任务提醒（发布者除外）
         await pushSubjectTaskNotice({
           subject: data.subject,
           taskId: res._id,
           title,
           deadline: data.deadline || 0,
           content: String(data.content || "").trim(),
+          publisherOpenid: OPENID,
         });
         return { ok: true, id: res._id };
       }
@@ -451,15 +458,17 @@ exports.main = async (event) => {
               content: String(data.desc || "").trim().slice(0, 100) || "新作业已发布，点击查看详情",
               deadline: data.deadline,
               creatorName: user.nickname,
+              publisherOpenid: OPENID, // 发布者本人不在通知中心展示此条
               createTime: db.serverDate(),
             },
           });
-          // 微信服务通知：配置了模板 ID 且同学已订阅时推送
+          // 微信服务通知：配置了模板 ID 且同学已订阅时推送（发布者除外）
           await pushHomeworkNotice({
             homeworkId: res._id,
             title: data.title,
             deadline: data.deadline,
             content: data.desc,
+            publisherOpenid: OPENID,
           });
         } catch (e) {}
         return { ok: true, id: res._id };

@@ -31,7 +31,11 @@ function fetchNotices() {
       const res = r.result || {};
       if (!res.ok) throw new Error(res.msg || "通知加载失败");
       const last = getLastRead();
-      const list = (res.list || []).map((n) => {
+      const myOpenid = (getApp().globalData.userInfo || {})._openid || "";
+      // 发布者本人不展示自己发布的通知
+      const list = (res.list || [])
+        .filter((n) => !n.publisherOpenid || n.publisherOpenid !== myOpenid)
+        .map((n) => {
         const ms = n.createMs || 0;
         const deadlineMs = n.deadlineMs || 0;
         return {
