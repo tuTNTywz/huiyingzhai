@@ -25,11 +25,11 @@
   class="card notice-item {{item.unread ? 'unread' : ''}}"
   wx:for="{{list}}"
   wx:key="_id"
-  data-id="{{item.homeworkId}}"
+  data-id="{{item.type === 'subject_task' ? item.subject : item.homeworkId}}"
   bindtap="openNotice"
 >
   <view class="notice-top">
-    <text class="tag tag-gold">新作业</text>
+    <text class="tag tag-gold">{{item.tagText}}</text>
     <text wx:if="{{item.unread}}" class="tag tag-red">未读</text>
     <text class="subtitle">{{item.timeText}}</text>
   </view>

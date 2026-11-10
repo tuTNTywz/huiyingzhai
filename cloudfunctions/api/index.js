@@ -25,6 +25,19 @@ const SUBJECT_KEYS = [
   "defense", "ideology", "pe", "career",
 ];
 
+// 科目名称（与小程序端 utils/subjects.js 保持一致），用于推送消息备注
+const SUBJECT_NAMES = {
+  english: "大学英语",
+  math: "高等数学",
+  psychology: "大学生心理健康教育",
+  ai: "人工智能基础及应用",
+  physics: "大学物理",
+  defense: "国防教育",
+  ideology: "思想道德与法治",
+  pe: "体育",
+  career: "职业生涯规划",
+};
+
 // 微信订阅消息模板 ID：在公众平台「订阅消息」申请「新作业提醒」类模板后填入
 // 留空时只写站内通知，不影响作业发布
 const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hQDn0X0VWmuQs0rcdbN5FgM";
@@ -126,8 +139,8 @@ function toMs(v) {
 }
 
 // 给已订阅的同学推送微信服务通知；单个用户失败不影响其它人
-// 模板字段：thing1=作业名，time4=结束时间，thing5=备注（与公众平台申请的模板一致）
-async function pushHomeworkNotice({ homeworkId, title, deadline, content }) {
+// 模板字段：thing1=作业/任务名，time4=结束时间，thing5=备注（作业与学科任务共用同一模板）
+async function pushSubscribeMessage({ page, title, time, remark }) {
   if (!HOMEWORK_TMPL_ID) return;
   try {
     const subs = await db
@@ -137,14 +150,14 @@ async function pushHomeworkNotice({ homeworkId, title, deadline, content }) {
       .get();
     const payload = {
       templateId: HOMEWORK_TMPL_ID,
-      page: `pages/homework/detail?id=${homeworkId}`,
+      page,
       miniprogramState: PUSH_MINIPROGRAM_STATE,
       lang: "zh_CN",
       data: {
-        thing1: { value: String(title || "新作业").slice(0, 20) },
-        time4: { value: noticeTimeText(deadline) },
+        thing1: { value: String(title || "新通知").slice(0, 20) },
+        time4: { value: noticeTimeText(time) },
         thing5: {
-          value: (String(content || "").trim().slice(0, 20)) || "点击查看详情",
+          value: String(remark || "").trim().slice(0, 20) || "点击查看详情",
         },
       },
     };
@@ -172,6 +185,24 @@ async function pushHomeworkNotice({ homeworkId, title, deadline, content }) {
     console.error("推送流程异常", e.errMsg || e.message || e);
   }
 }
+
+// 班级作业推送：点击进入作业详情
+const pushHomeworkNotice = ({ homeworkId, title, deadline, content }) =>
+  pushSubscribeMessage({
+    page: `pages/homework/detail?id=${homeworkId}`,
+    title,
+    time: deadline,
+    remark: content,
+  });
+
+// 学科任务推送：备注带科目名，点击进入对应学科板块
+const pushSubjectTaskNotice = ({ subject, taskId, title, deadline, content }) =>
+  pushSubscribeMessage({
+    page: `pages/subject/index?key=${subject}`,
+    title,
+    time: deadline || Date.now(),
+    remark: `${SUBJECT_NAMES[subject] || "科目任务"}：${content || ""}`,
+  });
 
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext();
@@ -334,6 +365,31 @@ exports.main = async (event) => {
             createTime: db.serverDate(),
           },
         });
+        // 生成站内通知，全体同学在通知中心可见（失败不影响发布本身）
+        try {
+          await db.collection("notifications").add({
+            data: {
+              type: "subject_task",
+              taskId: res._id,
+              subject: data.subject,
+              title,
+              content: String(data.content || "").trim().slice(0, 100) || "新任务已发布，点击查看详情",
+              deadline: data.deadline || 0,
+              creatorName: user.nickname,
+              createTime: db.serverDate(),
+            },
+          });
+        } catch (e) {
+          console.error("学科任务站内通知写入失败", e.errMsg || e.message || e);
+        }
+        // 微信服务通知：已订阅的同学收到学科任务提醒
+        await pushSubjectTaskNotice({
+          subject: data.subject,
+          taskId: res._id,
+          title,
+          deadline: data.deadline || 0,
+          content: String(data.content || "").trim(),
+        });
         return { ok: true, id: res._id };
       }
 
@@ -346,6 +402,10 @@ exports.main = async (event) => {
         }
         const fileIDs = (task.attachments || []).map((a) => a.fileID).filter(Boolean);
         await db.collection("subject_tasks").doc(data.id).remove();
+        // 同步移除该任务产生的站内通知
+        try {
+          await db.collection("notifications").where({ taskId: data.id }).remove();
+        } catch (e) {}
         // 一并清理云存储中的附件
         if (fileIDs.length) {
           try {

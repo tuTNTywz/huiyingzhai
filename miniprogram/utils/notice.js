@@ -1,5 +1,6 @@
 // 通知中心：站内通知读取、未读计算、微信订阅消息授权
 const { formatTime } = require("./util");
+const { subjectName } = require("./subjects");
 
 // 在微信公众平台「订阅消息」申请「新作业提醒」类模板后填入模板 ID
 // 留空时只使用站内通知，不影响作业发布与查看
@@ -38,6 +39,8 @@ function fetchNotices() {
           timeText: ms ? formatTime(ms) : "",
           deadlineText: deadlineMs ? formatTime(deadlineMs) : "",
           unread: ms > last,
+          // 学科任务显示科目名，班级作业显示「新作业」
+          tagText: n.type === "subject_task" ? subjectName(n.subject) || "科目任务" : "新作业",
         };
       });
       return { list, unread: list.filter((n) => n.unread).length };

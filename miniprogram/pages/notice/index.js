@@ -41,9 +41,16 @@ Page({
       });
   },
 
+  // 学科任务跳对应板块，班级作业跳作业详情
   openNotice(e) {
     const id = e.currentTarget.dataset.id;
-    if (id) wx.navigateTo({ url: `/pages/homework/detail?id=${id}` });
+    if (!id) return;
+    const notice = this.data.list.find((n) => n._id && (n.homeworkId === id || n.subject === id));
+    if (notice && notice.type === "subject_task") {
+      wx.navigateTo({ url: `/pages/subject/index?key=${id}` });
+    } else {
+      wx.navigateTo({ url: `/pages/homework/detail?id=${id}` });
+    }
   },
 
   // 提醒开关：开启时请求授权并登记一次推送额度；关闭时云端清零额度
