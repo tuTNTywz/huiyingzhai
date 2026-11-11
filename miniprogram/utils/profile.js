@@ -1,25 +1,21 @@
 // 学籍登记共用逻辑：登记页与「我的」弹窗复用
-// 职务与角色以数据库 roster 集合（学号名单）为准，自动根据学号确定
+// 职务与角色以后端 roster 名单为准，自动根据学号确定
+const api = require("./api");
 
 // 班级固定为本班，无需手动填写
 const DEFAULT_CLASS = "人工智能26A3班";
 
-// 名单缓存：学号 → 记录（按学号从数据库 roster 集合按需查询）
-// 注意：小程序端单次 get 最多返回 20 条，因此不能整表拉取，须按学号逐条查询
+// 名单缓存：学号 → 记录（按学号向后端查询 roster）
 const rosterCache = {}; // studentId -> 记录对象或 null（null 表示查询过但未命中）
 
 function loadStudent(studentId) {
   const id = String(studentId || "").trim();
   if (!id) return Promise.resolve(null);
   if (id in rosterCache) return Promise.resolve(rosterCache[id]);
-  return wx.cloud
-    .database()
-    .collection("roster")
-    .where({ studentId: id })
-    .limit(1)
-    .get()
+  return api
+    .call("lookupRoster", { studentId: id })
     .then((res) => {
-      rosterCache[id] = res.data[0] || null;
+      rosterCache[id] = (res && res.ok && res.item) || null;
       return rosterCache[id];
     })
     .catch(() => (rosterCache[id] = null));
@@ -65,23 +61,16 @@ function validateProfile(form = {}) {
 
 function saveProfile(form) {
   const app = getApp();
-  return wx.cloud
-    .callFunction({
-      name: "api",
-      data: {
-        action: "register",
-        data: {
-          name: String(form.name).trim(),
-          studentId: String(form.studentId).trim(),
-          className: String(form.className).trim(),
-          position: form.position,
-          // 课代表由管理员在课程设置中统一指定，登记时不可自选
-        },
-      },
+  return api
+    .call("register", {
+      name: String(form.name).trim(),
+      studentId: String(form.studentId).trim(),
+      className: String(form.className).trim(),
+      position: form.position,
+      // 课代表由管理员在课程设置中统一指定，登记时不可自选
     })
-    .then((res) => {
-      const r = res.result || {};
-      if (!r.ok) return Promise.reject(r.msg || "登记失败");
+    .then((r) => {
+      if (!r || !r.ok) return Promise.reject((r && r.msg) || "登记失败");
       app.updateUser(r.user);
       return r.user;
     });

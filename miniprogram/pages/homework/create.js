@@ -1,5 +1,6 @@
 // 发布作业（班委 / 管理员）：支持上传文档与图片附件
 const app = getApp();
+const api = require("../../utils/api");
 const { formatSize } = require("../../utils/util");
 
 const MAX_FILES = 5;
@@ -139,40 +140,11 @@ Page({
     return true;
   },
 
-  // 顺序上传附件到云存储；中途失败则清理已上传文件
+  // 顺序上传附件到服务器；中途失败由 api.upload 清理已上传文件
   uploadAttachments() {
-    const files = this.data.attachments;
-    const uploaded = [];
-    const run = (i) => {
-      if (i >= files.length) return Promise.resolve(uploaded);
-      const f = files[i];
-      this.setData({ uploadText: `正在上传附件 ${i + 1}/${files.length}` });
-      const cloudPath = `homework/${Date.now()}_${i}_${f.name}`;
-      return wx.cloud
-        .uploadFile({ cloudPath, filePath: f.tempPath })
-        .then((res) => {
-          uploaded.push(res.fileID);
-          return run(i + 1);
-        });
-    };
-    return run(0)
-      .then((fileIDs) =>
-        files.map((f, i) => ({
-          fileID: fileIDs[i],
-          name: f.name,
-          type: f.type,
-          size: f.size,
-        }))
-      )
-      .catch((err) => {
-        console.error(err);
-        if (uploaded.length) {
-          try {
-            wx.cloud.deleteFile({ fileList: uploaded }).catch(() => {});
-          } catch (e) {}
-        }
-        return Promise.reject("附件上传失败，请重试");
-      });
+    return api.upload(this.data.attachments, "homework", (text) =>
+      this.setData({ uploadText: text })
+    );
   },
 
   submit() {
@@ -183,25 +155,19 @@ Page({
       .then((attachments) => {
         this.setData({ uploadText: "正在发布…" });
         const deadline = new Date(`${this.data.date}T${this.data.time}:00`).getTime();
-        return wx.cloud.callFunction({
-          name: "api",
-          data: {
-            action: "publishHomework",
-            data: {
-              title: this.data.title.trim(),
-              desc: this.data.desc.trim(),
-              deadline,
-              attachments,
-            },
-          },
+        return api.call("publishHomework", {
+          title: this.data.title.trim(),
+          desc: this.data.desc.trim(),
+          deadline,
+          attachments,
         });
       })
       .then((res) => {
-        if (res.result.ok) {
+        if (res.ok) {
           wx.showToast({ title: "发布成功" });
           setTimeout(() => wx.navigateBack(), 800);
         } else {
-          wx.showToast({ title: res.result.msg, icon: "none" });
+          wx.showToast({ title: res.msg, icon: "none" });
         }
       })
       .catch((msg) => {

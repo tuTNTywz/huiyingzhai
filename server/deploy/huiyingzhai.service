@@ -1,0 +1,21 @@
+[Unit]
+Description=Huiyingzhai mini program API
+After=network.target
+
+[Service]
+Type=simple
+User=huiyingzhai
+Group=huiyingzhai
+WorkingDirectory=/opt/huiyingzhai/server
+EnvironmentFile=/opt/huiyingzhai/server/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/env node src/index.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

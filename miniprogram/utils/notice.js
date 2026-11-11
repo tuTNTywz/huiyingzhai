@@ -1,10 +1,8 @@
 // 通知中心：站内通知读取、未读计算、微信订阅消息授权
+const api = require("./api");
 const { formatTime } = require("./util");
 const { subjectName } = require("./subjects");
-
-// 在微信公众平台「订阅消息」申请「新作业提醒」类模板后填入模板 ID
-// 留空时只使用站内通知，不影响作业发布与查看
-const HOMEWORK_TMPL_ID = "6avlHCT0IR-fd1hk3c15hQDn0X0VWmuQs0rcdbN5FgM";
+const { HOMEWORK_TMPL_ID } = require("../config");
 
 const LAST_READ_KEY = "notice_last_read";
 // 提醒开关状态（本机记录）：开启时云端 subscriptions.remain 记录剩余推送次数
@@ -23,19 +21,16 @@ function getLastRead() {
 }
 
 // 广播式通知：所有同学读同一份记录，未读状态按本机「上次阅读时间」计算
-// 通过云函数读取（notifications 集合默认权限仅创建者可读写，小程序端直读会被拒）
+// 统一由后端返回（发布者本人不展示自己发布的通知）
 function fetchNotices() {
-  return wx.cloud
-    .callFunction({ name: "api", data: { action: "fetchHomeworkNotices" } })
-    .then((r) => {
-      const res = r.result || {};
-      if (!res.ok) throw new Error(res.msg || "通知加载失败");
-      const last = getLastRead();
-      const myOpenid = (getApp().globalData.userInfo || {})._openid || "";
-      // 发布者本人不展示自己发布的通知
-      const list = (res.list || [])
-        .filter((n) => !n.publisherOpenid || n.publisherOpenid !== myOpenid)
-        .map((n) => {
+  return api.call("fetchHomeworkNotices").then((res) => {
+    if (!res || !res.ok) throw new Error((res && res.msg) || "通知加载失败");
+    const last = getLastRead();
+    const myOpenid = (getApp().globalData.userInfo || {})._openid || "";
+    // 发布者本人不展示自己发布的通知
+    const list = (res.list || [])
+      .filter((n) => !n.publisherOpenid || n.publisherOpenid !== myOpenid)
+      .map((n) => {
         const ms = n.createMs || 0;
         const deadlineMs = n.deadlineMs || 0;
         return {
@@ -47,8 +42,8 @@ function fetchNotices() {
           tagText: n.type === "subject_task" ? subjectName(n.subject) || "科目任务" : "新作业",
         };
       });
-      return { list, unread: list.filter((n) => n.unread).length };
-    });
+    return { list, unread: list.filter((n) => n.unread).length };
+  });
 }
 
 // 进入通知中心后把当前最新一条标记为已读（下次进入不再显示未读）
@@ -66,7 +61,7 @@ function getUnreadCount() {
     .catch(() => 0);
 }
 
-// 订阅消息授权：必须由用户点击触发，成功后由云函数登记一次可推送次数
+// 订阅消息授权：必须由用户点击触发，成功后由服务端登记一次可推送次数
 function requestHomeworkPush() {
   return new Promise((resolve, reject) => {
     if (!HOMEWORK_TMPL_ID) return reject("尚未配置订阅消息模板 ID");
@@ -74,14 +69,14 @@ function requestHomeworkPush() {
       tmplIds: [HOMEWORK_TMPL_ID],
       success: (res) => {
         if (res[HOMEWORK_TMPL_ID] !== "accept") return reject("未开启提醒");
-        wx.cloud
-          .callFunction({ name: "api", data: { action: "subscribeHomework" } })
+        api
+          .call("subscribeHomework")
           .then((r) => {
-            if (r.result && r.result.ok) {
+            if (r && r.ok) {
               setPushEnabled(true);
               resolve();
             } else {
-              reject((r.result && r.result.msg) || "登记提醒失败");
+              reject((r && r.msg) || "登记提醒失败");
             }
           })
           .catch(() => reject("登记提醒失败"));
@@ -91,14 +86,12 @@ function requestHomeworkPush() {
   });
 }
 
-// 关闭提醒：云端清零剩余推送次数（微信侧授权无法撤销）
+// 关闭提醒：服务端清零剩余推送次数（微信侧授权无法撤销）
 function disableHomeworkPush() {
   setPushEnabled(false);
-  return wx.cloud
-    .callFunction({ name: "api", data: { action: "unsubscribeHomework" } })
-    .then((r) => {
-      if (!(r.result && r.result.ok)) throw new Error("关闭失败");
-    });
+  return api.call("unsubscribeHomework").then((r) => {
+    if (!(r && r.ok)) throw new Error("关闭失败");
+  });
 }
 
 // 进入通知中心时顺手续订一次额度（开关保持开启即自动续）
@@ -112,10 +105,10 @@ function renewPushOnEntry() {
       tmplIds: [HOMEWORK_TMPL_ID],
       success: (res) => {
         if (res[HOMEWORK_TMPL_ID] !== "accept") return resolve("declined");
-        wx.cloud
-          .callFunction({ name: "api", data: { action: "subscribeHomework" } })
+        api
+          .call("subscribeHomework")
           .then((r) => {
-            if (r.result && r.result.ok) {
+            if (r && r.ok) {
               setPushEnabled(true);
               resolve("renewed");
             } else {

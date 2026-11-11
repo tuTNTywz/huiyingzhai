@@ -1,5 +1,6 @@
 // 作业首页：九个学科板块入口 + 班级作业列表 + 通知入口
 const app = getApp();
+const api = require("../../utils/api");
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 const { SUBJECTS } = require("../../utils/subjects");
@@ -55,15 +56,12 @@ Page({
 
   fetchList() {
     wx.showLoading({ title: "载入中…" });
-    wx.cloud
-      .database()
-      .collection("homeworks")
-      .orderBy("createTime", "desc")
-      .limit(20)
-      .get()
+    api
+      .call("listHomeworks")
       .then((res) => {
+        if (!res.ok) throw res.msg;
         const now = Date.now();
-        const list = res.data.map((item) => {
+        const list = (res.list || []).map((item) => {
           const deadlineMs = toDateMs(item.deadline) || item.deadline;
           return { ...item, deadlineMs: deadlineMs, deadlineText: formatTime(deadlineMs), expired: deadlineMs < now };
         });
@@ -101,18 +99,17 @@ Page({
       confirmColor: "#b5543c",
       success: (res) => {
         if (!res.confirm) return;
-        wx.cloud.callFunction({
-          name: "api",
-          data: { action: "deleteHomework", data: { id } },
-          success: (r) => {
-            if (r.result.ok) {
+        api
+          .call("deleteHomework", { id })
+          .then((r) => {
+            if (r.ok) {
               wx.showToast({ title: "已删除" });
               this.fetchList();
             } else {
-              wx.showToast({ title: r.result.msg, icon: "none" });
+              wx.showToast({ title: r.msg, icon: "none" });
             }
-          },
-        });
+          })
+          .catch(() => wx.showToast({ title: "删除失败", icon: "none" }));
       },
     });
   },

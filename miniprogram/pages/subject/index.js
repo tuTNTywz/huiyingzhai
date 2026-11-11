@@ -1,6 +1,7 @@
 // 学科板块页：课程设置（管理员编辑） + 课代表发布任务通知（可传文件 / 照片）
 // 课代表由名单 roster 集合的 repSubjects 字段指定
 const app = getApp();
+const api = require("../../utils/api");
 const { formatTime, formatSize, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 const { getSubject } = require("../../utils/subjects");
@@ -86,14 +87,11 @@ Page({
   },
 
   fetchSettings() {
-    wx.cloud
-      .database()
-      .collection("subject_settings")
-      .where({ subject: this.data.key })
-      .limit(1)
-      .get()
+    api
+      .call("getSubjectSettings", { subject: this.data.key })
       .then((res) => {
-        const s = res.data[0] || null;
+        if (!res.ok) throw res.msg;
+        const s = res.item || null;
         this.setData({
           settings: s || {},
           hasSettings: !!s,
@@ -104,16 +102,12 @@ Page({
       .catch(() => {});
   },
 
-  // 从名单 roster 集合查询该科目课代表姓名
+  // 从后端 roster 名单查询该科目课代表姓名
   fetchRep() {
-    wx.cloud
-      .database()
-      .collection("roster")
-      .where({ repSubjects: this.data.key })
-      .limit(1)
-      .get()
+    api
+      .call("getSubjectRep", { subject: this.data.key })
       .then((res) => {
-        const rep = res.data[0];
+        const rep = res.ok ? res.item : null;
         this.setData({ fallbackRep: rep ? rep.name || rep.studentId : "暂未设置" });
       })
       .catch(() => {});
@@ -121,16 +115,12 @@ Page({
 
   fetchList() {
     wx.showLoading({ title: "载入中…" });
-    wx.cloud
-      .database()
-      .collection("subject_tasks")
-      .where({ subject: this.data.key })
-      .orderBy("createTime", "desc")
-      .limit(50)
-      .get()
+    api
+      .call("listSubjectTasks", { subject: this.data.key })
       .then((res) => {
+        if (!res.ok) throw res.msg;
         const now = Date.now();
-        const list = res.data.map((t) => {
+        const list = (res.list || []).map((t) => {
           const deadlineMs = toDateMs(t.deadline) || t.deadline || 0;
           return {
             ...t,
@@ -185,24 +175,18 @@ Page({
     this.setData({ savingSettings: true });
     wx.showLoading({ title: "保存中…", mask: true });
 
-    wx.cloud
-      .callFunction({
-        name: "api",
-        data: {
-          action: "saveSubjectSettings",
-          data: { subject: this.data.key, ...this.data.settingsForm },
-        },
-      })
+    api
+      .call("saveSubjectSettings", { subject: this.data.key, ...this.data.settingsForm })
       .then((res) => {
         wx.hideLoading();
-        if (res.result.ok) {
+        if (res.ok) {
           wx.showToast({ title: "设置已保存" });
           this.setData({ showSettings: false });
           this.fetchSettings();
           this.fetchRep();
           this.updateCanManage();
         } else {
-          wx.showToast({ title: res.result.msg, icon: "none" });
+          wx.showToast({ title: res.msg, icon: "none" });
         }
       })
       .catch(() => {
@@ -298,40 +282,11 @@ Page({
     this.setData({ taskAttachments: list });
   },
 
-  // 顺序上传到云存储；失败时清理已上传文件
+  // 顺序上传到服务器；失败时由 api.upload 清理已上传文件
   uploadTaskAttachments() {
-    const files = this.data.taskAttachments;
-    const uploaded = [];
-    const run = (i) => {
-      if (i >= files.length) return Promise.resolve(uploaded);
-      const f = files[i];
-      this.setData({ uploadText: `正在上传附件 ${i + 1}/${files.length}` });
-      const cloudPath = `subject-tasks/${this.data.key}/${Date.now()}_${i}_${f.name}`;
-      return wx.cloud
-        .uploadFile({ cloudPath, filePath: f.tempPath })
-        .then((res) => {
-          uploaded.push(res.fileID);
-          return run(i + 1);
-        });
-    };
-    return run(0)
-      .then((fileIDs) =>
-        files.map((f, i) => ({
-          fileID: fileIDs[i],
-          name: f.name,
-          type: f.type,
-          size: f.size,
-        }))
-      )
-      .catch((err) => {
-        console.error(err);
-        if (uploaded.length) {
-          try {
-            wx.cloud.deleteFile({ fileList: uploaded }).catch(() => {});
-          } catch (e) {}
-        }
-        return Promise.reject("附件上传失败，请重试");
-      });
+    return api.upload(this.data.taskAttachments, `subject-tasks/${this.data.key}`, (text) =>
+      this.setData({ uploadText: text })
+    );
   },
 
   // 查看附件：照片全屏预览，文档用微信内置打开
@@ -342,34 +297,27 @@ Page({
     wx.showLoading({ title: "加载中…", mask: true });
 
     if (type === "image") {
-      wx.cloud
-        .getTempFileURL({ fileList: [fileid] })
-        .then((res) => {
-          wx.hideLoading();
-          const item = res.fileList && res.fileList[0];
-          if (item && item.tempFileURL) wx.previewImage({ urls: [item.tempFileURL] });
-          else wx.showToast({ title: "照片加载失败", icon: "none" });
-        })
-        .catch(() => {
-          wx.hideLoading();
-          wx.showToast({ title: "照片加载失败", icon: "none" });
-        })
-        .finally(() => this.setData({ downloading: "" }));
+      wx.hideLoading();
+      wx.previewImage({
+        urls: [api.fileUrl(fileid)],
+        fail: () => wx.showToast({ title: "照片加载失败", icon: "none" }),
+        complete: () => this.setData({ downloading: "" }),
+      });
       return;
     }
 
-    wx.cloud
-      .downloadFile({ fileID: fileid })
-      .then((res) => {
+    api
+      .download(fileid)
+      .then((tempFilePath) => {
         wx.hideLoading();
         const ext = (name || "").split(".").pop().toLowerCase();
         wx.openDocument({
-          filePath: res.tempFilePath,
+          filePath: tempFilePath,
           fileType: ext,
           showMenu: true,
           fail: () => {
             wx.saveFile({
-              tempFilePath: res.tempFilePath,
+              tempFilePath,
               success: () => wx.showToast({ title: "已保存，可在文件管理中查看" }),
               fail: () => wx.showToast({ title: "该类型暂不支持预览", icon: "none" }),
             });
@@ -408,27 +356,21 @@ Page({
       .then((attachments) => {
         this.setData({ uploadText: "正在发布…" });
         const deadline = form.date ? new Date(`${form.date}T${form.time}:00`).getTime() : 0;
-        return wx.cloud.callFunction({
-          name: "api",
-          data: {
-            action: "publishSubjectTask",
-            data: {
-              subject: this.data.key,
-              title: form.title.trim(),
-              content: form.content.trim(),
-              deadline,
-              attachments,
-            },
-          },
+        return api.call("publishSubjectTask", {
+          subject: this.data.key,
+          title: form.title.trim(),
+          content: form.content.trim(),
+          deadline,
+          attachments,
         });
       })
       .then((res) => {
-        if (res.result.ok) {
+        if (res.ok) {
           wx.showToast({ title: "已发布" });
           this.setData({ showPublish: false, taskAttachments: [] });
           this.fetchList();
         } else {
-          wx.showToast({ title: res.result.msg, icon: "none" });
+          wx.showToast({ title: res.msg, icon: "none" });
         }
       })
       .catch((msg) => {
@@ -446,18 +388,17 @@ Page({
       confirmColor: "#b5543c",
       success: (res) => {
         if (!res.confirm) return;
-        wx.cloud.callFunction({
-          name: "api",
-          data: { action: "deleteSubjectTask", data: { id } },
-          success: (r) => {
-            if (r.result.ok) {
+        api
+          .call("deleteSubjectTask", { id })
+          .then((r) => {
+            if (r.ok) {
               wx.showToast({ title: "已删除" });
               this.fetchList();
             } else {
-              wx.showToast({ title: r.result.msg, icon: "none" });
+              wx.showToast({ title: r.msg, icon: "none" });
             }
-          },
-        });
+          })
+          .catch(() => wx.showToast({ title: "删除失败", icon: "none" }));
       },
     });
   },

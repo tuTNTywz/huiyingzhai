@@ -2,3 +2,8 @@ node_modules/
 miniprogram_npm/
 .DS_Store
 *.log
+
+# 自建后端运行时文件
+server/data/
+server/uploads/
+server/.env

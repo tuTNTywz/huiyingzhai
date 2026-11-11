@@ -1,5 +1,6 @@
 // 交流栏目：所有人可自由发帖（可带文件 / 照片附件）
 const app = getApp();
+const api = require("../../utils/api");
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 const A = require("../../utils/attachments");
@@ -30,14 +31,11 @@ Page({
 
   fetchList() {
     wx.showLoading({ title: "载入中…" });
-    wx.cloud
-      .database()
-      .collection("posts")
-      .orderBy("createTime", "desc")
-      .limit(20)
-      .get()
+    api
+      .call("listPosts")
       .then((res) => {
-        const list = res.data.map((p) => ({
+        if (!res.ok) throw res.msg;
+        const list = (res.list || []).map((p) => ({
           ...p,
           attachments: A.decorate(p.attachments),
           timeText: formatTime(toDateMs(p.createTime)),
@@ -106,18 +104,15 @@ Page({
     )
       .then((attachments) => {
         this.setData({ uploadText: "正在发布…" });
-        return wx.cloud.callFunction({
-          name: "api",
-          data: { action: "createPost", data: { content, attachments } },
-        });
+        return api.call("createPost", { content, attachments });
       })
       .then((res) => {
-        if (res.result.ok) {
+        if (res.ok) {
           this.setData({ content: "", attachments: [] });
           wx.showToast({ title: "已发布", icon: "success" });
           this.fetchList();
         } else {
-          wx.showToast({ title: res.result.msg, icon: "none" });
+          wx.showToast({ title: res.msg, icon: "none" });
         }
       })
       .catch((msg) => {
@@ -138,18 +133,17 @@ Page({
       confirmColor: "#b5543c",
       success: (res) => {
         if (!res.confirm) return;
-        wx.cloud.callFunction({
-          name: "api",
-          data: { action: "deletePost", data: { id } },
-          success: (r) => {
-            if (r.result.ok) {
+        api
+          .call("deletePost", { id })
+          .then((r) => {
+            if (r.ok) {
               wx.showToast({ title: "已删除" });
               this.fetchList();
             } else {
-              wx.showToast({ title: r.result.msg, icon: "none" });
+              wx.showToast({ title: r.msg, icon: "none" });
             }
-          },
-        });
+          })
+          .catch(() => wx.showToast({ title: "删除失败", icon: "none" }));
       },
     });
   },

@@ -1,4 +1,6 @@
 // 发布志愿活动（宣传委员）
+const api = require("../../utils/api");
+
 Page({
   data: {
     title: "",
@@ -95,30 +97,24 @@ Page({
     ).getTime();
     const endTime = new Date(`${this.data.date}T${this.data.time}:00`).getTime();
 
-    wx.cloud
-      .callFunction({
-        name: "api",
-        data: {
-          action: "createVolunteer",
-          data: {
-            title: this.data.title.trim(),
-            content: this.data.content.trim(),
-            place: this.data.place.trim(),
-            activityStartTime,
-            activityEndTime,
-            signupMethod: this.data.signupMethod.trim(),
-            startTime: Date.now(),
-            endTime,
-          },
-        },
+    api
+      .call("createVolunteer", {
+        title: this.data.title.trim(),
+        content: this.data.content.trim(),
+        place: this.data.place.trim(),
+        activityStartTime,
+        activityEndTime,
+        signupMethod: this.data.signupMethod.trim(),
+        startTime: Date.now(),
+        endTime,
       })
       .then((res) => {
         wx.hideLoading();
-        if (res.result.ok) {
+        if (res.ok) {
           wx.showToast({ title: "已发布" });
-          setTimeout(() => wx.redirectTo({ url: `/pages/sign/detail?id=${res.result.id}` }), 600);
+          setTimeout(() => wx.redirectTo({ url: `/pages/sign/detail?id=${res.id}` }), 600);
         } else {
-          wx.showToast({ title: res.result.msg, icon: "none" });
+          wx.showToast({ title: res.msg, icon: "none" });
         }
       })
       .catch(() => {

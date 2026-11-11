@@ -1,5 +1,6 @@
 // 活动详情
 const app = getApp();
+const api = require("../../utils/api");
 const { formatTime, toDateMs } = require("../../utils/util");
 
 Page({
@@ -21,13 +22,11 @@ Page({
   },
 
   fetchDetail() {
-    wx.cloud
-      .database()
-      .collection("activities")
-      .doc(this.id)
-      .get()
+    api
+      .call("getActivity", { id: this.id })
       .then((res) => {
-        const a = res.data;
+        if (!res.ok) throw res.msg;
+        const a = res.item;
         const ms = toDateMs(a.activityTime) || a.activityTime;
         this.setData({
           activity: {
@@ -38,7 +37,12 @@ Page({
           ended: ms < Date.now(),
         });
       })
-      .catch(() => wx.showToast({ title: "活动不存在或已被删除", icon: "none" }));
+      .catch((msg) =>
+        wx.showToast({
+          title: typeof msg === "string" ? msg : "活动不存在或已被删除",
+          icon: "none",
+        })
+      );
   },
 
   onDelete() {
@@ -48,18 +52,17 @@ Page({
       confirmColor: "#b5543c",
       success: (res) => {
         if (!res.confirm) return;
-        wx.cloud.callFunction({
-          name: "api",
-          data: { action: "deleteActivity", data: { id: this.id } },
-          success: (r) => {
-            if (r.result.ok) {
+        api
+          .call("deleteActivity", { id: this.id })
+          .then((r) => {
+            if (r.ok) {
               wx.showToast({ title: "已删除" });
               setTimeout(() => wx.navigateBack(), 600);
             } else {
-              wx.showToast({ title: r.result.msg, icon: "none" });
+              wx.showToast({ title: r.msg, icon: "none" });
             }
-          },
-        });
+          })
+          .catch(() => wx.showToast({ title: "删除失败", icon: "none" }));
       },
     });
   },

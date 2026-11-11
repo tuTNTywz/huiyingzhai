@@ -1,5 +1,6 @@
 // 发布活动（仅班委）
 const app = getApp();
+const api = require("../../utils/api");
 
 Page({
   data: {
@@ -60,26 +61,20 @@ Page({
     wx.showLoading({ title: "发布中…", mask: true });
 
     const activityTime = new Date(`${this.data.date}T${this.data.time}:00`).getTime();
-    wx.cloud
-      .callFunction({
-        name: "api",
-        data: {
-          action: "publishActivity",
-          data: {
-            title: this.data.title.trim(),
-            place: this.data.place.trim() || "待定",
-            content: this.data.content.trim(),
-            activityTime,
-          },
-        },
+    api
+      .call("publishActivity", {
+        title: this.data.title.trim(),
+        place: this.data.place.trim() || "待定",
+        content: this.data.content.trim(),
+        activityTime,
       })
       .then((res) => {
         wx.hideLoading();
-        if (res.result.ok) {
+        if (res.ok) {
           wx.showToast({ title: "发布成功" });
           setTimeout(() => wx.navigateBack(), 800);
         } else {
-          wx.showToast({ title: res.result.msg, icon: "none" });
+          wx.showToast({ title: res.msg, icon: "none" });
         }
       })
       .catch(() => {

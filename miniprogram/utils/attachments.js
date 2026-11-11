@@ -1,4 +1,5 @@
 // 附件通用逻辑：文件 / 照片的选择、上传与查看（作业、板块、交流共用）
+const api = require("./api");
 const { formatSize } = require("./util");
 
 const MAX_FILES = 5;
@@ -73,75 +74,40 @@ function merge(current, picked) {
   return list;
 }
 
-// 顺序上传到云存储；中途失败清理已上传文件，避免产生孤儿文件
-function upload(files, cloudDir, onProgress) {
-  const uploaded = [];
-  const run = (i) => {
-    if (i >= files.length) return Promise.resolve(uploaded);
-    const f = files[i];
-    if (onProgress) onProgress(`正在上传附件 ${i + 1}/${files.length}`);
-    const cloudPath = `${cloudDir}/${Date.now()}_${i}_${f.name}`;
-    return wx.cloud
-      .uploadFile({ cloudPath, filePath: f.tempPath })
-      .then((res) => {
-        uploaded.push(res.fileID);
-        return run(i + 1);
-      });
-  };
-  return run(0)
-    .then((fileIDs) =>
-      files.map((f, i) => ({
-        fileID: fileIDs[i],
-        name: f.name,
-        type: f.type,
-        size: f.size,
-      }))
-    )
-    .catch((err) => {
-      console.error(err);
-      if (uploaded.length) {
-        try {
-          wx.cloud.deleteFile({ fileList: uploaded }).catch(() => {});
-        } catch (e) {}
-      }
-      return Promise.reject("附件上传失败，请重试");
-    });
+// 顺序上传到服务器；中途失败会由 api.upload 清理已上传文件
+function upload(files, dir, onProgress) {
+  return api.upload(files, dir, onProgress);
 }
 
 // 查看附件：照片全屏预览，文档用微信内置打开（可另存 / 转发）
 function open(file) {
   const { fileid, name, type } = file;
   if (!fileid) return Promise.resolve();
-  wx.showLoading({ title: "加载中…", mask: true });
-  const done = () => wx.hideLoading();
 
   if (type === "image") {
-    return wx.cloud
-      .getTempFileURL({ fileList: [fileid] })
-      .then((res) => {
-        done();
-        const item = res.fileList && res.fileList[0];
-        if (item && item.tempFileURL) wx.previewImage({ urls: [item.tempFileURL] });
-        else wx.showToast({ title: "照片加载失败", icon: "none" });
-      })
-      .catch(() => {
-        done();
-        wx.showToast({ title: "照片加载失败", icon: "none" });
+    return new Promise((resolve) => {
+      wx.previewImage({
+        urls: [api.fileUrl(fileid)],
+        fail: () => wx.showToast({ title: "照片加载失败", icon: "none" }),
+        complete: resolve,
       });
+    });
   }
 
-  return wx.cloud
-    .downloadFile({ fileID: fileid })
-    .then((res) => {
+  wx.showLoading({ title: "加载中…", mask: true });
+  const done = () => wx.hideLoading();
+  return api
+    .download(fileid)
+    .then((tempFilePath) => {
       done();
       const ext = (name || "").split(".").pop().toLowerCase();
       wx.openDocument({
-        filePath: res.tempFilePath,
+        filePath: tempFilePath,
         fileType: ext,
         showMenu: true,
         fail: () => {
           wx.saveFile({
-            tempFilePath: res.tempFilePath,
+            tempFilePath,
             success: () => wx.showToast({ title: "已保存，可在文件管理中查看" }),
             fail: () => wx.showToast({ title: "该类型暂不支持预览", icon: "none" }),
           });
