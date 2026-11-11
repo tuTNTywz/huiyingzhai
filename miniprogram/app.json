@@ -3,15 +3,12 @@
     "pages/homework/index",
     "pages/activity/index",
     "pages/forum/index",
-    "pages/sign/index",
     "pages/mine/index",
     "pages/homework/create",
     "pages/homework/detail",
     "pages/activity/create",
     "pages/activity/detail",
     "pages/forum/detail",
-    "pages/sign/create",
-    "pages/sign/detail",
     "pages/register/index",
     "pages/subject/index",
     "pages/notice/index"
@@ -46,12 +43,6 @@
         "text": "交流",
         "iconPath": "images/icons/examples.png",
         "selectedIconPath": "images/icons/examples-active.png"
-      },
-      {
-        "pagePath": "pages/sign/index",
-        "text": "志愿活动",
-        "iconPath": "images/icons/business.png",
-        "selectedIconPath": "images/icons/business-active.png"
       },
       {
         "pagePath": "pages/mine/index",
