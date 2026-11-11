@@ -1,69 +1,51 @@
 // app.js
+const api = require("./utils/api");
+
 App({
   globalData: {
-    // env 参数决定小程序发起的云开发调用请求到哪个云环境
-    // 请填入环境 ID（微信开发者工具 -> 云开发 -> 环境设置 中查看）
-    // 留空则使用默认环境
-    env: "cloud1-d6ghclqds0c2bf34d",
     userInfo: null, // { _id, _openid, name, studentId, className, position, nickname, role, registered }
     registered: null, // null=登录中 / false=未注册 / true=已注册
     needRegisterModal: false, // 首次登录自动在「我的」弹出注册窗口
   },
 
   onLaunch: function () {
-    if (!wx.cloud) {
-      console.error("请使用 2.2.3 或以上的基础库以使用云能力");
-      return;
-    }
-    // env 为空时不传该参数，使用云开发的默认环境（单环境项目可留空）
-    const cloudOptions = { traceUser: true };
-    if (this.globalData.env) cloudOptions.env = this.globalData.env;
-    try {
-      wx.cloud.init(cloudOptions);
-    } catch (e) {
-      console.error("云开发初始化失败，请检查环境 ID", e);
+    if (/example\.com/.test(api.BASE_URL)) {
+      console.warn("请先在 miniprogram/config.js 中配置后端域名 BASE_URL");
     }
     this.ensureUser();
   },
 
-  // 云函数自动建档并返回注册状态；首次登录引导至「我的」注册窗口
+  // 自建后端自动建档并返回注册状态；首次登录引导至「我的」注册窗口
   ensureUser() {
-    wx.cloud.callFunction({
-      name: "api",
-      data: { action: "login" },
-      success: (res) => {
-        const r = res.result || {};
-        if (r.ok) {
-          this.globalData.userInfo = r.user;
-          this.globalData.registered = !!r.registered;
-          if (!r.registered) this.globalData.needRegisterModal = true;
-          if (this.userReadyCallback) this.userReadyCallback(r.user);
-          if (!r.registered) {
-            wx.switchTab({ url: "/pages/mine/index" });
-          }
-        } else {
-          // 云函数返回业务错误时不再静默（否则界面会一直停在「未登录」状态）
-          console.error("登录失败", r.msg);
-          wx.showToast({ title: r.msg || "登录失败，请稍后重试", icon: "none" });
-          if (this.userReadyCallback) this.userReadyCallback(null);
+    api
+      .login()
+      .then((r) => {
+        this.globalData.userInfo = r.user || null;
+        this.globalData.registered = !!r.registered;
+        if (!r.registered) this.globalData.needRegisterModal = true;
+        if (this.userReadyCallback) this.userReadyCallback(r.user || null);
+        if (!r.registered) {
+          wx.switchTab({ url: "/pages/mine/index" });
         }
-      },
-      fail: (err) => {
+      })
+      .catch((err) => {
         console.error("登录失败", err);
-        wx.showToast({ title: "登录失败，请检查网络或云函数是否已部署", icon: "none" });
+        wx.showToast({
+          title: typeof err === "string" ? err : "登录失败，请稍后重试",
+          icon: "none",
+        });
         if (this.userReadyCallback) this.userReadyCallback(null);
-      },
-    });
+      });
   },
 
   // 重新拉取最新用户资料（重新登记后同步展示）
   refreshUser() {
-    return wx.cloud
-      .callFunction({ name: "api", data: { action: "login" } })
-      .then((res) => {
-        if (res.result && res.result.ok) {
-          this.globalData.userInfo = res.result.user;
-          this.globalData.registered = !!res.result.registered;
+    return api
+      .call("login")
+      .then((r) => {
+        if (r && r.ok && r.user) {
+          this.globalData.userInfo = r.user;
+          this.globalData.registered = !!r.registered;
         }
         return this.globalData.userInfo;
       })

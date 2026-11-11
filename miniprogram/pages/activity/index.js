@@ -1,5 +1,6 @@
 // 活动列表（仅班委可发布）
 const app = getApp();
+const api = require("../../utils/api");
 const { formatTime, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 
@@ -20,15 +21,12 @@ Page({
 
   fetchList() {
     wx.showLoading({ title: "载入中…" });
-    wx.cloud
-      .database()
-      .collection("activities")
-      .orderBy("activityTime", "desc")
-      .limit(20)
-      .get()
+    api
+      .call("listActivities")
       .then((res) => {
+        if (!res.ok) throw res.msg;
         const now = Date.now();
-        const list = res.data.map((a) => {
+        const list = (res.list || []).map((a) => {
           const activityMs = toDateMs(a.activityTime) || a.activityTime;
           return {
             ...a,
@@ -66,18 +64,17 @@ Page({
       confirmColor: "#b5543c",
       success: (res) => {
         if (!res.confirm) return;
-        wx.cloud.callFunction({
-          name: "api",
-          data: { action: "deleteActivity", data: { id } },
-          success: (r) => {
-            if (r.result.ok) {
+        api
+          .call("deleteActivity", { id })
+          .then((r) => {
+            if (r.ok) {
               wx.showToast({ title: "已删除" });
               this.fetchList();
             } else {
-              wx.showToast({ title: r.result.msg, icon: "none" });
+              wx.showToast({ title: r.msg, icon: "none" });
             }
-          },
-        });
+          })
+          .catch(() => wx.showToast({ title: "删除失败", icon: "none" }));
       },
     });
   },

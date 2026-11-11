@@ -1,5 +1,6 @@
 // 志愿活动列表
 const app = getApp();
+const api = require("../../utils/api");
 const { formatTime, formatTimeRange, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 
@@ -20,15 +21,12 @@ Page({
 
   fetchList() {
     wx.showLoading({ title: "载入中…" });
-    wx.cloud
-      .database()
-      .collection("sign_tasks")
-      .orderBy("createTime", "desc")
-      .limit(20)
-      .get()
+    api
+      .call("listSignTasks")
       .then((res) => {
+        if (!res.ok) throw res.msg;
         const now = Date.now();
-        const list = res.data.map((t) => {
+        const list = (res.list || []).map((t) => {
           const start = toDateMs(t.startTime) || t.startTime;
           const end = toDateMs(t.endTime) || t.endTime;
           const status = now < start ? "pending" : now <= end ? "active" : "ended";

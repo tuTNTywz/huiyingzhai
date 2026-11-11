@@ -1,5 +1,6 @@
 // 志愿活动详情：同学在线报名，查看报名记录
 const app = getApp();
+const api = require("../../utils/api");
 const { formatTime, formatTimeRange, toDateMs } = require("../../utils/util");
 
 Page({
@@ -30,12 +31,11 @@ Page({
   },
 
   fetchAll() {
-    const db = wx.cloud.database();
-    db.collection("sign_tasks")
-      .doc(this.id)
-      .get()
+    api
+      .call("getSignTask", { id: this.id })
       .then((res) => {
-        const t = res.data;
+        if (!res.ok) throw res.msg;
+        const t = res.item;
         const end = toDateMs(t.endTime) || t.endTime;
         const status = Date.now() <= end ? "active" : "ended";
         const legacyMs = toDateMs(t.activityTime) || t.activityTime || 0;
@@ -53,45 +53,42 @@ Page({
           },
           status,
         });
-        // 查询报名记录（所有用户可读）
-        return db
-          .collection("sign_records")
-          .where({ taskId: this.id })
-          .orderBy("createTime", "asc")
-          .limit(100)
-          .get()
-          .then((r) => {
-            const me = app.globalData.userInfo;
-            const records = r.data.map((x) => ({
-              ...x,
-              timeText: x.signTime && x.signTime.$date ? formatTime(x.signTime.$date) : "",
-            }));
-            const myRecord = records.find((x) => x._openid === me?._openid) || null;
-            this.setData({
-              records,
-              myRecord,
-              countText: `共 ${records.length} 人报名`,
-            });
+        // 查询报名记录
+        return api.call("listSignRecords", { taskId: this.id }).then((r) => {
+          if (!r.ok) throw r.msg;
+          const me = app.globalData.userInfo;
+          const records = (r.list || []).map((x) => ({
+            ...x,
+            timeText: x.signTime ? formatTime(toDateMs(x.signTime)) : "",
+          }));
+          const myRecord = records.find((x) => x._openid === (me && me._openid)) || null;
+          this.setData({
+            records,
+            myRecord,
+            countText: `共 ${records.length} 人报名`,
           });
+        });
       })
-      .catch(() => wx.showToast({ title: "志愿活动不存在", icon: "none" }));
+      .catch((msg) =>
+        wx.showToast({
+          title: typeof msg === "string" ? msg : "志愿活动不存在",
+          icon: "none",
+        })
+      );
   },
 
   // 同学在线报名
   doSign() {
     if (this.data.signing) return;
     this.setData({ signing: true });
-    wx.cloud
-      .callFunction({
-        name: "api",
-        data: { action: "joinVolunteer", data: { taskId: this.id } },
-      })
+    api
+      .call("joinVolunteer", { taskId: this.id })
       .then((res) => {
-        if (res.result.ok) {
+        if (res.ok) {
           wx.showToast({ title: "报名成功", icon: "success" });
           this.fetchAll();
         } else {
-          wx.showModal({ title: "报名失败", content: res.result.msg, showCancel: false });
+          wx.showModal({ title: "报名失败", content: res.msg, showCancel: false });
         }
       })
       .catch(() => wx.showToast({ title: "网络异常", icon: "none" }))

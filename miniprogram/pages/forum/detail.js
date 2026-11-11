@@ -1,5 +1,6 @@
 // 帖子详情：所有人可自由回复（可带文件 / 照片附件）
 const app = getApp();
+const api = require("../../utils/api");
 const { formatTime, toDateMs } = require("../../utils/util");
 const A = require("../../utils/attachments");
 
@@ -38,12 +39,11 @@ Page({
   },
 
   fetchAll() {
-    const db = wx.cloud.database();
-    db.collection("posts")
-      .doc(this.id)
-      .get()
+    api
+      .call("getPost", { id: this.id })
       .then((res) => {
-        const p = res.data;
+        if (!res.ok) throw res.msg;
+        const p = res.item;
         this.setData({
           post: {
             ...p,
@@ -53,24 +53,24 @@ Page({
             isCommittee: p.role === "committee" || p.role === "admin",
           },
         });
-        return db
-          .collection("post_replies")
-          .where({ postId: this.id })
-          .orderBy("createTime", "asc")
-          .limit(100)
-          .get()
-          .then((r) => {
-            this.setData({
-              replies: r.data.map((x) => ({
-                ...x,
-                attachments: A.decorate(x.attachments),
-                timeText: formatTime(toDateMs(x.createTime)),
-                avatarText: (x.nickname || "同").charAt(0),
-              })),
-            });
+        return api.call("listReplies", { postId: this.id }).then((r) => {
+          if (!r.ok) throw r.msg;
+          this.setData({
+            replies: (r.list || []).map((x) => ({
+              ...x,
+              attachments: A.decorate(x.attachments),
+              timeText: formatTime(toDateMs(x.createTime)),
+              avatarText: (x.nickname || "同").charAt(0),
+            })),
           });
+        });
       })
-      .catch(() => wx.showToast({ title: "帖子不存在或已被删除", icon: "none" }));
+      .catch((msg) =>
+        wx.showToast({
+          title: typeof msg === "string" ? msg : "帖子不存在或已被删除",
+          icon: "none",
+        })
+      );
   },
 
   onInput(e) {
@@ -131,21 +131,15 @@ Page({
     )
       .then((attachments) => {
         this.setData({ uploadText: "正在发送…" });
-        return wx.cloud.callFunction({
-          name: "api",
-          data: {
-            action: "createReply",
-            data: { postId: this.id, content, attachments },
-          },
-        });
+        return api.call("createReply", { postId: this.id, content, attachments });
       })
       .then((res) => {
-        if (res.result.ok) {
+        if (res.ok) {
           this.setData({ content: "", showAttachPanel: false });
           this.setAttachments([]);
           this.fetchAll();
         } else {
-          wx.showToast({ title: res.result.msg, icon: "none" });
+          wx.showToast({ title: res.msg, icon: "none" });
         }
       })
       .catch((msg) => {
