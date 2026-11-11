@@ -1,0 +1,98 @@
+.login-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 90rpx 48rpx 60rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f5f1e8;
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 60rpx;
+}
+.seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 132rpx;
+  height: 132rpx;
+  border: 4rpx solid #9c6b4a;
+  border-radius: 16rpx;
+  background: #e8dcc6;
+  color: #9c6b4a;
+  font-size: 64rpx;
+  font-weight: bold;
+  letter-spacing: 4rpx;
+}
+.brand-name {
+  font-size: 52rpx;
+  font-weight: bold;
+  letter-spacing: 10rpx;
+  color: #3d3a34;
+  margin-top: 36rpx;
+}
+.brand-sub {
+  font-size: 26rpx;
+  color: #8a8478;
+  letter-spacing: 4rpx;
+  margin-top: 12rpx;
+}
+.brand-motto {
+  font-size: 24rpx;
+  color: #9c6b4a;
+  margin-top: 28rpx;
+}
+
+.status-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #eee8da;
+}
+.status-row:last-of-type {
+  border-bottom: none;
+}
+.status-label {
+  font-size: 27rpx;
+  color: #6f6858;
+}
+.status-value {
+  font-size: 27rpx;
+  color: #3d3a34;
+}
+.status-tip {
+  font-size: 23rpx;
+  color: #a49a86;
+  line-height: 1.6;
+  padding-top: 20rpx;
+  margin-top: 8rpx;
+  border-top: 1rpx solid #eee8da;
+}
+
+.login-btn {
+  width: 100%;
+  margin-top: 56rpx;
+  font-size: 32rpx;
+  padding: 18rpx 0;
+  letter-spacing: 4rpx;
+}
+.skip-btn {
+  font-size: 26rpx;
+  color: #8a8478;
+  padding: 28rpx 0;
+  text-align: center;
+}
+.login-foot {
+  margin-top: auto;
+  padding-top: 60rpx;
+  font-size: 22rpx;
+  color: #b0a894;
+  letter-spacing: 2rpx;
+}

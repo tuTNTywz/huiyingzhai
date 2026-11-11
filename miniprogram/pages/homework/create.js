@@ -1,6 +1,7 @@
 // 发布作业（班委 / 管理员）：支持上传文档与图片附件
 const app = getApp();
 const { formatSize } = require("../../utils/util");
+const A = require("../../utils/attachments");
 
 const MAX_FILES = 5;
 const MAX_SIZE = 20 * 1024 * 1024;
@@ -72,28 +73,14 @@ Page({
     this.setData({ attachments: list });
   },
 
-  // 从微信聊天记录选择 PDF / Word 等文档
+  // 从微信聊天记录选择 PDF / Word 等文档（能力检测在附件工具中统一处理）
   chooseFile() {
     const remain = this.getRemain();
     if (remain <= 0) {
       wx.showToast({ title: `最多添加 ${MAX_FILES} 个附件`, icon: "none" });
       return;
     }
-    wx.chooseMessageFile({
-      count: remain,
-      type: "file",
-      extension: DOC_EXT,
-      success: (res) => {
-        this.addFiles(
-          res.tempFiles.map((f) => ({
-            name: f.name,
-            size: f.size,
-            tempPath: f.path,
-            type: "file",
-          }))
-        );
-      },
-    });
+    A.pickFiles(remain).then((files) => this.addFiles(files));
   },
 
   // 从相册或拍照添加图片附件
@@ -103,21 +90,7 @@ Page({
       wx.showToast({ title: `最多添加 ${MAX_FILES} 个附件`, icon: "none" });
       return;
     }
-    wx.chooseMedia({
-      count: remain,
-      mediaType: ["image"],
-      sourceType: ["album", "camera"],
-      success: (res) => {
-        this.addFiles(
-          res.tempFiles.map((f, i) => ({
-            name: `图片_${Date.now()}_${i + 1}.jpg`,
-            size: f.size,
-            tempPath: f.tempFilePath,
-            type: "image",
-          }))
-        );
-      },
-    });
+    A.pickImages(remain).then((files) => this.addFiles(files));
   },
 
   removeFile(e) {
