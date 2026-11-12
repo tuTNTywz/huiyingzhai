@@ -180,7 +180,7 @@ sudo -u huiyingzhai node scripts/import-roster.js /path/to/roster.json
 | GET | `/uploads/...` | 附件静态访问 |
 
 业务 action 与改造前云函数保持一致，另新增读接口：
-`listHomeworks`、`getHomework`、`listActivities`、`getActivity`、`listPosts`、`getPost`、`listReplies`、`listSignTasks`、`getSignTask`、`listSignRecords`、`getSubjectSettings`、`getSubjectRep`、`listSubjectTasks`、`lookupRoster`。
+`listHomeworks`、`getHomework`、`listActivities`、`getActivity`、`listPosts`、`getPost`、`listReplies`、`getSubjectSettings`、`getSubjectRep`、`listSubjectTasks`、`lookupRoster`。
 
 ## 六、常见问题
 

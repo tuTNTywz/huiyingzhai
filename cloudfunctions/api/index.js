@@ -51,8 +51,6 @@ const COLLECTIONS = [
   "users",
   "roster",
   "homeworks",
-  "sign_tasks",
-  "sign_records",
   "activities",
   "posts",
   "post_replies",
@@ -544,66 +542,6 @@ exports.main = async (event) => {
           } catch (e) {}
         }
         return { ok: true };
-      }
-
-      // ===== 志愿活动栏目：仅宣传委员（或管理员）可发布 =====
-      case "createVolunteer": {
-        if (user.position !== "宣传委员" && user.role !== "admin") {
-          return { ok: false, msg: "仅宣传委员可发布志愿活动" };
-        }
-        const content = String(data.content || "").trim();
-        const place = String(data.place || "").trim();
-        const signupMethod = String(data.signupMethod || "小程序内报名").trim() || "小程序内报名";
-        const activityStartTime = Number(data.activityStartTime) || 0;
-        const activityEndTime = Number(data.activityEndTime) || 0;
-        if (!data.title || !data.endTime) return { ok: false, msg: "缺少志愿活动主题或报名截止时间" };
-        if (!content || !place || !activityStartTime || !activityEndTime || activityEndTime <= activityStartTime) {
-          return { ok: false, msg: "请选择有效的志愿活动时间段" };
-        }
-        const res = await db.collection("sign_tasks").add({
-          data: {
-            title: data.title,
-            content,
-            place,
-            activityStartTime, // 活动开始时间戳(ms)
-            activityEndTime, // 活动结束时间戳(ms)
-            activityTime: activityStartTime, // 兼容旧的按开始时间读取/排序
-            signupMethod, // 报名方式
-            startTime: data.startTime || Date.now(),
-            endTime: data.endTime, // 报名截止时间戳(ms)
-            creatorOpenid: OPENID,
-            creatorName: user.nickname,
-            createTime: db.serverDate(),
-          },
-        });
-        return { ok: true, id: res._id };
-      }
-
-      case "joinVolunteer": {
-        if (!data.taskId) return { ok: false, msg: "缺少志愿活动" };
-        const taskRes = await db.collection("sign_tasks").doc(data.taskId).get();
-        const task = taskRes.data;
-        if (!task) return { ok: false, msg: "志愿活动不存在" };
-        const now = Date.now();
-        if (now < task.startTime) return { ok: false, msg: "报名尚未开始" };
-        if (now > task.endTime) return { ok: false, msg: "报名已截止" };
-        const dup = await db
-          .collection("sign_records")
-          .where({ taskId: data.taskId, _openid: OPENID })
-          .get();
-        if (dup.data.length) return { ok: false, msg: "您已报名，无需重复操作" };
-        await db.collection("sign_records").add({
-          data: {
-            taskId: data.taskId,
-            taskTitle: task.title,
-            _openid: OPENID,
-            nickname: user.nickname,
-            signTime: db.serverDate(), // 云端记录报名时间
-            onTime: true,
-            createTime: db.serverDate(),
-          },
-        });
-        return { ok: true, msg: "报名成功" };
       }
 
       // ===== 活动栏目：班委或管理员发布 =====

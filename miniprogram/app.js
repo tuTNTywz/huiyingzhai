@@ -70,10 +70,4 @@ App({
   isAdmin() {
     return this.globalData.userInfo && this.globalData.userInfo.role === "admin";
   },
-
-  // 判断是否可发布志愿活动（宣传委员或管理员）
-  canCreateVolunteer() {
-    const u = this.globalData.userInfo;
-    return !!u && (u.role === "admin" || u.position === "宣传委员");
-  },
 });

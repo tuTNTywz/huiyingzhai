@@ -108,8 +108,6 @@ const WRITE_ACTIONS = new Set([
   "deleteHomework",
   "subscribeHomework",
   "unsubscribeHomework",
-  "createVolunteer",
-  "joinVolunteer",
   "publishActivity",
   "deleteActivity",
   "createPost",
@@ -400,94 +398,6 @@ async function handleAction(user, action, data = {}) {
         }));
       const sub = store.findOne("subscriptions", (s) => s._openid === openid);
       return { ok: true, list, pushRemain: sub ? Number(sub.remain) || 0 : 0 };
-    }
-
-    // ===== 志愿活动栏目：仅宣传委员（或管理员）可发布 =====
-    case "createVolunteer": {
-      if (user.position !== "宣传委员" && user.role !== "admin") {
-        return { ok: false, msg: "仅宣传委员可发布志愿活动" };
-      }
-      const content = String(data.content || "").trim();
-      const place = String(data.place || "").trim();
-      const signupMethod =
-        String(data.signupMethod || "小程序内报名").trim() || "小程序内报名";
-      const activityStartTime = Number(data.activityStartTime) || 0;
-      const activityEndTime = Number(data.activityEndTime) || 0;
-      if (!data.title || !data.endTime) {
-        return { ok: false, msg: "缺少志愿活动主题或报名截止时间" };
-      }
-      if (
-        !content ||
-        !place ||
-        !activityStartTime ||
-        !activityEndTime ||
-        activityEndTime <= activityStartTime
-      ) {
-        return { ok: false, msg: "请选择有效的志愿活动时间段" };
-      }
-      const task = store.insert("sign_tasks", {
-        title: data.title,
-        content,
-        place,
-        activityStartTime, // 活动开始时间戳(ms)
-        activityEndTime, // 活动结束时间戳(ms)
-        activityTime: activityStartTime, // 兼容旧的按开始时间读取/排序
-        signupMethod, // 报名方式
-        startTime: Number(data.startTime) || Date.now(),
-        endTime: Number(data.endTime), // 报名截止时间戳(ms)
-        creatorOpenid: openid,
-        creatorName: user.nickname,
-        createTime: Date.now(),
-      });
-      return { ok: true, id: task._id };
-    }
-
-    case "listSignTasks": {
-      const list = store.find("sign_tasks", null, {
-        sortBy: "createTime",
-        direction: "desc",
-        limit: 20,
-      });
-      return { ok: true, list };
-    }
-
-    case "getSignTask": {
-      const item = getDocOrNull("sign_tasks", data.id);
-      if (!item) return { ok: false, msg: "志愿活动不存在" };
-      return { ok: true, item };
-    }
-
-    case "listSignRecords": {
-      const list = store.find("sign_records", (r) => r.taskId === data.taskId, {
-        sortBy: "createTime",
-        direction: "asc",
-        limit: 100,
-      });
-      return { ok: true, list };
-    }
-
-    case "joinVolunteer": {
-      if (!data.taskId) return { ok: false, msg: "缺少志愿活动" };
-      const task = getDocOrNull("sign_tasks", data.taskId);
-      if (!task) return { ok: false, msg: "志愿活动不存在" };
-      const now = Date.now();
-      if (now < Number(task.startTime)) return { ok: false, msg: "报名尚未开始" };
-      if (now > Number(task.endTime)) return { ok: false, msg: "报名已截止" };
-      const dup = store.findOne(
-        "sign_records",
-        (r) => r.taskId === data.taskId && r._openid === openid
-      );
-      if (dup) return { ok: false, msg: "您已报名，无需重复操作" };
-      store.insert("sign_records", {
-        taskId: data.taskId,
-        taskTitle: task.title,
-        _openid: openid,
-        nickname: user.nickname,
-        signTime: Date.now(), // 服务端记录报名时间
-        onTime: true,
-        createTime: Date.now(),
-      });
-      return { ok: true, msg: "报名成功" };
     }
 
     // ===== 活动栏目：班委或管理员发布 =====
