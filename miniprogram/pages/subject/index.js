@@ -6,6 +6,7 @@ const { formatTime, formatSize, toDateMs } = require("../../utils/util");
 const { requireRegistered } = require("../../utils/guard");
 const { getSubject } = require("../../utils/subjects");
 const { isSubjectRep } = require("../../utils/profile");
+const A = require("../../utils/attachments");
 
 const emptyTaskForm = () => ({ title: "", content: "", date: "", time: "23:59" });
 const emptySettingsForm = () => ({ teacher: "", credit: "", schedule: "" });
@@ -124,10 +125,8 @@ Page({
           const deadlineMs = toDateMs(t.deadline) || t.deadline || 0;
           return {
             ...t,
-            attachments: (t.attachments || []).map((a) => ({
-              ...a,
-              sizeText: a.size ? formatSize(a.size) : "",
-            })),
+            // A.decorate 补齐 type（历史附件缺失时按文件名兜底）与 sizeText
+            attachments: A.decorate(t.attachments),
             deadlineText: deadlineMs ? formatTime(deadlineMs) : "",
             expired: deadlineMs ? deadlineMs < now : false,
             createTimeText: formatTime(toDateMs(t.createTime)),
@@ -227,28 +226,14 @@ Page({
     this.setData({ taskAttachments: list });
   },
 
-  // 文档从微信聊天记录选择
+  // 文档从微信聊天记录选择（能力检测在附件工具中统一处理，避免低版本 unsupport）
   chooseTaskFile() {
     const remain = this.getRemain();
     if (remain <= 0) {
       wx.showToast({ title: `最多添加 ${MAX_FILES} 个附件`, icon: "none" });
       return;
     }
-    wx.chooseMessageFile({
-      count: remain,
-      type: "file",
-      extension: DOC_EXT,
-      success: (res) => {
-        this.addTaskFiles(
-          res.tempFiles.map((f) => ({
-            name: f.name,
-            size: f.size,
-            tempPath: f.path,
-            type: "file",
-          }))
-        );
-      },
-    });
+    A.pickFiles(remain).then((files) => this.addTaskFiles(files));
   },
 
   // 照片从相册或拍照添加
@@ -258,21 +243,7 @@ Page({
       wx.showToast({ title: `最多添加 ${MAX_FILES} 个附件`, icon: "none" });
       return;
     }
-    wx.chooseMedia({
-      count: remain,
-      mediaType: ["image"],
-      sourceType: ["album", "camera"],
-      success: (res) => {
-        this.addTaskFiles(
-          res.tempFiles.map((f, i) => ({
-            name: `照片_${Date.now()}_${i + 1}.jpg`,
-            size: f.size,
-            tempPath: f.tempFilePath,
-            type: "image",
-          }))
-        );
-      },
-    });
+    A.pickImages(remain).then((files) => this.addTaskFiles(files));
   },
 
   removeTaskFile(e) {
@@ -289,46 +260,12 @@ Page({
     );
   },
 
-  // 查看附件：照片全屏预览，文档用微信内置打开
+  // 查看附件：统一走 A.open —— 照片下载到本地后全屏预览，文档用微信内置打开
   downloadAttachment(e) {
-    const { fileid, name, type } = e.currentTarget.dataset;
-    if (!fileid || this.data.downloading) return;
-    this.setData({ downloading: fileid });
-    wx.showLoading({ title: "加载中…", mask: true });
-
-    if (type === "image") {
-      wx.hideLoading();
-      wx.previewImage({
-        urls: [api.fileUrl(fileid)],
-        fail: () => wx.showToast({ title: "照片加载失败", icon: "none" }),
-        complete: () => this.setData({ downloading: "" }),
-      });
-      return;
-    }
-
-    api
-      .download(fileid)
-      .then((tempFilePath) => {
-        wx.hideLoading();
-        const ext = (name || "").split(".").pop().toLowerCase();
-        wx.openDocument({
-          filePath: tempFilePath,
-          fileType: ext,
-          showMenu: true,
-          fail: () => {
-            wx.saveFile({
-              tempFilePath,
-              success: () => wx.showToast({ title: "已保存，可在文件管理中查看" }),
-              fail: () => wx.showToast({ title: "该类型暂不支持预览", icon: "none" }),
-            });
-          },
-        });
-      })
-      .catch(() => {
-        wx.hideLoading();
-        wx.showToast({ title: "下载失败", icon: "none" });
-      })
-      .finally(() => this.setData({ downloading: "" }));
+    const file = e.currentTarget.dataset;
+    if (!file.fileid || this.data.downloading) return;
+    this.setData({ downloading: file.fileid });
+    A.open(file).finally(() => this.setData({ downloading: "" }));
   },
 
   // ===== 任务通知：发布与删除 =====

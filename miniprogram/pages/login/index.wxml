@@ -1,0 +1,31 @@
+<view class="login-page">
+  <view class="brand">
+    <view class="seal">斋</view>
+    <view class="brand-name">汇 英 斋</view>
+    <view class="brand-sub">班级同窗小助手</view>
+    <view class="brand-motto">「 同窗共砚，奇文共赏 」</view>
+  </view>
+
+  <view class="card status-card">
+    <view class="status-row">
+      <text class="status-label">微信账号</text>
+      <text class="tag {{bound ? 'tag-gold' : 'tag-gray'}}">{{bound ? '已绑定' : '未绑定'}}</text>
+    </view>
+    <view class="status-row">
+      <text class="status-label">当前同窗</text>
+      <text class="status-value">{{nickname}}</text>
+    </view>
+    <view class="status-row">
+      <text class="status-label">学籍登记</text>
+      <text class="tag {{registered ? 'tag-green' : 'tag-red'}}">{{registered ? '已登记' : '待登记'}}</text>
+    </view>
+    <view class="status-tip">绑定后可同步学籍资料、接收作业提醒；暂不绑定也可先浏览内容。</view>
+  </view>
+
+  <button class="btn-primary login-btn" disabled="{{busy}}" bindtap="bindWechat">
+    {{busy ? '绑定中…' : (bound ? '进入汇英斋' : '绑定微信登录')}}
+  </button>
+  <view class="skip-btn" bindtap="skip">{{fromMine ? '返 回' : '暂不绑定，先浏览'}}</view>
+
+  <view class="login-foot">汇英斋 · 简约古风班级助手</view>
+</view>
