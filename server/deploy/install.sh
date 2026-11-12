@@ -42,8 +42,11 @@ sudo -u "${APP_USER}" "${TARGET}/.venv/bin/pip" install -r "${TARGET}/requiremen
 
 echo "==> 导入学号名单"
 if [[ -f "${REPO_ROOT}/roster_import.json" ]]; then
+  # 先复制到服务目录并交给服务用户：/home/<user> 可能不可被 huiyingzhai 读取
+  install -m 644 -o "${APP_USER}" -g "${APP_USER}" \
+    "${REPO_ROOT}/roster_import.json" "${TARGET}/roster_import.json"
   sudo -u "${APP_USER}" "${TARGET}/.venv/bin/python" \
-    "${TARGET}/scripts/import_roster.py" "${REPO_ROOT}/roster_import.json"
+    "${TARGET}/scripts/import_roster.py" "${TARGET}/roster_import.json"
 else
   echo "未找到 ${REPO_ROOT}/roster_import.json，跳过名单导入（之后可手动执行 python scripts/import_roster.py）"
 fi

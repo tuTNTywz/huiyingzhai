@@ -213,5 +213,8 @@ Nginx `client_max_body_size`（当前 25m）与 `.env` 的 `MAX_UPLOAD_MB`（默
 **`ModuleNotFoundError: app`**
 需在 `server/` 目录下执行 `python -m app`（systemd 已设置 `WorkingDirectory`）。
 
+**名单导入提示「名单文件不存在」**
+导入以 `huiyingzhai` 用户身份执行，而仓库若放在 `/home/ubuntu` 下，家目录权限可能让它读不到该文件。`install.sh` 会先把名单复制到 `/opt/huiyingzhai/server/roster_import.json` 再导入；手动导入时也请先复制到 `/tmp` 或服务目录并 `chmod 644`。
+
 **旧的 Node 文件还在**
 重跑 `install.sh` 会通过 `rsync --delete` 清理；也可手动删除 `src/`、`package.json`、`package-lock.json`、`node_modules/`。
