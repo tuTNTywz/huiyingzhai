@@ -7,3 +7,8 @@ miniprogram_npm/
 server/data/
 server/uploads/
 server/.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]

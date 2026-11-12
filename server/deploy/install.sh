@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ubuntu 22.04/24.04 一键部署脚本（在仓库根目录执行：sudo bash server/deploy/install.sh）
-# 仅负责安装 Node/Nginx、部署代码、注册 systemd 服务；域名与证书需按 README 手动配置。
+# 仅负责安装 Python/Nginx、部署代码、注册 systemd 服务；域名与证书需按 README 手动配置。
 set -euo pipefail
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -14,13 +14,11 @@ APP_USER="huiyingzhai"
 
 echo "==> 安装基础软件"
 apt-get update
-apt-get install -y nginx curl rsync ca-certificates build-essential python3 sqlite3
+apt-get install -y nginx curl rsync ca-certificates python3 python3-venv python3-pip sqlite3
 
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-if [[ "${NODE_MAJOR}" -lt 22 ]]; then
-  echo "==> 安装 Node.js 22 LTS"
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  apt-get install -y nodejs
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "需要 Python 3.10 及以上（Ubuntu 22.04 自带 3.10）"
+  exit 1
 fi
 
 echo "==> 创建服务用户与目录"
@@ -30,23 +28,24 @@ mkdir -p "${TARGET}" "${TARGET}/data" "${TARGET}/uploads"
 
 echo "==> 同步代码到 ${TARGET}"
 rsync -a --delete \
-  --exclude node_modules --exclude data --exclude uploads --exclude .env \
+  --exclude .venv --exclude __pycache__ --exclude '*.pyc' \
+  --exclude data --exclude uploads --exclude .env \
   "${REPO_ROOT}/server/" "${TARGET}/"
 chown -R "${APP_USER}:${APP_USER}" /opt/huiyingzhai
 
-echo "==> 安装依赖"
-cd "${TARGET}"
-if [[ -f package-lock.json ]]; then
-  sudo -u "${APP_USER}" npm ci --omit=dev
-else
-  sudo -u "${APP_USER}" npm install --omit=dev
+echo "==> 创建虚拟环境并安装依赖"
+if [[ ! -x "${TARGET}/.venv/bin/python" ]]; then
+  sudo -u "${APP_USER}" python3 -m venv "${TARGET}/.venv"
 fi
+sudo -u "${APP_USER}" "${TARGET}/.venv/bin/pip" install --upgrade pip
+sudo -u "${APP_USER}" "${TARGET}/.venv/bin/pip" install -r "${TARGET}/requirements.txt"
 
 echo "==> 导入学号名单"
 if [[ -f "${REPO_ROOT}/roster_import.json" ]]; then
-  sudo -u "${APP_USER}" node scripts/import-roster.js "${REPO_ROOT}/roster_import.json"
+  sudo -u "${APP_USER}" "${TARGET}/.venv/bin/python" \
+    "${TARGET}/scripts/import_roster.py" "${REPO_ROOT}/roster_import.json"
 else
-  echo "未找到 ${REPO_ROOT}/roster_import.json，跳过名单导入（之后可手动执行 npm run seed:roster）"
+  echo "未找到 ${REPO_ROOT}/roster_import.json，跳过名单导入（之后可手动执行 python scripts/import_roster.py）"
 fi
 
 if [[ ! -f "${TARGET}/.env" ]]; then

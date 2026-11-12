@@ -8,8 +8,8 @@ User=huiyingzhai
 Group=huiyingzhai
 WorkingDirectory=/opt/huiyingzhai/server
 EnvironmentFile=/opt/huiyingzhai/server/.env
-Environment=NODE_ENV=production
-ExecStart=/usr/bin/env node src/index.js
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/huiyingzhai/server/.venv/bin/python -m app
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

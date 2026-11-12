@@ -1,25 +1,30 @@
-# 汇英斋自建后端（Ubuntu）
+# 汇英斋自建后端（Ubuntu / Python）
 
-小程序原本使用微信云开发（云函数 + 云数据库 + 云存储）。本目录用 **Node.js + Express + SQLite** 实现了同等能力，可部署在任意 Ubuntu 云服务器上：
+小程序原本使用微信云开发（云函数 + 云数据库 + 云存储）。本目录用 **Python 3 + FastAPI + SQLite** 实现了同等能力，可部署在任意 Ubuntu 云服务器上：
 
 - `wx.login` code 换取 openid，自建 token 会话
 - 全部读写操作走 `/api/action`，服务端校验班委 / 管理员 / 课代表权限
 - 附件上传到服务器本地 `uploads/` 目录，由 Nginx 直接提供
 - 站内通知 + 微信订阅消息推送（服务端获取 access_token）
 
+> 小程序端仍是 JavaScript（微信小程序只能使用 JS），`server/` 内已无任何 Node 代码。
+> 数据库结构与原 Node 版完全一致，旧 `data/huiyingzhai.sqlite` 可直接沿用。
+
 ## 目录结构
 
 ```
 server/
-├── src/
-│   ├── index.js     # Express 入口
-│   ├── api.js       # 业务 action（读写接口）
-│   ├── auth.js      # 微信登录 / token 校验
-│   ├── db.js        # SQLite 文档存储
-│   ├── files.js     # 附件上传 / 删除
-│   ├── push.js      # 订阅消息推送
-│   └── config.js    # 环境变量
-├── scripts/import-roster.js  # 名单导入
+├── app/
+│   ├── main.py      # FastAPI 入口与路由
+│   ├── __main__.py  # python -m app 启动入口
+│   ├── api.py       # 业务 action（读写接口）
+│   ├── auth.py      # 微信登录 / token 校验
+│   ├── db.py        # SQLite 文档存储
+│   ├── files.py     # 附件上传 / 删除
+│   ├── push.py      # 订阅消息推送
+│   └── config.py    # 环境变量
+├── scripts/import_roster.py  # 名单导入
+├── requirements.txt
 ├── deploy/          # systemd / Nginx / 安装脚本
 ├── data/            # SQLite 数据库（运行时生成，勿提交）
 ├── uploads/         # 附件（运行时生成，勿提交）
@@ -41,13 +46,17 @@ server/
 
 ## 二、本地调试
 
+需要 Python 3.10+（Ubuntu 22.04 自带 3.10）。
+
 ```bash
 cd server
-npm install
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 cp .env.example .env
 # 在 .env 中设置 DEV_MODE=true（无需微信凭据，登录固定使用 DEV_OPENID）
-npm run seed:roster ../roster_import.json
-npm start
+python scripts/import_roster.py ../roster_import.json
+python -m app
 ```
 
 自检：
@@ -71,7 +80,9 @@ curl -X POST http://127.0.0.1:3000/api/login -H 'Content-Type: application/json'
 sudo bash server/deploy/install.sh
 ```
 
-脚本会：安装 Node 22 / Nginx → 创建 `huiyingzhai` 服务用户 → 复制代码到 `/opt/huiyingzhai/server` → 安装依赖 → 导入名单 → 注册 systemd 服务。
+脚本会：安装 Python / Nginx / sqlite3 → 创建 `huiyingzhai` 服务用户 → 复制代码到 `/opt/huiyingzhai/server` → 创建 `.venv` 并安装依赖 → 导入名单 → 注册 systemd 服务。
+
+> 从旧 Node 版升级时直接重跑脚本即可：旧 `src/*.js`、`package*.json` 会被 rsync 删除，`.env`、`data/`、`uploads/` 保留，SQLite 数据无需迁移。
 
 ### 2. 填写环境变量
 
@@ -132,7 +143,7 @@ module.exports = {
 ```bash
 cd /opt/huiyingzhai/server
 # 或在仓库根目录重新执行 sudo bash server/deploy/install.sh
-sudo -u huiyingzhai npm ci --omit=dev
+sudo -u huiyingzhai .venv/bin/pip install -r requirements.txt
 sudo systemctl restart huiyingzhai
 ```
 
@@ -163,7 +174,7 @@ sudo tar czf /root/uploads-$(date +%F).tar.gz -C /opt/huiyingzhai/server uploads
 
 ```bash
 cd /opt/huiyingzhai/server
-sudo -u huiyingzhai node scripts/import-roster.js /path/to/roster.json
+sudo -u huiyingzhai .venv/bin/python scripts/import_roster.py /path/to/roster.json
 ```
 
 脚本按学号 upsert，可重复执行。JSON 数组与 JSON Lines 都支持。
@@ -195,3 +206,12 @@ sudo -u huiyingzhai node scripts/import-roster.js /path/to/roster.json
 
 **上传 413 / 附件太大**
 Nginx `client_max_body_size`（当前 25m）与 `.env` 的 `MAX_UPLOAD_MB`（默认 20）都要满足。
+
+**`python3 -m venv` 报错**
+安装 `sudo apt-get install -y python3-venv`；若 pip 下载慢可加 `-i https://pypi.tuna.tsinghua.edu.cn/simple`。
+
+**`ModuleNotFoundError: app`**
+需在 `server/` 目录下执行 `python -m app`（systemd 已设置 `WorkingDirectory`）。
+
+**旧的 Node 文件还在**
+重跑 `install.sh` 会通过 `rsync --delete` 清理；也可手动删除 `src/`、`package.json`、`package-lock.json`、`node_modules/`。
