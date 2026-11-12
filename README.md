@@ -9,8 +9,8 @@
 ├── miniprogram/        # 微信小程序前端
 │   ├── config.js       # 后端地址、订阅消息模板 ID（部署前必改）
 │   └── utils/api.js    # 自建后端调用封装（登录、action、附件）
-├── server/             # Ubuntu 自建后端（Express + SQLite）
-│   ├── src/            # 服务端代码
+├── server/             # Ubuntu 自建后端（Python + FastAPI + SQLite）
+│   ├── app/            # 服务端代码
 │   ├── deploy/         # systemd / Nginx / 安装脚本
 │   └── README.md       # 部署与运维文档
 ├── cloudfunctions/     # 原云开发云函数（已不再使用，仅保留参考）
@@ -23,10 +23,12 @@
 
 ```bash
 cd server
-npm install
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 cp .env.example .env      # 本地调试请在 .env 中设置 DEV_MODE=true
-npm run seed:roster ../roster_import.json
-npm start
+python scripts/import_roster.py ../roster_import.json
+python -m app
 ```
 
 详细的生产部署步骤（Nginx、HTTPS、微信服务器域名、订阅消息）见 [server/README.md](server/README.md)。
@@ -46,4 +48,4 @@ npm start
 - 附件：上传到服务器 `uploads/`，由 Nginx 提供访问
 - 推送：服务端获取微信 access_token 后发送订阅消息
 
-云开发中的旧数据不会自动迁移。学号名单可通过 `server/scripts/import-roster.js` 重新导入。
+云开发中的旧数据不会自动迁移。学号名单可通过 `server/scripts/import_roster.py` 重新导入。
