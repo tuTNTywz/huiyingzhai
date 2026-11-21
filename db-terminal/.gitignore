@@ -1,0 +1,11 @@
+# 终端运行时生成的文件
+backups/
+exports/
+*.log
+__pycache__/
+dbterm_gui-error.log
+dbterm_gui.log
+
+# Windows 远程配置（含服务器地址）与上传缓存
+remote.env
+.remote-cache.json
