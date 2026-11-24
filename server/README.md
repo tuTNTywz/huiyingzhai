@@ -191,13 +191,15 @@ journalctl -u huiyingzhai-deploy -n 50 --no-pager
 
 **安装与 Nginx**
 
-`install.sh` 会自动创建面板用户、配置、账号、systemd 单元并启动，结束后打印初始账号密码。首次升级旧部署时，还需要给 Nginx 增加个人主页和部署面板反代。`deploy/nginx.conf` 已包含；已有站点可手动加入：
+`install.sh` 会自动创建面板用户、配置、账号、systemd 单元并启动，结束后打印初始账号密码。
+
+新服务器可以直接把 `deploy/nginx.conf` 作为站点配置（已包含限速 zone 和 location）。已有站点建议用独立文件，避免改动 certbot 生成的配置：
 
 ```nginx
-# http 上下文（sites-enabled 文件顶部）
+# 1) /etc/nginx/conf.d/huiyingzhai-panel-zone.conf（http 上下文）
 limit_req_zone $binary_remote_addr zone=huiyingzhai_deploy:10m rate=120r/m;
 
-# server 块内
+# 2) /etc/nginx/snippets/huiyingzhai-panel.conf
 location = / {
     proxy_pass http://127.0.0.1:3999;
     proxy_http_version 1.1;
@@ -223,9 +225,13 @@ location /deploy/ {
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_read_timeout 30s;
 }
+
+# 3) 在 HTTPS server { } 内加一行
+include /etc/nginx/snippets/huiyingzhai-panel.conf;
 ```
 
-`sudo nginx -t && sudo systemctl reload nginx`。
+> `limit_req_zone` 只能定义一次；如果站点文件里已有，就不要重复添加。
+> `sudo nginx -t && sudo systemctl reload nginx`。
 
 **配置**
 
