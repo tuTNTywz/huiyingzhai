@@ -263,7 +263,7 @@ else
   ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/refs/heads/${BRANCH}"
 fi
 
-CURL_ARGS=(-fL --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 300
+CURL_ARGS=(-fsSL --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 300
   --max-filesize 104857600 -o "$TARBALL")
 CURL_ARGS+=("${CURL_AUTH_ARGS[@]}")
 
