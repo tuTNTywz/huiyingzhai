@@ -154,8 +154,8 @@ sudo systemctl restart huiyingzhai
 浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），有四个按钮：
 
 - **Deploy** → `https://<后端域名>/deploy/`：部署控制台，需要登录（登录入口在「我的」）；
-- **慧英斋项目介绍** → `/intro/`：目前是标题页，内容待补充；页面内带「项目介绍资料」上传/下载区；
-- **慧英斋使用说明书** → `/manual/`：带动画的完整使用说明；页面内带「共享资料」上传/下载区；
+- **慧英斋项目介绍** → `/intro/`：默认是标题页；`tutnt` / `zhl` 登录后右下角出现「页面编辑」工具条；
+- **慧英斋使用说明书** → `/manual/`：带动画的完整说明；同样带「页面编辑」工具条（仅 `tutnt` / `zhl` 可见）；
 - **我的** → `/me/`：只负责登录、修改密码和退出。
 
 `install.sh` 首次运行会创建账号文件并打印随机密码（默认两个账号 `tutnt`、`zhl`）。密码只以 PBKDF2-HMAC-SHA256 哈希保存在 `/var/lib/huiyingzhai-panel/accounts.json`。登录与修改密码都在「我的」；部署页不再单独显示登录表单，未登录时会提示前往「我的」。忘记密码可用命令重置：
@@ -168,15 +168,19 @@ sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py 
 printf '%s\n' '新密码' | sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py set tutnt
 ```
 
-**我的 / 共享资料**
+**我的 / 页面编辑**
 
-「我的」只保留登录、修改密码和退出。共享资料上传/下载放在「慧英斋项目介绍」和「慧英斋使用说明书」两个页面底部：
+「我的」只保留登录、修改密码和退出。项目介绍和使用说明书的内容直接在对应页面上编辑：
 
+1. 用 `tutnt` 或 `zhl` 登录「我的」；
+2. 打开 `/intro/` 或 `/manual/`，右下角出现「页面编辑」工具条（其他访客完全看不到，工具条由服务端只对这两个账号注入）；
+3. 点「下载当前页面」拿到当前 HTML，在电脑上修改；
+4. 点「上传新版本」选择修改后的 `.html` 文件，上传成功后页面立即刷新。
+
+- 上传后的页面保存在 `/var/lib/huiyingzhai-panel/pages/intro.html` / `manual.html`；删除对应文件即恢复内置默认页面；
+- 页面须为 UTF-8 完整 HTML，单个不超过 2MB；为保证安全，外部脚本/样式/图片会被 CSP 拦截，建议页面保持自包含；
 - 只有 `tutnt`、`zhl` 两个账号可以登录（`/etc/huiyingzhai/panel.env` 的 `PANEL_ALLOWED_USERS`，默认 `tutnt,zhl`）；其它账号不会被记录或放行；
-- 资料区默认隐藏：只有 `tutnt` / `zhl` 登录后才会出现上传/下载界面，其他人（包括未登录）完全看不到；
-- 资料按页面分类（`category=intro` / `manual`），两个页面互不混合；
-- 单个文件不超过 20MB；保存在 `/var/lib/huiyingzhai-panel/files/`，索引为同目录 `files.json`；
-- 文件只能通过登录后的 `/me/api/files/...` 访问，不会直接暴露在公网。
+- 接口：`GET /me/api/pages/download?page=intro|manual`、`POST /me/api/pages?page=intro|manual`（需登录 + CSRF）。
 
 `manage_accounts.py` 同样只会写入 `PANEL_ALLOWED_USERS` 中的账号；设置其它账号会直接报错。
 
@@ -311,9 +315,9 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、允许账号（PANEL_A
 | 登录提示用户名或密码不正确 | 确认账号；忘记密码用 `manage_accounts.py set` 重置 |
 | 登录提示尝试过于频繁 | 5 分钟内失败次数过多，等待几分钟再试 |
 | 页面提示 401 | 会话过期或面板重启，重新登录即可 |
-| 上传提示 413 / 超过 20MB | Nginx `client_max_body_size` 需 ≥ 25m；单文件上限 20MB |
-| 上传后列表为空 | 确认在「项目介绍」或「使用说明书」页面上传；两个页面的资料按分类分开 |
-| 看不到资料区 | 正常，资料区只对 `tutnt` / `zhl` 登录后显示 |
+| 上传提示 413 / 超过 2MB | 页面 HTML 单文件上限 2MB；Nginx `client_max_body_size` 需 ≥ 25m |
+| 上传后页面没变化 | 确认上传的是完整 `.html` 文件；刷新页面；检查 `/var/lib/huiyingzhai-panel/pages/` 权限 |
+| 看不到「页面编辑」工具条 | 正常，仅 `tutnt` / `zhl` 登录后由服务端注入；其他访客看不到 |
 | 提示已有任务 | 等待当前部署结束；超过 15 分钟可 `sudo systemctl stop huiyingzhai-deploy` 后再试 |
 | 点了没反应 | `systemctl status huiyingzhai-deploy.path`、`journalctl -u huiyingzhai-deploy` |
 | 部署失败已回滚 | 看日志中的具体步骤；修复后重新部署，备份在 `/opt/huiyingzhai/backups/` |
@@ -339,7 +343,7 @@ sudo systemctl start huiyingzhai
 # 附件
 sudo tar czf /root/uploads-$(date +%F).tar.gz -C /opt/huiyingzhai/server uploads
 
-# 网页账号、共享文件（/me 上传）与文件索引
+# 网页账号、项目介绍/使用说明书的自定义页面
 sudo tar czf /root/huiyingzhai-panel-$(date +%F).tar.gz -C /var/lib/huiyingzhai-panel .
 ```
 

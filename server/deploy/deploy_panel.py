@@ -25,13 +25,12 @@ import hmac
 import json
 import os
 import secrets
-import shutil
 import threading
 import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 PORT = int(os.environ.get("PANEL_PORT") or "3999")
 QUEUE_DIR = Path(os.environ.get("PANEL_QUEUE_DIR") or "/var/lib/huiyingzhai-panel")
@@ -47,9 +46,8 @@ CURRENT_FILE = Path(
 )
 LOG_FILE = Path(os.environ.get("PANEL_LOG_FILE") or "/var/log/huiyingzhai-deploy.log")
 REQUEST_FILE = QUEUE_DIR / "deploy.request"
-FILES_DIR = QUEUE_DIR / "files"
-FILES_INDEX = QUEUE_DIR / "files.json"
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+PAGES_DIR = QUEUE_DIR / "pages"
+MAX_PAGE_BYTES = 2 * 1024 * 1024
 
 SESSION_COOKIE = "hyz_session"
 SESSION_TTL = 12 * 3600
@@ -70,7 +68,6 @@ CSP = (
 )
 
 _accounts_lock = threading.RLock()
-_files_lock = threading.RLock()
 _sessions_lock = threading.Lock()
 _deploy_lock = threading.Lock()
 _login_lock = threading.Lock()
@@ -181,25 +178,139 @@ def has_perm(username: str, perm: str) -> bool:
     return perm in user_perms(username)
 
 
-# ---------- 共享文件 ----------
+# ---------- 页面内容（项目介绍 / 使用说明书） ----------
 
 
-def load_file_entries() -> list[dict]:
-    data = _read_json(FILES_INDEX)
-    entries = data.get("files") if data else None
-    if not isinstance(entries, list):
-        return []
-    return [entry for entry in entries if isinstance(entry, dict)]
+def page_path(slug: str) -> Path:
+    return PAGES_DIR / (slug + ".html")
 
 
-def save_file_entries(entries: list[dict]) -> None:
-    FILES_INDEX.parent.mkdir(parents=True, exist_ok=True)
-    tmp = FILES_INDEX.with_name(FILES_INDEX.name + ".tmp")
-    with _files_lock:
-        with tmp.open("w", encoding="utf-8") as fh:
-            json.dump({"version": 1, "files": entries}, fh, ensure_ascii=False, indent=2)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, FILES_INDEX)
+def load_page_bytes(slug: str) -> bytes:
+    try:
+        return page_path(slug).read_bytes()
+    except OSError:
+        builtin = INTRO_HTML if slug == "intro" else MANUAL_HTML
+        return builtin.encode("utf-8")
+
+
+def save_page_bytes(slug: str, data: bytes) -> None:
+    PAGES_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = PAGES_DIR / (slug + ".html.tmp")
+    with tmp.open("wb") as fh:
+        fh.write(data)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, page_path(slug))
+
+
+PAGE_TOOLBAR = """<div id="hyz-page-tool" class="hyz-page-tool">
+  <div class="hyz-page-tool-title">页面编辑 · __LABEL__</div>
+  <div class="hyz-page-tool-note">下载当前页面，在电脑上改好后上传，页面会立即更新。</div>
+  <div class="hyz-page-tool-row">
+    <a class="hyz-page-tool-btn secondary" href="/me/api/pages/download?page=__PAGE__">下载当前页面</a>
+    <label class="hyz-page-tool-btn" for="hyz-page-file">上传新版本</label>
+    <input id="hyz-page-file" class="hyz-page-tool-file" type="file" accept=".html,.htm,text/html">
+  </div>
+  <div id="hyz-page-msg" class="hyz-page-tool-msg"></div>
+</div>
+<style>
+  .hyz-page-tool { position: fixed; right: 18px; bottom: 18px; z-index: 2147483000; width: min(340px, calc(100vw - 36px)); padding: 14px; border-radius: 14px; background: rgba(255, 250, 242, 0.97); border: 1px solid #e0cfb8; box-shadow: 0 18px 42px rgba(60, 40, 20, 0.2); font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; color: #3f3a32; text-align: left; }
+  .hyz-page-tool-title { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+  .hyz-page-tool-note { color: #8a7a68; font-size: 12px; margin-bottom: 10px; }
+  .hyz-page-tool-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .hyz-page-tool-btn { display: inline-block; padding: 7px 12px; border-radius: 9px; background: #9c6b4a; color: #fff; text-decoration: none; font-size: 12px; cursor: pointer; border: 0; }
+  .hyz-page-tool-btn.secondary { background: #f0e4d4; color: #5f4a37; }
+  .hyz-page-tool-file { display: none; }
+  .hyz-page-tool-msg { margin-top: 8px; min-height: 1.2em; color: #8a7a68; font-size: 12px; }
+  @media (prefers-color-scheme: dark) {
+    .hyz-page-tool { background: rgba(29, 23, 18, 0.97); border-color: #3a2d22; color: #ece4d8; }
+    .hyz-page-tool-note, .hyz-page-tool-msg { color: #b8aa99; }
+    .hyz-page-tool-btn.secondary { background: #33261c; color: #d9c8b3; }
+  }
+</style>
+<script>
+(function () {
+  var page = '__PAGE__';
+  var input = document.getElementById('hyz-page-file');
+  var msg = document.getElementById('hyz-page-msg');
+  var csrf = '';
+
+  async function getCsrf() {
+    if (csrf) return csrf;
+    try {
+      var resp = await fetch('/me/api/session', { credentials: 'same-origin', cache: 'no-store' });
+      if (resp.ok) {
+        var data = await resp.json();
+        csrf = data.csrf || '';
+      }
+    } catch (err) { /* ignore */ }
+    return csrf;
+  }
+
+  input.addEventListener('change', async function () {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    var lower = (file.name || '').toLowerCase();
+    if (!lower.endsWith('.html') && !lower.endsWith('.htm')) {
+      msg.textContent = '请选择 .html 文件';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      msg.textContent = '页面文件不能超过 2MB';
+      return;
+    }
+    var token = await getCsrf();
+    if (!token) {
+      msg.textContent = '登录已过期，请重新登录';
+      return;
+    }
+    var form = new FormData();
+    form.append('file', file);
+    msg.textContent = '上传中…';
+    try {
+      var resp = await fetch('/me/api/pages?page=' + encodeURIComponent(page), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': token },
+        body: form
+      });
+      var data = await resp.json().catch(function () { return {}; });
+      if (resp.status === 401) {
+        location.href = '/me/?next=' + encodeURIComponent(location.pathname);
+        return;
+      }
+      if (!resp.ok) {
+        msg.textContent = data.message || ('上传失败（HTTP ' + resp.status + '）');
+        input.value = '';
+        return;
+      }
+      msg.textContent = '已更新，正在刷新…';
+      location.reload();
+    } catch (err) {
+      msg.textContent = '网络错误，请重试';
+      input.value = '';
+    }
+  });
+})();
+</script>"""
+
+
+def page_toolbar(slug: str) -> str:
+    label = "项目介绍" if slug == "intro" else "使用说明书"
+    return PAGE_TOOLBAR.replace("__PAGE__", slug).replace("__LABEL__", label)
+
+
+def inject_page_toolbar(content: bytes, slug: str) -> bytes:
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content
+    toolbar = page_toolbar(slug)
+    index = text.rfind("</body>")
+    if index >= 0:
+        text = text[:index] + toolbar + text[index:]
+    else:
+        text = text + toolbar
+    return text.encode("utf-8")
 
 
 # ---------- 会话 ----------
@@ -683,36 +794,12 @@ INTRO_HTML = """<!doctype html>
   h1 { margin: 0 0 28px; font-size: clamp(30px, 6vw, 48px); letter-spacing: -0.02em; font-family: "Songti SC", "Noto Serif CJK SC", serif; }
   .back { color: #8a8478; text-decoration: none; font-size: 14px; border-bottom: 1px solid transparent; transition: color .2s, border-color .2s; }
   .back:hover { color: #9c6b4a; border-color: #9c6b4a; }
-  .files-card {
-    max-width: 680px; margin: 34px auto 0; padding: 20px; text-align: left;
-    background: rgba(255, 250, 242, 0.9); border: 1px solid #e8ddcc; border-radius: 18px;
-    box-shadow: 0 14px 36px rgba(120, 95, 65, 0.08);
-  }
-  .files-card h2 { margin: 0 0 4px; font-size: 17px; font-family: inherit; }
-  .files-sub { margin: 0 0 14px; color: #8a7a68; font-size: 13px; }
-  .upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
-  .upload-row input[type=file] { border: 1px solid #dfcfba; border-radius: 10px; padding: 8px; background: #fffdf9; color: inherit; max-width: 100%; }
-  .upload-row button { border: 0; border-radius: 10px; padding: 9px 18px; background: #9c6b4a; color: #fff; cursor: pointer; font: inherit; }
-  .upload-row button:disabled { opacity: .5; cursor: not-allowed; }
-  .upload-msg { font-size: 13px; color: #8a7a68; }
-  .file-list { display: grid; gap: 8px; }
-  .file-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid #eadfd0; border-radius: 11px; background: #fffdf9; }
-  .file-name { font-size: 14px; word-break: break-all; }
-  .file-meta { font-size: 12px; color: #8a7a68; }
-  .file-dl { color: #9c6b4a; text-decoration: none; font-size: 13px; border: 1px solid #d8c4ac; border-radius: 999px; padding: 4px 12px; }
-  .file-dl:hover { background: #f2e6d7; }
-  .empty { color: #a99c8b; font-size: 13px; padding: 8px 0; }
-  .hidden { display: none !important; }
   @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
   @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
   @media (prefers-color-scheme: dark) {
     body { color: #ece4d8; background: radial-gradient(circle at 50% 15%, #221a14 0%, #171310 55%, #100d0a 100%); }
     .back { color: #a99c8b; }
     .back:hover { color: #d9b28e; border-color: #d9b28e; }
-    .files-card { background: rgba(29, 23, 18, 0.92); border-color: #33281f; }
-    .upload-row input[type=file], .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
-    .files-sub, .upload-msg, .file-meta, .empty { color: #a99c8b; }
-    .file-dl { color: #dcb894; border-color: #4a3829; }
   }
   @media (prefers-reduced-motion: reduce) { main, .seal { animation: none; } }
 </style>
@@ -722,152 +809,9 @@ INTRO_HTML = """<!doctype html>
   <div class="seal">斋</div>
   <h1>慧英斋项目介绍</h1>
   <a class="back" href="/">← 返回主页</a>
-
-  <section id="files-card" class="files-card hidden">
-    <h2>项目介绍资料</h2>
-    <div class="files-sub">仅 tutnt / zhl 登录后可上传和下载；单个文件 ≤ 20MB。</div>
-    <div id="files-main">
-      <div id="upload-row" class="upload-row">
-        <input id="file-input" type="file">
-        <button id="upload-btn">上传</button>
-        <span id="upload-msg" class="upload-msg"></span>
-      </div>
-      <div id="file-list" class="file-list"><div class="empty">加载中…</div></div>
-    </div>
-  </section>
 </main>
-<script>
-(() => {
-  const CATEGORY = 'intro';
-  const FILES_SECTION = 'files-card';
-  const TOC_LINK = '';
-  const $ = (id) => document.getElementById(id);
-  let csrf = '';
-  let perms = [];
-
-  function api(path, options) {
-    options = options || {};
-    const headers = Object.assign({}, options.headers || {});
-    if (csrf) headers['X-CSRF-Token'] = csrf;
-    return fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, options, { headers }));
-  }
-
-  function humanSize(bytes) {
-    const n = Number(bytes) || 0;
-    if (n < 1024) return n + ' B';
-    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-    return (n / 1024 / 1024).toFixed(1) + ' MB';
-  }
-
-  function fmtTime(ms) {
-    if (!ms) return '';
-    try { return new Date(ms).toLocaleString('zh-CN', { hour12: false }); }
-    catch (err) { return ''; }
-  }
-
-  function render(files) {
-    const box = $('file-list');
-    box.textContent = '';
-    if (!files.length) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = '还没有资料';
-      box.appendChild(empty);
-      return;
-    }
-    files.forEach((file) => {
-      const row = document.createElement('div');
-      row.className = 'file-row';
-      const info = document.createElement('div');
-      const name = document.createElement('div');
-      name.className = 'file-name';
-      name.textContent = file.name || '未命名文件';
-      const meta = document.createElement('div');
-      meta.className = 'file-meta';
-      meta.textContent = humanSize(file.size) + ' · ' + (file.uploadedBy || '') + ' · ' + fmtTime(file.uploadedAt);
-      info.appendChild(name);
-      info.appendChild(meta);
-      row.appendChild(info);
-      if (perms.indexOf('download') >= 0) {
-        const link = document.createElement('a');
-        link.className = 'file-dl';
-        link.textContent = '下载';
-        link.href = '/me/api/files/download?id=' + encodeURIComponent(file.id || '');
-        row.appendChild(link);
-      }
-      box.appendChild(row);
-    });
-  }
-
-  async function loadFiles() {
-    const box = $('file-list');
-    let resp;
-    try {
-      resp = await api('/me/api/files?category=' + CATEGORY);
-    } catch (err) {
-      box.textContent = '读取资料失败';
-      return;
-    }
-    if (resp.status === 401) { location.reload(); return; }
-    if (!resp.ok) { box.textContent = '读取资料失败'; return; }
-    const data = await resp.json();
-    perms = Array.isArray(data.perms) ? data.perms : perms;
-    $('upload-row').classList.toggle('hidden', perms.indexOf('upload') < 0);
-    render(Array.isArray(data.files) ? data.files : []);
-  }
-
-  async function upload() {
-    const input = $('file-input');
-    const file = input.files && input.files[0];
-    const msg = $('upload-msg');
-    msg.textContent = '';
-    if (!file) { msg.textContent = '请选择文件'; return; }
-    if (file.size > 20 * 1024 * 1024) { msg.textContent = '文件超过 20MB 限制'; return; }
-    const form = new FormData();
-    form.append('file', file);
-    $('upload-btn').disabled = true;
-    msg.textContent = '上传中…';
-    try {
-      const resp = await api('/me/api/files?category=' + CATEGORY, { method: 'POST', body: form });
-      if (resp.status === 401) { location.reload(); return; }
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        msg.textContent = data.message || ('上传失败（HTTP ' + resp.status + '）');
-        return;
-      }
-      msg.textContent = '上传成功';
-      input.value = '';
-      await loadFiles();
-    } catch (err) {
-      msg.textContent = '网络错误，请重试';
-    } finally {
-      $('upload-btn').disabled = false;
-    }
-  }
-
-  async function init() {
-    try {
-      const resp = await fetch('/me/api/session', { credentials: 'same-origin', cache: 'no-store' });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      csrf = data.csrf || '';
-      perms = Array.isArray(data.perms) ? data.perms : [];
-      // 只有拥有文件权限的账号（当前仅 tutnt / zhl）才看到资料区
-      if (perms.indexOf('upload') < 0 && perms.indexOf('download') < 0) return;
-      $(FILES_SECTION).classList.remove('hidden');
-      if (TOC_LINK) $(TOC_LINK).classList.remove('hidden');
-      if (perms.indexOf('upload') < 0) $('upload-row').classList.add('hidden');
-      await loadFiles();
-    } catch (err) { /* ignore */ }
-  }
-
-  $('upload-btn').addEventListener('click', upload);
-  init();
-})();
-</script>
 </body>
-</html>
-"""
+</html>"""
 
 MANUAL_HTML = """<!doctype html>
 <html lang="zh-CN">
@@ -925,19 +869,6 @@ MANUAL_HTML = """<!doctype html>
   .faq-a { max-height: 0; overflow: hidden; transition: max-height .38s ease, padding .38s ease; color: #6f675d; font-size: 14px; }
   .faq-item.open .faq-a { max-height: 600px; padding-bottom: 12px; }
   .faq-item.open .faq-q span { transform: rotate(45deg); }
-  .hidden { display: none !important; }
-  .upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0 12px; }
-  .upload-row input[type=file] { border: 1px solid #dfcfba; border-radius: 10px; padding: 8px; background: #fffdf9; color: inherit; max-width: 100%; }
-  .upload-row button { border: 0; border-radius: 10px; padding: 9px 18px; background: var(--brown); color: #fff; cursor: pointer; font: inherit; }
-  .upload-row button:disabled { opacity: .5; cursor: not-allowed; }
-  .upload-msg { font-size: 13px; color: var(--muted); }
-  .file-list { display: grid; gap: 8px; }
-  .file-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid #eadfd0; border-radius: 11px; background: #fffdf9; }
-  .file-name { font-size: 14px; word-break: break-all; }
-  .file-meta { font-size: 12px; color: var(--muted); }
-  .file-dl { color: var(--brown); text-decoration: none; font-size: 13px; border: 1px solid #d8c4ac; border-radius: 999px; padding: 4px 12px; }
-  .file-dl:hover { background: #f2e6d7; }
-  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
   footer { text-align: center; padding: 30px 18px 50px; color: #9a8f80; font-size: 12px; letter-spacing: .08em; }
   footer a { color: var(--brown); text-decoration: none; }
   @keyframes rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
@@ -967,8 +898,6 @@ MANUAL_HTML = """<!doctype html>
     .step p, .role p, .faq-a { color: #b8aa99; }
     .tip { background: #2a2119; color: #d9c2a8; border-left-color: #a97a54; }
     .faq-item { border-bottom-color: #3a2d22; }
-    .upload-row input[type=file], .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
-    .file-dl { color: #dcb894; border-color: #4a3829; }
     .hero-back { color: #c9b9a6; border-color: #4a3829; }
     .hero-back:hover { background: #241c16; color: #e0b993; border-color: var(--brown); }
   }
@@ -1000,7 +929,6 @@ MANUAL_HTML = """<!doctype html>
   <a href="#mine">我的</a>
   <a href="#web">网页端</a>
   <a href="#attach">附件规则</a>
-  <a id="toc-files" class="hidden" href="#files">共享资料</a>
   <a href="#faq">常见问题</a>
 </nav>
 
@@ -1104,10 +1032,10 @@ MANUAL_HTML = """<!doctype html>
 
   <section id="web" class="section reveal">
     <div class="sec-head"><span class="sec-num">10</span><h2>网页端</h2></div>
-    <p>除了小程序，班级还提供网页入口，用于查看说明和班级共享文件。</p>
+    <p>除了小程序，班级还提供网页入口，用于查看项目介绍和使用说明书。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>主页</b><p>打开班级域名，可看到「慧英斋项目介绍」「慧英斋使用说明书」「我的」以及部署入口。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>我的</b><p>使用班级账号登录后可以修改密码；共享资料在「项目介绍」和「使用说明书」页面，登录后可上传/下载（单个 ≤ 20MB）。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>我的</b><p>使用班级账号登录后可以修改密码；项目介绍和使用说明书的编辑入口在对应页面，仅 tutnt / zhl 登录后可见。</p></div></div>
       <div class="step"><span class="step-num">3</span><div><b>账号</b><p>网页账号由管理员分配；忘记密码可在登录后自行修改，或联系管理员重置。</p></div></div>
     </div>
     <div class="tip">网页「我的」与小程序「我的」不是同一个登录体系：小程序用微信登录，网页用班级账号。</div>
@@ -1123,21 +1051,8 @@ MANUAL_HTML = """<!doctype html>
     <div class="tip">上传前注意网络环境；大文件建议先压缩，避免超限或等待过久。</div>
   </section>
 
-  <section id="files" class="section hidden">
-    <div class="sec-head"><span class="sec-num">12</span><h2>共享资料</h2></div>
-    <p>仅 tutnt / zhl 登录后可上传和下载本页资料；单个文件 ≤ 20MB。项目介绍页也有独立的资料区。</p>
-    <div id="files-main">
-      <div id="upload-row" class="upload-row">
-        <input id="file-input" type="file">
-        <button id="upload-btn">上传</button>
-        <span id="upload-msg" class="upload-msg"></span>
-      </div>
-      <div id="file-list" class="file-list"><div class="empty">加载中…</div></div>
-    </div>
-  </section>
-
   <section id="faq" class="section reveal">
-    <div class="sec-head"><span class="sec-num">13</span><h2>常见问题</h2></div>
+    <div class="sec-head"><span class="sec-num">12</span><h2>常见问题</h2></div>
     <div class="faq-item">
       <button class="faq-q">登记后职位不对怎么办？<span>＋</span></button>
       <div class="faq-a"><p>职位由班级名单按学号匹配。请确认学号填写正确；仍有问题请联系管理员更新名单。</p></div>
@@ -1190,135 +1105,7 @@ MANUAL_HTML = """<!doctype html>
   });
 })();
 </script>
-<script>
-(() => {
-  const CATEGORY = 'manual';
-  const FILES_SECTION = 'files';
-  const TOC_LINK = 'toc-files';
-  const $ = (id) => document.getElementById(id);
-  let csrf = '';
-  let perms = [];
 
-  function api(path, options) {
-    options = options || {};
-    const headers = Object.assign({}, options.headers || {});
-    if (csrf) headers['X-CSRF-Token'] = csrf;
-    return fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, options, { headers }));
-  }
-
-  function humanSize(bytes) {
-    const n = Number(bytes) || 0;
-    if (n < 1024) return n + ' B';
-    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-    return (n / 1024 / 1024).toFixed(1) + ' MB';
-  }
-
-  function fmtTime(ms) {
-    if (!ms) return '';
-    try { return new Date(ms).toLocaleString('zh-CN', { hour12: false }); }
-    catch (err) { return ''; }
-  }
-
-  function render(files) {
-    const box = $('file-list');
-    box.textContent = '';
-    if (!files.length) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = '还没有资料';
-      box.appendChild(empty);
-      return;
-    }
-    files.forEach((file) => {
-      const row = document.createElement('div');
-      row.className = 'file-row';
-      const info = document.createElement('div');
-      const name = document.createElement('div');
-      name.className = 'file-name';
-      name.textContent = file.name || '未命名文件';
-      const meta = document.createElement('div');
-      meta.className = 'file-meta';
-      meta.textContent = humanSize(file.size) + ' · ' + (file.uploadedBy || '') + ' · ' + fmtTime(file.uploadedAt);
-      info.appendChild(name);
-      info.appendChild(meta);
-      row.appendChild(info);
-      if (perms.indexOf('download') >= 0) {
-        const link = document.createElement('a');
-        link.className = 'file-dl';
-        link.textContent = '下载';
-        link.href = '/me/api/files/download?id=' + encodeURIComponent(file.id || '');
-        row.appendChild(link);
-      }
-      box.appendChild(row);
-    });
-  }
-
-  async function loadFiles() {
-    const box = $('file-list');
-    let resp;
-    try {
-      resp = await api('/me/api/files?category=' + CATEGORY);
-    } catch (err) {
-      box.textContent = '读取资料失败';
-      return;
-    }
-    if (resp.status === 401) { location.reload(); return; }
-    if (!resp.ok) { box.textContent = '读取资料失败'; return; }
-    const data = await resp.json();
-    perms = Array.isArray(data.perms) ? data.perms : perms;
-    $('upload-row').classList.toggle('hidden', perms.indexOf('upload') < 0);
-    render(Array.isArray(data.files) ? data.files : []);
-  }
-
-  async function upload() {
-    const input = $('file-input');
-    const file = input.files && input.files[0];
-    const msg = $('upload-msg');
-    msg.textContent = '';
-    if (!file) { msg.textContent = '请选择文件'; return; }
-    if (file.size > 20 * 1024 * 1024) { msg.textContent = '文件超过 20MB 限制'; return; }
-    const form = new FormData();
-    form.append('file', file);
-    $('upload-btn').disabled = true;
-    msg.textContent = '上传中…';
-    try {
-      const resp = await api('/me/api/files?category=' + CATEGORY, { method: 'POST', body: form });
-      if (resp.status === 401) { location.reload(); return; }
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        msg.textContent = data.message || ('上传失败（HTTP ' + resp.status + '）');
-        return;
-      }
-      msg.textContent = '上传成功';
-      input.value = '';
-      await loadFiles();
-    } catch (err) {
-      msg.textContent = '网络错误，请重试';
-    } finally {
-      $('upload-btn').disabled = false;
-    }
-  }
-
-  async function init() {
-    try {
-      const resp = await fetch('/me/api/session', { credentials: 'same-origin', cache: 'no-store' });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      csrf = data.csrf || '';
-      perms = Array.isArray(data.perms) ? data.perms : [];
-      // 只有拥有文件权限的账号（当前仅 tutnt / zhl）才看到资料区
-      if (perms.indexOf('upload') < 0 && perms.indexOf('download') < 0) return;
-      $(FILES_SECTION).classList.remove('hidden');
-      if (TOC_LINK) $(TOC_LINK).classList.remove('hidden');
-      if (perms.indexOf('upload') < 0) $('upload-row').classList.add('hidden');
-      await loadFiles();
-    } catch (err) { /* ignore */ }
-  }
-
-  $('upload-btn').addEventListener('click', upload);
-  init();
-})();
-</script>
 </body>
 </html>
 """
@@ -1371,7 +1158,7 @@ MY_HTML = """<!doctype html>
 <main>
   <div class="top"><a class="home" href="/">← tuTNT's home</a><a class="home" href="/deploy/">部署控制台 →</a></div>
   <h1>我的</h1>
-  <div class="sub">登录后可修改密码；共享资料请到「项目介绍」和「使用说明书」页面。</div>
+  <div class="sub">登录后可修改密码；页面编辑入口在「项目介绍」和「使用说明书」页面。</div>
 
   <section id="login" class="card hidden">
     <h2>登录</h2>
@@ -1397,10 +1184,11 @@ MY_HTML = """<!doctype html>
     </div>
 
     <div class="card">
-      <h2>共享资料</h2>
+      <h2>页面编辑</h2>
       <div class="sub" style="margin: 0">
-        上传与下载已移到 <a href="/intro/">项目介绍</a> 和 <a href="/manual/">使用说明书</a> 页面，
-        仅 tutnt / zhl 登录后可用。
+        项目介绍和使用说明书的编辑入口在
+        <a href="/intro/">项目介绍</a> 和 <a href="/manual/">使用说明书</a> 页面，
+        仅 tutnt / zhl 登录后可见。
       </div>
     </div>
 
@@ -1658,6 +1446,19 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _page_editor(self):
+        """已登录且允许编辑页面的账号才注入编辑工具条。"""
+        _token, record = self._session_record()
+        if not record:
+            return None
+        user = record["user"]
+        if user not in allowed_users():
+            return None
+        perms = user_perms(user)
+        if "upload" not in perms and "download" not in perms:
+            return None
+        return record
+
     def _read_json(self, limit: int = 8192):
         content_type = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if content_type != "application/json":
@@ -1716,10 +1517,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, HOME_HTML, "text/html; charset=utf-8")
             return
         if area == "" and path in ("/intro", "/intro/", "/intro/index.html"):
-            self._send(200, INTRO_HTML, "text/html; charset=utf-8")
+            content = load_page_bytes("intro")
+            if self._page_editor():
+                content = inject_page_toolbar(content, "intro")
+            self._send(200, content, "text/html; charset=utf-8")
             return
         if area == "" and path in ("/manual", "/manual/", "/manual/index.html"):
-            self._send(200, MANUAL_HTML, "text/html; charset=utf-8")
+            content = load_page_bytes("manual")
+            if self._page_editor():
+                content = inject_page_toolbar(content, "manual")
+            self._send(200, content, "text/html; charset=utf-8")
             return
         if area == "/deploy" and path in ("/", "/index.html"):
             self._send(200, DEPLOY_HTML, "text/html; charset=utf-8")
@@ -1759,11 +1566,8 @@ class Handler(BaseHTTPRequestHandler):
             lines = _tail_text(LOG_FILE).splitlines()[-LOG_LINES:]
             self._send(200, "\n".join(lines), "text/plain; charset=utf-8")
             return
-        if path == "/api/files":
-            self._handle_files_list()
-            return
-        if path == "/api/files/download":
-            self._handle_file_download()
+        if path == "/api/pages/download":
+            self._handle_page_download()
             return
         self._send(404, json.dumps({"ok": False, "message": "接口不存在"}, ensure_ascii=False))
 
@@ -1783,8 +1587,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/deploy":
             self._handle_deploy()
             return
-        if path == "/api/files":
-            self._handle_file_upload()
+        if path == "/api/pages":
+            self._handle_page_upload()
             return
         self._send(404, json.dumps({"ok": False, "message": "接口不存在"}, ensure_ascii=False))
 
@@ -1886,33 +1690,27 @@ class Handler(BaseHTTPRequestHandler):
         drop_user_sessions(record["user"], keep=token)
         self._send(200, json.dumps({"ok": True, "message": "密码已更新"}, ensure_ascii=False))
 
-    def _handle_files_list(self):
+    def _handle_page_download(self):
         _token, record = self._require_session()
         if not record:
             return
-        user = record["user"]
-        perms = user_perms(user)
-        if "download" not in perms and "upload" not in perms:
-            self._send(403, json.dumps({"ok": False, "message": "没有文件权限"}, ensure_ascii=False))
+        if not has_perm(record["user"], "download"):
+            self._send(403, json.dumps({"ok": False, "message": "没有下载权限"}, ensure_ascii=False))
             return
         query = parse_qs(urlparse(self.path).query)
-        category = (query.get("category") or [""])[0].strip()
-        if category and category not in ("intro", "manual"):
-            self._send(400, json.dumps({"ok": False, "message": "资料分类不正确"}, ensure_ascii=False))
+        slug = (query.get("page") or [""])[0].strip()
+        if slug not in ("intro", "manual"):
+            self._send(400, json.dumps({"ok": False, "message": "页面不正确"}, ensure_ascii=False))
             return
-        entries = [
-            entry
-            for entry in load_file_entries()
-            if (not category or entry.get("category") == category)
-            and (FILES_DIR / str(entry.get("id", ""))).is_file()
-        ]
-        entries.sort(key=lambda entry: int(entry.get("uploadedAt") or 0), reverse=True)
+        data = load_page_bytes(slug)
         self._send(
             200,
-            json.dumps({"ok": True, "files": entries, "perms": perms}, ensure_ascii=False),
+            data,
+            "text/html; charset=utf-8",
+            extra_headers=[("Content-Disposition", 'attachment; filename="%s.html"' % slug)],
         )
 
-    def _handle_file_upload(self):
+    def _handle_page_upload(self):
         _token, record = self._require_session()
         if not record:
             return
@@ -1922,16 +1720,15 @@ class Handler(BaseHTTPRequestHandler):
         if not has_perm(user, "upload"):
             self._send(403, json.dumps({"ok": False, "message": "没有上传权限"}, ensure_ascii=False))
             return
-
         query = parse_qs(urlparse(self.path).query)
-        category = (query.get("category") or [""])[0].strip()
-        if category not in ("intro", "manual"):
-            self._send(400, json.dumps({"ok": False, "message": "缺少资料分类"}, ensure_ascii=False))
+        slug = (query.get("page") or [""])[0].strip()
+        if slug not in ("intro", "manual"):
+            self._send(400, json.dumps({"ok": False, "message": "页面不正确"}, ensure_ascii=False))
             return
 
         content_type = self.headers.get("Content-Type") or ""
         if not content_type.lower().startswith("multipart/form-data"):
-            self._send(415, json.dumps({"ok": False, "message": "请使用表单上传文件"}, ensure_ascii=False))
+            self._send(415, json.dumps({"ok": False, "message": "请使用表单上传页面"}, ensure_ascii=False))
             return
         try:
             length = int(self.headers.get("Content-Length") or "0")
@@ -1940,9 +1737,9 @@ class Handler(BaseHTTPRequestHandler):
         if length <= 0:
             self._send(400, json.dumps({"ok": False, "message": "没有选择文件"}, ensure_ascii=False))
             return
-        if length > MAX_UPLOAD_BYTES + 1024 * 1024:
+        if length > MAX_PAGE_BYTES + 1024 * 1024:
             self.close_connection = True
-            self._send(413, json.dumps({"ok": False, "message": "文件超过 20MB 限制"}, ensure_ascii=False))
+            self._send(413, json.dumps({"ok": False, "message": "页面文件超过 2MB 限制"}, ensure_ascii=False))
             return
 
         environ = {
@@ -1960,110 +1757,44 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, json.dumps({"ok": False, "message": "没有选择文件"}, ensure_ascii=False))
             return
 
-        original = os.path.basename(str(getattr(item, "filename", "") or "file"))
-        # 浏览器通常用 UTF-8 发送 filename，但 HTTP 头按 latin-1 解码，
-        # 这里尝试还原；失败则保留原值。
+        data = bytearray()
         try:
-            recovered = original.encode("latin-1").decode("utf-8")
-            if recovered:
-                original = recovered
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            pass
-        original = "".join(
-            ch for ch in original if ch.isprintable() and ch not in "\r\n/\\"
-        )[:200] or "file"
-
-        file_id = secrets.token_hex(16)
-        target = FILES_DIR / file_id
-        size = 0
-        try:
-            FILES_DIR.mkdir(parents=True, exist_ok=True)
-            with target.open("wb") as out:
-                while True:
-                    chunk = item.file.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    if size > MAX_UPLOAD_BYTES:
-                        raise ValueError("too large")
-                    out.write(chunk)
+            while True:
+                chunk = item.file.read(256 * 1024)
+                if not chunk:
+                    break
+                data.extend(chunk)
+                if len(data) > MAX_PAGE_BYTES:
+                    raise ValueError("too large")
         except ValueError:
-            target.unlink(missing_ok=True)
-            self._send(413, json.dumps({"ok": False, "message": "文件超过 20MB 限制"}, ensure_ascii=False))
+            self._send(413, json.dumps({"ok": False, "message": "页面文件超过 2MB 限制"}, ensure_ascii=False))
             return
         except OSError as exc:
-            target.unlink(missing_ok=True)
-            self._send(500, json.dumps({"ok": False, "message": "保存文件失败：%s" % exc}, ensure_ascii=False))
+            self._send(500, json.dumps({"ok": False, "message": "读取上传文件失败：%s" % exc}, ensure_ascii=False))
             return
 
-        if size == 0:
-            target.unlink(missing_ok=True)
-            self._send(400, json.dumps({"ok": False, "message": "文件为空"}, ensure_ascii=False))
+        if not data:
+            self._send(400, json.dumps({"ok": False, "message": "页面文件为空"}, ensure_ascii=False))
             return
-
-        entry = {
-            "id": file_id,
-            "name": original,
-            "size": size,
-            "category": category,
-            "uploadedBy": user,
-            "uploadedAt": _now_ms(),
-        }
         try:
-            with _files_lock:
-                entries = load_file_entries()
-                entries.append(entry)
-                save_file_entries(entries)
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            self._send(400, json.dumps({"ok": False, "message": "页面必须是 UTF-8 编码的 HTML"}, ensure_ascii=False))
+            return
+        lowered = text.lower()
+        if "<html" not in lowered and "<body" not in lowered:
+            self._send(400, json.dumps({"ok": False, "message": "请上传完整的 HTML 页面文件"}, ensure_ascii=False))
+            return
+
+        try:
+            save_page_bytes(slug, bytes(data))
         except OSError as exc:
-            target.unlink(missing_ok=True)
-            self._send(500, json.dumps({"ok": False, "message": "写入文件索引失败：%s" % exc}, ensure_ascii=False))
+            self._send(500, json.dumps({"ok": False, "message": "保存页面失败：%s" % exc}, ensure_ascii=False))
             return
-        self._send(201, json.dumps({"ok": True, "file": entry}, ensure_ascii=False))
-
-    def _handle_file_download(self):
-        _token, record = self._require_session()
-        if not record:
-            return
-        user = record["user"]
-        if not has_perm(user, "download"):
-            self._send(403, json.dumps({"ok": False, "message": "没有下载权限"}, ensure_ascii=False))
-            return
-        query = parse_qs(urlparse(self.path).query)
-        file_id = (query.get("id") or [""])[0].strip()
-        if len(file_id) != 32 or any(ch not in "0123456789abcdef" for ch in file_id):
-            self._send(404, json.dumps({"ok": False, "message": "文件不存在"}, ensure_ascii=False))
-            return
-        entry = next(
-            (item for item in load_file_entries() if item.get("id") == file_id), None
+        self._send(
+            200,
+            json.dumps({"ok": True, "page": slug, "size": len(data)}, ensure_ascii=False),
         )
-        target = FILES_DIR / file_id
-        if not entry or not target.is_file():
-            self._send(404, json.dumps({"ok": False, "message": "文件不存在"}, ensure_ascii=False))
-            return
-        self._send_file(target, str(entry.get("name") or "download"))
-
-    def _send_file(self, path: Path, name: str) -> None:
-        try:
-            size = path.stat().st_size
-        except OSError:
-            self._send(404, json.dumps({"ok": False, "message": "文件不存在"}, ensure_ascii=False))
-            return
-        self.send_response(200)
-        self.send_header("Content-Type", "application/octet-stream")
-        self.send_header("Content-Length", str(size))
-        self.send_header(
-            "Content-Disposition",
-            "attachment; filename=\"download\"; filename*=UTF-8''%s" % quote(name, safe=""),
-        )
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("X-Frame-Options", "DENY")
-        self.end_headers()
-        if self.command == "HEAD":
-            return
-        with path.open("rb") as fh:
-            shutil.copyfileobj(fh, self.wfile, 64 * 1024)
 
     def _handle_deploy(self):
         global _last_deploy_request_at
