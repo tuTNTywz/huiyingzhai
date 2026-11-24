@@ -173,7 +173,7 @@ printf '%s\n' '新密码' | sudo -u huiyingzhai-panel python3 /usr/local/lib/hui
 「我的」只保留登录、修改密码和退出。共享资料上传/下载放在「慧英斋项目介绍」和「慧英斋使用说明书」两个页面底部：
 
 - 只有 `tutnt`、`zhl` 两个账号可以登录（`/etc/huiyingzhai/panel.env` 的 `PANEL_ALLOWED_USERS`，默认 `tutnt,zhl`）；其它账号不会被记录或放行；
-- 登录后页面显示上传/下载区，未登录显示「去登录」；
+- 资料区默认隐藏：只有 `tutnt` / `zhl` 登录后才会出现上传/下载界面，其他人（包括未登录）完全看不到；
 - 资料按页面分类（`category=intro` / `manual`），两个页面互不混合；
 - 单个文件不超过 20MB；保存在 `/var/lib/huiyingzhai-panel/files/`，索引为同目录 `files.json`；
 - 文件只能通过登录后的 `/me/api/files/...` 访问，不会直接暴露在公网。
@@ -313,7 +313,7 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、允许账号（PANEL_A
 | 页面提示 401 | 会话过期或面板重启，重新登录即可 |
 | 上传提示 413 / 超过 20MB | Nginx `client_max_body_size` 需 ≥ 25m；单文件上限 20MB |
 | 上传后列表为空 | 确认在「项目介绍」或「使用说明书」页面上传；两个页面的资料按分类分开 |
-| 页面显示「去登录」 | 正常，资料区只对 `tutnt` / `zhl` 登录后开放 |
+| 看不到资料区 | 正常，资料区只对 `tutnt` / `zhl` 登录后显示 |
 | 提示已有任务 | 等待当前部署结束；超过 15 分钟可 `sudo systemctl stop huiyingzhai-deploy` 后再试 |
 | 点了没反应 | `systemctl status huiyingzhai-deploy.path`、`journalctl -u huiyingzhai-deploy` |
 | 部署失败已回滚 | 看日志中的具体步骤；修复后重新部署，备份在 `/opt/huiyingzhai/backups/` |

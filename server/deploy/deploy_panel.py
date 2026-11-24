@@ -690,8 +690,6 @@ INTRO_HTML = """<!doctype html>
   }
   .files-card h2 { margin: 0 0 4px; font-size: 17px; font-family: inherit; }
   .files-sub { margin: 0 0 14px; color: #8a7a68; font-size: 13px; }
-  .files-login { padding: 12px 14px; border: 1px dashed #d8c9b5; border-radius: 12px; background: #fffdf9; color: #8a7a68; font-size: 14px; }
-  .files-login a { color: #9c6b4a; }
   .upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
   .upload-row input[type=file] { border: 1px solid #dfcfba; border-radius: 10px; padding: 8px; background: #fffdf9; color: inherit; max-width: 100%; }
   .upload-row button { border: 0; border-radius: 10px; padding: 9px 18px; background: #9c6b4a; color: #fff; cursor: pointer; font: inherit; }
@@ -712,7 +710,7 @@ INTRO_HTML = """<!doctype html>
     .back { color: #a99c8b; }
     .back:hover { color: #d9b28e; border-color: #d9b28e; }
     .files-card { background: rgba(29, 23, 18, 0.92); border-color: #33281f; }
-    .files-login, .upload-row input[type=file], .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
+    .upload-row input[type=file], .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
     .files-sub, .upload-msg, .file-meta, .empty { color: #a99c8b; }
     .file-dl { color: #dcb894; border-color: #4a3829; }
   }
@@ -725,11 +723,10 @@ INTRO_HTML = """<!doctype html>
   <h1>慧英斋项目介绍</h1>
   <a class="back" href="/">← 返回主页</a>
 
-  <section class="files-card">
+  <section id="files-card" class="files-card hidden">
     <h2>项目介绍资料</h2>
     <div class="files-sub">仅 tutnt / zhl 登录后可上传和下载；单个文件 ≤ 20MB。</div>
-    <div id="files-login" class="files-login">登录后可上传/下载 · <a href="/me/?next=/intro/">去登录</a></div>
-    <div id="files-main" class="hidden">
+    <div id="files-main">
       <div id="upload-row" class="upload-row">
         <input id="file-input" type="file">
         <button id="upload-btn">上传</button>
@@ -742,6 +739,8 @@ INTRO_HTML = """<!doctype html>
 <script>
 (() => {
   const CATEGORY = 'intro';
+  const FILES_SECTION = 'files-card';
+  const TOC_LINK = '';
   const $ = (id) => document.getElementById(id);
   let csrf = '';
   let perms = [];
@@ -853,8 +852,10 @@ INTRO_HTML = """<!doctype html>
       const data = await resp.json();
       csrf = data.csrf || '';
       perms = Array.isArray(data.perms) ? data.perms : [];
-      $('files-login').classList.add('hidden');
-      $('files-main').classList.remove('hidden');
+      // 只有拥有文件权限的账号（当前仅 tutnt / zhl）才看到资料区
+      if (perms.indexOf('upload') < 0 && perms.indexOf('download') < 0) return;
+      $(FILES_SECTION).classList.remove('hidden');
+      if (TOC_LINK) $(TOC_LINK).classList.remove('hidden');
       if (perms.indexOf('upload') < 0) $('upload-row').classList.add('hidden');
       await loadFiles();
     } catch (err) { /* ignore */ }
@@ -925,8 +926,6 @@ MANUAL_HTML = """<!doctype html>
   .faq-item.open .faq-a { max-height: 600px; padding-bottom: 12px; }
   .faq-item.open .faq-q span { transform: rotate(45deg); }
   .hidden { display: none !important; }
-  .files-login { margin-top: 10px; padding: 12px 14px; border: 1px dashed #d8c9b5; border-radius: 12px; background: #fffdf9; color: #6f675d; font-size: 14px; }
-  .files-login a { color: var(--brown); }
   .upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0 12px; }
   .upload-row input[type=file] { border: 1px solid #dfcfba; border-radius: 10px; padding: 8px; background: #fffdf9; color: inherit; max-width: 100%; }
   .upload-row button { border: 0; border-radius: 10px; padding: 9px 18px; background: var(--brown); color: #fff; cursor: pointer; font: inherit; }
@@ -968,7 +967,7 @@ MANUAL_HTML = """<!doctype html>
     .step p, .role p, .faq-a { color: #b8aa99; }
     .tip { background: #2a2119; color: #d9c2a8; border-left-color: #a97a54; }
     .faq-item { border-bottom-color: #3a2d22; }
-    .files-login, .upload-row input[type=file], .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
+    .upload-row input[type=file], .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
     .file-dl { color: #dcb894; border-color: #4a3829; }
     .hero-back { color: #c9b9a6; border-color: #4a3829; }
     .hero-back:hover { background: #241c16; color: #e0b993; border-color: var(--brown); }
@@ -1001,7 +1000,7 @@ MANUAL_HTML = """<!doctype html>
   <a href="#mine">我的</a>
   <a href="#web">网页端</a>
   <a href="#attach">附件规则</a>
-  <a href="#files">共享资料</a>
+  <a id="toc-files" class="hidden" href="#files">共享资料</a>
   <a href="#faq">常见问题</a>
 </nav>
 
@@ -1124,11 +1123,10 @@ MANUAL_HTML = """<!doctype html>
     <div class="tip">上传前注意网络环境；大文件建议先压缩，避免超限或等待过久。</div>
   </section>
 
-  <section id="files" class="section reveal">
+  <section id="files" class="section hidden">
     <div class="sec-head"><span class="sec-num">12</span><h2>共享资料</h2></div>
     <p>仅 tutnt / zhl 登录后可上传和下载本页资料；单个文件 ≤ 20MB。项目介绍页也有独立的资料区。</p>
-    <div id="files-login" class="files-login">登录后可上传/下载 · <a href="/me/?next=/manual/">去登录</a></div>
-    <div id="files-main" class="hidden">
+    <div id="files-main">
       <div id="upload-row" class="upload-row">
         <input id="file-input" type="file">
         <button id="upload-btn">上传</button>
@@ -1195,6 +1193,8 @@ MANUAL_HTML = """<!doctype html>
 <script>
 (() => {
   const CATEGORY = 'manual';
+  const FILES_SECTION = 'files';
+  const TOC_LINK = 'toc-files';
   const $ = (id) => document.getElementById(id);
   let csrf = '';
   let perms = [];
@@ -1306,8 +1306,10 @@ MANUAL_HTML = """<!doctype html>
       const data = await resp.json();
       csrf = data.csrf || '';
       perms = Array.isArray(data.perms) ? data.perms : [];
-      $('files-login').classList.add('hidden');
-      $('files-main').classList.remove('hidden');
+      // 只有拥有文件权限的账号（当前仅 tutnt / zhl）才看到资料区
+      if (perms.indexOf('upload') < 0 && perms.indexOf('download') < 0) return;
+      $(FILES_SECTION).classList.remove('hidden');
+      if (TOC_LINK) $(TOC_LINK).classList.remove('hidden');
       if (perms.indexOf('upload') < 0) $('upload-row').classList.add('hidden');
       await loadFiles();
     } catch (err) { /* ignore */ }
