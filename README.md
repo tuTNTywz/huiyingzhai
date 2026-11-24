@@ -13,7 +13,6 @@
 │   ├── app/            # 服务端代码
 │   ├── deploy/         # systemd / Nginx / 安装脚本
 │   └── README.md       # 部署与运维文档
-├── cloudfunctions/     # 原云开发云函数（已不再使用，仅保留参考）
 └── roster_import.json  # 学号名单（JSON Lines）
 ```
 
