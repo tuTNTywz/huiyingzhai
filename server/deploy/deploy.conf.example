@@ -1,0 +1,23 @@
+# /etc/huiyingzhai/deploy.conf
+# 部署脚本以 root 读取本文件，权限应为 600（install.sh 会自动创建）。
+# 修改后无需重启服务，下一次部署生效。
+
+# GitHub 仓库（owner/repo）与分支
+DEPLOY_REPO=tuTNTywz/huiyingzhai
+DEPLOY_BRANCH=main
+
+# 私有仓库需要 PAT：classic token 勾选 repo；fine-grained token 勾选 Contents 只读
+# GITHUB_TOKEN=
+
+# 可选：GitHub 下载镜像/代理模板。
+# 服务器直连 GitHub 慢或失败时使用；%REPO% 与 %BRANCH% 会被替换。
+# 例：DEPLOY_ARCHIVE_URL_TEMPLATE=https://ghproxy.example.com/https://github.com/%REPO%/archive/refs/heads/%BRANCH%.tar.gz
+# 注意：如果镜像地址里包含私密参数，它会出现在部署日志中。
+# DEPLOY_ARCHIVE_URL_TEMPLATE=
+
+# 以下保持默认即可（install.sh / 服务定义依赖这些路径）
+# DEPLOY_TARGET=/opt/huiyingzhai/server
+# DEPLOY_APP_USER=huiyingzhai
+# DEPLOY_SERVICE=huiyingzhai
+# DEPLOY_BACKUP_ROOT=/opt/huiyingzhai/backups
+# DEPLOY_KEEP_BACKUPS=5

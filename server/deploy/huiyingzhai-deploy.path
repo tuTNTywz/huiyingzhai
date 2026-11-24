@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for Huiyingzhai deploy requests
+
+[Path]
+PathExists=/var/lib/huiyingzhai-panel/deploy.request
+Unit=huiyingzhai-deploy.service
+
+[Install]
+WantedBy=multi-user.target

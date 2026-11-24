@@ -1,0 +1,23 @@
+[Unit]
+Description=Deploy latest Huiyingzhai server code from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 先删掉触发文件，避免本次执行期间重复触发
+ExecStartPre=/bin/rm -f /var/lib/huiyingzhai-panel/deploy.request
+ExecStart=/usr/local/sbin/huiyingzhai-deploy
+TimeoutStartSec=15min
+Nice=10
+UMask=0027
+StateDirectory=huiyingzhai-deploy
+StateDirectoryMode=0755
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+# 需要写入：代码目录、触发文件目录、状态目录、日志目录
+# 故意不包含 /etc/systemd/system：仓库代码不能自动改 root 服务单元
+ReadWritePaths=/opt/huiyingzhai /var/lib/huiyingzhai-panel /var/lib/huiyingzhai-deploy /var/log

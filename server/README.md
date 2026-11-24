@@ -147,6 +147,88 @@ sudo -u huiyingzhai .venv/bin/pip install -r requirements.txt
 sudo systemctl restart huiyingzhai
 ```
 
+也可以使用下面的网页一键部署。
+
+### 网页一键部署（部署面板）
+
+在浏览器打开 `https://<后端域名>/deploy/`，输入安装时生成的口令，点击「部署最新代码」即可：
+
+1. 从 GitHub 下载当前分支的源码压缩包（默认 `tuTNTywz/huiyingzhai` 的 `main`）；
+2. 校验代码包结构，备份当前版本（保留最近 5 份）；
+3. 把压缩包中的 `server/` 同步到 `/opt/huiyingzhai/server`；
+4. **保留** `.env`、`data/`、`uploads/`、`.venv`；
+5. `requirements.txt` 变化时执行 `pip install`（systemd 单元不随部署更新，改动后需重跑 `install.sh`）；
+6. 重启 `huiyingzhai`，轮询 `/api/health`；失败自动回滚并再次重启。
+
+> 这里的自动备份只保留**代码**（不含 `.env`、`data/`、`uploads/`）；数据库与附件仍需按本节末尾「备份」定期备份。
+
+页面会显示当前部署的提交、上次部署结果和实时日志。部署脚本与日志：
+
+```bash
+sudo /usr/local/sbin/huiyingzhai-deploy        # 手动执行一次（等价于点按钮）
+sudo tail -f /var/log/huiyingzhai-deploy.log
+journalctl -u huiyingzhai-deploy -n 50 --no-pager
+```
+
+**权限模型**（为什么不把部署直接写进 FastAPI）：
+
+- 网页面板 `huiyingzhai-panel` 以独立用户运行，只监听 `127.0.0.1:3999`，只能往 `/var/lib/huiyingzhai-panel/` 写一个请求文件；
+- `huiyingzhai-deploy.path` 监听该文件，触发 root 的 `huiyingzhai-deploy.service` 执行 `/usr/local/sbin/huiyingzhai-deploy`；
+- FastAPI 服务本身仍然是无特权用户 + `NoNewPrivileges=true`，即使应用被攻破也不能直接提权重启服务；
+- 部署脚本由 root 拥有，**不会**从 GitHub 自动更新；修改 `server/deploy/` 下的部署脚本、面板或 systemd 单元后，需要重新执行 `sudo bash server/deploy/install.sh` 才生效。
+
+**安装与 Nginx**
+
+`install.sh` 会自动创建面板用户、配置、systemd 单元并启动，结束后打印访问口令。首次升级旧部署时，还需要给 Nginx 增加 `/deploy/` 反代。`deploy/nginx.conf` 已包含；已有站点可手动加入：
+
+```nginx
+# http 上下文（sites-enabled 文件顶部）
+limit_req_zone $binary_remote_addr zone=huiyingzhai_deploy:10m rate=120r/m;
+
+# server 块内
+location = /deploy {
+    return 301 /deploy/;
+}
+location /deploy/ {
+    # allow 203.0.113.10;   # 建议填写自己的固定出口 IP
+    # deny all;
+    limit_req zone=huiyingzhai_deploy burst=40 nodelay;
+    proxy_pass http://127.0.0.1:3999;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+}
+```
+
+`sudo nginx -t && sudo systemctl reload nginx`。
+
+**配置**
+
+```bash
+sudo nano /etc/huiyingzhai/deploy.conf   # 仓库、分支、私有仓库 token、GitHub 镜像
+sudo nano /etc/huiyingzhai/panel.env     # 面板端口与口令（修改后重启 huiyingzhai-panel）
+```
+
+- 私有仓库：在 `deploy.conf` 中设置 `GITHUB_TOKEN`（`Contents` 只读即可）。
+- 服务器直连 GitHub 慢：设置 `DEPLOY_ARCHIVE_URL_TEMPLATE`，例如
+  `https://ghproxy.example.com/https://github.com/%REPO%/archive/refs/heads/%BRANCH%.tar.gz`。
+- 口令泄露等于允许别人触发「拉取当前仓库代码并重启服务」，请使用 HTTPS 并尽量再加 Nginx IP 白名单。
+
+**故障排查**
+
+| 现象 | 处理 |
+| --- | --- |
+| `/deploy/` 404 | Nginx 未加 `/deploy/` 反代，或未 reload |
+| `/deploy/` 502 | `systemctl status huiyingzhai-panel`，看端口是否为 3999 |
+| 页面提示 401 | 口令不对；查看 `/etc/huiyingzhai/panel.env` 的 `PANEL_TOKEN` |
+| 提示已有任务 | 等待当前部署结束；超过 15 分钟可 `sudo systemctl stop huiyingzhai-deploy` 后再试 |
+| 点了没反应 | `systemctl status huiyingzhai-deploy.path`、`journalctl -u huiyingzhai-deploy` |
+| 部署失败已回滚 | 看日志中的具体步骤；修复后重新部署，备份在 `/opt/huiyingzhai/backups/` |
+| GitHub 下载失败 | 检查服务器出网；在 `deploy.conf` 配置镜像模板 |
+
 ### 日志
 
 ```bash

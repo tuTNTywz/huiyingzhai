@@ -11,7 +11,7 @@
 │   └── utils/api.js    # 自建后端调用封装（登录、action、附件）
 ├── server/             # Ubuntu 自建后端（Python + FastAPI + SQLite）
 │   ├── app/            # 服务端代码
-│   ├── deploy/         # systemd / Nginx / 安装脚本
+│   ├── deploy/         # systemd / Nginx / 安装脚本 / 网页一键部署面板
 │   └── README.md       # 部署与运维文档
 └── roster_import.json  # 学号名单（JSON Lines）
 ```

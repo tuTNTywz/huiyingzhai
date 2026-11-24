@@ -65,6 +65,83 @@ install -m 644 "${TARGET}/deploy/huiyingzhai.service" /etc/systemd/system/huiyin
 systemctl daemon-reload
 systemctl enable --now huiyingzhai
 
+echo "==> 安装网页部署面板"
+PANEL_USER="huiyingzhai-panel"
+PANEL_HOME="/var/lib/huiyingzhai-panel"
+DEPLOY_STATE_DIR="/var/lib/huiyingzhai-deploy"
+PANEL_CONF="/etc/huiyingzhai/panel.env"
+DEPLOY_CONF="/etc/huiyingzhai/deploy.conf"
+
+# 面板以独立系统用户运行，只能写请求目录；真正部署由 root 的 systemd 单元执行
+id -u "${PANEL_USER}" >/dev/null 2>&1 || \
+  useradd --system --user-group --home "${PANEL_HOME}" --shell /usr/sbin/nologin "${PANEL_USER}"
+
+install -d -m 755 /etc/huiyingzhai
+install -d -m 755 "${DEPLOY_STATE_DIR}"
+install -d -o "${PANEL_USER}" -g "${PANEL_USER}" -m 700 "${PANEL_HOME}"
+chown "${PANEL_USER}:${PANEL_USER}" "${PANEL_HOME}"
+chmod 700 "${PANEL_HOME}"
+touch /var/log/huiyingzhai-deploy.log
+chmod 644 /var/log/huiyingzhai-deploy.log
+
+if [[ ! -f "${DEPLOY_CONF}" ]]; then
+  install -m 600 -o root -g root \
+    "${REPO_ROOT}/server/deploy/deploy.conf.example" "${DEPLOY_CONF}"
+fi
+chown root:root "${DEPLOY_CONF}"
+chmod 600 "${DEPLOY_CONF}"
+
+if [[ ! -f "${PANEL_CONF}" ]]; then
+  PANEL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+  cat > "${PANEL_CONF}" <<EOF
+# 由 install.sh 生成；修改口令后执行 systemctl restart huiyingzhai-panel
+PANEL_PORT=3999
+PANEL_TOKEN=${PANEL_TOKEN}
+PANEL_QUEUE_DIR=${PANEL_HOME}
+PANEL_STATUS_FILE=${DEPLOY_STATE_DIR}/status.json
+PANEL_CURRENT_FILE=${DEPLOY_STATE_DIR}/current.json
+PANEL_LOG_FILE=/var/log/huiyingzhai-deploy.log
+EOF
+fi
+chown root:root "${PANEL_CONF}"
+chmod 600 "${PANEL_CONF}"
+PANEL_TOKEN="$(sed -n 's/^PANEL_TOKEN=//p' "${PANEL_CONF}" | tail -n1)"
+if [[ -z "${PANEL_TOKEN}" ]]; then
+  PANEL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+  if grep -q '^PANEL_TOKEN=' "${PANEL_CONF}"; then
+    sed -i "s/^PANEL_TOKEN=.*/PANEL_TOKEN=${PANEL_TOKEN}/" "${PANEL_CONF}"
+  else
+    printf 'PANEL_TOKEN=%s\n' "${PANEL_TOKEN}" >>"${PANEL_CONF}"
+  fi
+fi
+chown root:root "${PANEL_CONF}"
+chmod 600 "${PANEL_CONF}"
+
+# root 拥有并执行部署脚本；面板脚本只需读权限
+install -m 755 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.sh" \
+  /usr/local/sbin/huiyingzhai-deploy
+install -d -m 755 /usr/local/lib/huiyingzhai
+install -m 755 "${REPO_ROOT}/server/deploy/deploy_panel.py" \
+  /usr/local/lib/huiyingzhai/deploy_panel.py
+
+install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.service" \
+  /etc/systemd/system/huiyingzhai-deploy.service
+install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.path" \
+  /etc/systemd/system/huiyingzhai-deploy.path
+install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-panel.service" \
+  /etc/systemd/system/huiyingzhai-panel.service
+
+rm -f "${PANEL_HOME}/deploy.request"
+systemctl daemon-reload
+systemctl enable huiyingzhai-deploy.path
+systemctl restart huiyingzhai-deploy.path
+systemctl enable huiyingzhai-panel.service
+systemctl restart huiyingzhai-panel.service
+
+if ! systemctl is-active --quiet huiyingzhai-panel.service; then
+  echo "警告：部署面板启动失败，执行 journalctl -u huiyingzhai-panel 查看原因"
+fi
+
 if [[ "${NEED_ENV}" -eq 1 ]]; then
   cat <<EOF
 
@@ -88,3 +165,20 @@ EOF
 else
   echo "检测到已有 .env，未覆盖。请确认配置后执行：sudo systemctl restart huiyingzhai"
 fi
+
+NGINX_SITE="/etc/nginx/sites-enabled/huiyingzhai"
+if [[ -f "${NGINX_SITE}" ]] && ! grep -q 'location /deploy/' "${NGINX_SITE}"; then
+  echo "提示：现有 Nginx 站点缺少 /deploy/ 反向代理，请按 server/README.md 更新后 reload nginx"
+fi
+
+cat <<EOF
+
+==> 网页部署面板已安装
+  访问地址：https://<你的域名>/deploy/（Nginx 需包含 /deploy/ 反代）
+  部署口令：${PANEL_TOKEN}
+  面板配置：${PANEL_CONF}（600）
+  部署参数：${DEPLOY_CONF}（600，可改仓库/分支/镜像）
+  部署日志：/var/log/huiyingzhai-deploy.log
+
+  口令泄露等同于允许别人触发“拉取当前仓库代码并重启服务”，请勿外传。
+EOF

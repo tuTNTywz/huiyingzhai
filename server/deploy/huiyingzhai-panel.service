@@ -1,0 +1,30 @@
+[Unit]
+Description=Huiyingzhai deploy web panel (localhost only)
+After=network.target
+
+[Service]
+Type=simple
+User=huiyingzhai-panel
+Group=huiyingzhai-panel
+WorkingDirectory=/var/lib/huiyingzhai-panel
+StateDirectory=huiyingzhai-panel
+StateDirectoryMode=0700
+EnvironmentFile=/etc/huiyingzhai/panel.env
+ExecStart=/usr/bin/python3 -I /usr/local/lib/huiyingzhai/deploy_panel.py
+Restart=always
+RestartSec=3
+UMask=0077
+
+# 面板没有特权：它只能往 /var/lib/huiyingzhai-panel 写请求文件
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/huiyingzhai-panel
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+PrivateDevices=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
