@@ -151,9 +151,14 @@ sudo systemctl restart huiyingzhai
 
 ### 个人主页与网页部署
 
-浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），页面只有一个「Deploy」按钮；点击进入 `https://<后端域名>/deploy/`，用账号登录后即可部署。
+浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），有四个按钮：
 
-`install.sh` 首次运行会创建账号文件并打印随机密码（默认两个账号 `tutnt`、`zhl`）。密码只以 PBKDF2-HMAC-SHA256 哈希保存在 `/var/lib/huiyingzhai-panel/accounts.json`。登录后页面里有「修改密码」；忘记密码可用命令重置：
+- **Deploy** → `https://<后端域名>/deploy/`：部署控制台，需要登录（登录入口在「我的」）；
+- **慧英斋项目介绍** → `/intro/`：目前是标题页，内容待补充；
+- **慧英斋使用说明书** → `/manual/`：带动画的完整使用说明；
+- **我的** → `/me/`：登录、修改密码、共享文件上传/下载。
+
+`install.sh` 首次运行会创建账号文件并打印随机密码（默认两个账号 `tutnt`、`zhl`）。密码只以 PBKDF2-HMAC-SHA256 哈希保存在 `/var/lib/huiyingzhai-panel/accounts.json`。登录与修改密码都在「我的」；部署页不再单独显示登录表单，未登录时会提示前往「我的」。忘记密码可用命令重置：
 
 ```bash
 # 列出账号
@@ -162,6 +167,10 @@ sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py 
 # 重置密码（从 stdin 读取，避免密码出现在 ps）
 printf '%s\n' '新密码' | sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py set tutnt
 ```
+
+**我的 / 共享文件**
+
+「我的」里除登录、修改密码外，还有「共享文件」：所有已登录班级账号都可以上传和下载（当前两个账号默认都有上传 + 下载权限），单个文件不超过 20MB。文件保存在 `/var/lib/huiyingzhai-panel/files/`，索引为同目录的 `files.json`；只有登录后才能通过 `/me/api/files/...` 访问，不会直接暴露在公网。
 
 点击「部署最新代码」后：
 
@@ -226,6 +235,40 @@ location /deploy/ {
     proxy_read_timeout 30s;
 }
 
+location = /intro { return 301 /intro/; }
+location /intro/ {
+    proxy_pass http://127.0.0.1:3999;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+}
+
+location = /manual { return 301 /manual/; }
+location /manual/ {
+    proxy_pass http://127.0.0.1:3999;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+}
+
+location = /me { return 301 /me/; }
+location /me/ {
+    limit_req zone=huiyingzhai_deploy burst=40 nodelay;
+    proxy_pass http://127.0.0.1:3999;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+}
+
 # 3) 在 HTTPS server { } 内加一行
 include /etc/nginx/snippets/huiyingzhai-panel.conf;
 ```
@@ -251,11 +294,16 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口与账号文件路径（�
 | 现象 | 处理 |
 | --- | --- |
 | `/` 404 | Nginx 未加 `location = /` 反代，或未 reload |
+| `/intro/` 或 `/manual/` 404 | Nginx 未加对应 location，或未 reload |
+| `/me/` 404 | Nginx 未加 `/me/` location，或未 reload |
 | `/deploy/` 404 | Nginx 未加 `/deploy/` 反代，或未 reload |
 | `/deploy/` 502 | `systemctl status huiyingzhai-panel`，看端口是否为 3999 |
+| 部署页提示「请先登录」 | 正常，先到 `/me/` 登录；登录后会回到部署页 |
 | 登录提示用户名或密码不正确 | 确认账号；忘记密码用 `manage_accounts.py set` 重置 |
 | 登录提示尝试过于频繁 | 5 分钟内失败次数过多，等待几分钟再试 |
 | 页面提示 401 | 会话过期或面板重启，重新登录即可 |
+| 上传提示 413 / 超过 20MB | Nginx `client_max_body_size` 需 ≥ 25m；单文件上限 20MB |
+| 上传后文件列表为空 | 检查 `systemctl status huiyingzhai-panel` 和 `/var/lib/huiyingzhai-panel` 权限 |
 | 提示已有任务 | 等待当前部署结束；超过 15 分钟可 `sudo systemctl stop huiyingzhai-deploy` 后再试 |
 | 点了没反应 | `systemctl status huiyingzhai-deploy.path`、`journalctl -u huiyingzhai-deploy` |
 | 部署失败已回滚 | 看日志中的具体步骤；修复后重新部署，备份在 `/opt/huiyingzhai/backups/` |
@@ -270,7 +318,7 @@ sudo tail -f /var/log/nginx/access.log
 
 ### 备份
 
-需要备份两处：
+需要备份三处：
 
 ```bash
 # 数据库（WAL 模式，建议先停服务或用 sqlite3 .backup）
@@ -280,9 +328,12 @@ sudo systemctl start huiyingzhai
 
 # 附件
 sudo tar czf /root/uploads-$(date +%F).tar.gz -C /opt/huiyingzhai/server uploads
+
+# 网页账号、共享文件（/me 上传）与文件索引
+sudo tar czf /root/huiyingzhai-panel-$(date +%F).tar.gz -C /var/lib/huiyingzhai-panel .
 ```
 
-恢复时把数据库文件与 `uploads/` 放回原位置并 `chown -R huiyingzhai:huiyingzhai`。
+恢复时把数据库文件与 `uploads/` 放回原位置并 `chown -R huiyingzhai:huiyingzhai`；面板目录恢复后执行 `chown -R huiyingzhai-panel:huiyingzhai-panel /var/lib/huiyingzhai-panel`。
 
 ### 新增 / 修改名单
 

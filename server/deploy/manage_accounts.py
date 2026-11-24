@@ -51,6 +51,7 @@ def make_record(password: str) -> dict:
         "salt": salt,
         "hash": digest.hex(),
         "iterations": ITERATIONS,
+        "perms": ["upload", "download"],
         "updatedAt": now_ms(),
     }
 
@@ -124,8 +125,12 @@ def command_init(args) -> None:
 
 def command_set(args) -> None:
     users = load_users()
+    old = users.get(args.username) or {}
     password = read_new_password()
-    users[args.username] = make_record(password)
+    record = make_record(password)
+    if isinstance(old.get("perms"), list):
+        record["perms"] = old["perms"]
+    users[args.username] = record
     save_users(users)
     print("已更新账号：%s" % args.username)
 
