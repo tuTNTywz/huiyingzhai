@@ -94,6 +94,7 @@ chmod 600 "${DEPLOY_CONF}"
 cat > "${PANEL_CONF}" <<EOF
 # 由 install.sh 生成；账号保存在 ${PANEL_HOME}/accounts.json
 PANEL_PORT=3999
+PANEL_ALLOWED_USERS=tutnt,zhl
 PANEL_QUEUE_DIR=${PANEL_HOME}
 PANEL_ACCOUNTS_FILE=${PANEL_HOME}/accounts.json
 PANEL_STATUS_FILE=${DEPLOY_STATE_DIR}/status.json

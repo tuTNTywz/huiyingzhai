@@ -31,6 +31,12 @@ ACCOUNTS_FILE = Path(
     os.environ.get("PANEL_ACCOUNTS_FILE")
     or "/var/lib/huiyingzhai-panel/accounts.json"
 )
+DEFAULT_ALLOWED_USERS = ("tutnt", "zhl")
+
+
+def allowed_users() -> set[str]:
+    raw = os.environ.get("PANEL_ALLOWED_USERS") or ",".join(DEFAULT_ALLOWED_USERS)
+    return {part.strip() for part in raw.replace(" ", ",").split(",") if part.strip()}
 
 try:
     IS_ROOT = os.geteuid() == 0
@@ -71,6 +77,8 @@ def load_users() -> dict:
 
 
 def save_users(users: dict) -> None:
+    # 只记录允许的账号（默认 tutnt / zhl），其它账号一律不写入
+    users = {name: record for name, record in users.items() if name in allowed_users()}
     ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = ACCOUNTS_FILE.with_name(ACCOUNTS_FILE.name + ".tmp")
     with tmp.open("w", encoding="utf-8") as fh:
@@ -107,12 +115,15 @@ def read_new_password() -> str:
 def command_init(args) -> None:
     if ACCOUNTS_FILE.exists() and not args.force:
         raise SystemExit("账号文件已存在：%s（如需重建请加 --force）" % ACCOUNTS_FILE)
+    allowed = allowed_users()
     users = {} if args.force else load_users()
     created = []
     for username in args.usernames:
         username = username.strip()
         if not username:
             continue
+        if username not in allowed:
+            raise SystemExit("账号不在允许列表：%s（允许：%s）" % (username, ",".join(sorted(allowed))))
         password = secrets.token_urlsafe(9)
         users[username] = make_record(password)
         created.append((username, password))
@@ -124,6 +135,8 @@ def command_init(args) -> None:
 
 
 def command_set(args) -> None:
+    if args.username not in allowed_users():
+        raise SystemExit("账号不在允许列表：%s" % args.username)
     users = load_users()
     old = users.get(args.username) or {}
     password = read_new_password()
@@ -136,6 +149,8 @@ def command_set(args) -> None:
 
 
 def command_delete(args) -> None:
+    if args.username not in allowed_users():
+        raise SystemExit("账号不在允许列表：%s" % args.username)
     users = load_users()
     if args.username not in users:
         raise SystemExit("账号不存在：%s" % args.username)
@@ -148,7 +163,7 @@ def command_delete(args) -> None:
 
 def command_list(_args) -> None:
     users = load_users()
-    for username in sorted(users):
+    for username in sorted(name for name in users if name in allowed_users()):
         print(username)
 
 
@@ -157,7 +172,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="生成随机账号并打印密码")
-    p_init.add_argument("usernames", nargs="*", default=["tutnt", "zhl"])
+    p_init.add_argument("usernames", nargs="*", default=sorted(allowed_users()))
     p_init.add_argument("--force", action="store_true", help="覆盖已有账号文件")
     p_init.set_defaults(func=command_init)
 

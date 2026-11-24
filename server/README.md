@@ -154,9 +154,9 @@ sudo systemctl restart huiyingzhai
 浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），有四个按钮：
 
 - **Deploy** → `https://<后端域名>/deploy/`：部署控制台，需要登录（登录入口在「我的」）；
-- **慧英斋项目介绍** → `/intro/`：目前是标题页，内容待补充；
-- **慧英斋使用说明书** → `/manual/`：带动画的完整使用说明；
-- **我的** → `/me/`：登录、修改密码、共享文件上传/下载。
+- **慧英斋项目介绍** → `/intro/`：目前是标题页，内容待补充；页面内带「项目介绍资料」上传/下载区；
+- **慧英斋使用说明书** → `/manual/`：带动画的完整使用说明；页面内带「共享资料」上传/下载区；
+- **我的** → `/me/`：只负责登录、修改密码和退出。
 
 `install.sh` 首次运行会创建账号文件并打印随机密码（默认两个账号 `tutnt`、`zhl`）。密码只以 PBKDF2-HMAC-SHA256 哈希保存在 `/var/lib/huiyingzhai-panel/accounts.json`。登录与修改密码都在「我的」；部署页不再单独显示登录表单，未登录时会提示前往「我的」。忘记密码可用命令重置：
 
@@ -168,9 +168,17 @@ sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py 
 printf '%s\n' '新密码' | sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py set tutnt
 ```
 
-**我的 / 共享文件**
+**我的 / 共享资料**
 
-「我的」里除登录、修改密码外，还有「共享文件」：所有已登录班级账号都可以上传和下载（当前两个账号默认都有上传 + 下载权限），单个文件不超过 20MB。文件保存在 `/var/lib/huiyingzhai-panel/files/`，索引为同目录的 `files.json`；只有登录后才能通过 `/me/api/files/...` 访问，不会直接暴露在公网。
+「我的」只保留登录、修改密码和退出。共享资料上传/下载放在「慧英斋项目介绍」和「慧英斋使用说明书」两个页面底部：
+
+- 只有 `tutnt`、`zhl` 两个账号可以登录（`/etc/huiyingzhai/panel.env` 的 `PANEL_ALLOWED_USERS`，默认 `tutnt,zhl`）；其它账号不会被记录或放行；
+- 登录后页面显示上传/下载区，未登录显示「去登录」；
+- 资料按页面分类（`category=intro` / `manual`），两个页面互不混合；
+- 单个文件不超过 20MB；保存在 `/var/lib/huiyingzhai-panel/files/`，索引为同目录 `files.json`；
+- 文件只能通过登录后的 `/me/api/files/...` 访问，不会直接暴露在公网。
+
+`manage_accounts.py` 同样只会写入 `PANEL_ALLOWED_USERS` 中的账号；设置其它账号会直接报错。
 
 点击「部署最新代码」后：
 
@@ -280,14 +288,15 @@ include /etc/nginx/snippets/huiyingzhai-panel.conf;
 
 ```bash
 sudo nano /etc/huiyingzhai/deploy.conf   # 仓库、分支、私有仓库 token、GitHub 镜像
-sudo nano /etc/huiyingzhai/panel.env     # 面板端口与账号文件路径（无密钥）
+sudo nano /etc/huiyingzhai/panel.env     # 面板端口、允许账号（PANEL_ALLOWED_USERS）、账号文件路径
 ```
 
 - 私有仓库：在 `deploy.conf` 中设置 `GITHUB_TOKEN`（`Contents` 只读即可）。
 - 服务器直连 GitHub 慢：设置 `DEPLOY_ARCHIVE_URL_TEMPLATE`，例如
   `https://ghproxy.example.com/https://github.com/%REPO%/archive/refs/heads/%BRANCH%.tar.gz`。
 - 账号密码只保存哈希；请使用 HTTPS，并尽量再加 Nginx IP 白名单。
-- 账号文件权限 600、属主 `huiyingzhai-panel`；如需增删账号，使用 `manage_accounts.py`。
+- 账号文件权限 600、属主 `huiyingzhai-panel`；当前只允许 `tutnt`、`zhl`（`PANEL_ALLOWED_USERS`），其它账号不会被记录。
+- 如需修改密码，使用 `manage_accounts.py set`；如需调整允许账号，同时修改 `panel.env` 并重启面板。
 
 **故障排查**
 
@@ -303,7 +312,8 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口与账号文件路径（�
 | 登录提示尝试过于频繁 | 5 分钟内失败次数过多，等待几分钟再试 |
 | 页面提示 401 | 会话过期或面板重启，重新登录即可 |
 | 上传提示 413 / 超过 20MB | Nginx `client_max_body_size` 需 ≥ 25m；单文件上限 20MB |
-| 上传后文件列表为空 | 检查 `systemctl status huiyingzhai-panel` 和 `/var/lib/huiyingzhai-panel` 权限 |
+| 上传后列表为空 | 确认在「项目介绍」或「使用说明书」页面上传；两个页面的资料按分类分开 |
+| 页面显示「去登录」 | 正常，资料区只对 `tutnt` / `zhl` 登录后开放 |
 | 提示已有任务 | 等待当前部署结束；超过 15 分钟可 `sudo systemctl stop huiyingzhai-deploy` 后再试 |
 | 点了没反应 | `systemctl status huiyingzhai-deploy.path`、`journalctl -u huiyingzhai-deploy` |
 | 部署失败已回滚 | 看日志中的具体步骤；修复后重新部署，备份在 `/opt/huiyingzhai/backups/` |

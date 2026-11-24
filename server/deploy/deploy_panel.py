@@ -107,6 +107,14 @@ def _tail_text(path: Path, max_bytes: int = MAX_LOG_BYTES) -> str:
 # ---------- 账号 ----------
 
 
+DEFAULT_ALLOWED_USERS = ("tutnt", "zhl")
+
+
+def allowed_users() -> set[str]:
+    raw = os.environ.get("PANEL_ALLOWED_USERS") or ",".join(DEFAULT_ALLOWED_USERS)
+    return {part.strip() for part in raw.replace(" ", ",").split(",") if part.strip()}
+
+
 def load_accounts() -> dict:
     try:
         with ACCOUNTS_FILE.open("r", encoding="utf-8") as fh:
@@ -159,6 +167,8 @@ DEFAULT_PERMS = ("upload", "download")
 
 
 def user_perms(username: str) -> list[str]:
+    if username not in allowed_users():
+        return []
     record = load_accounts().get(username) or {}
     perms = record.get("perms")
     if isinstance(perms, list):
@@ -651,9 +661,10 @@ INTRO_HTML = """<!doctype html>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html, body { min-height: 100%; }
   body {
     margin: 0;
+    min-height: 100vh;
     display: grid;
     place-items: center;
     font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
@@ -672,12 +683,38 @@ INTRO_HTML = """<!doctype html>
   h1 { margin: 0 0 28px; font-size: clamp(30px, 6vw, 48px); letter-spacing: -0.02em; font-family: "Songti SC", "Noto Serif CJK SC", serif; }
   .back { color: #8a8478; text-decoration: none; font-size: 14px; border-bottom: 1px solid transparent; transition: color .2s, border-color .2s; }
   .back:hover { color: #9c6b4a; border-color: #9c6b4a; }
+  .files-card {
+    max-width: 680px; margin: 34px auto 0; padding: 20px; text-align: left;
+    background: rgba(255, 250, 242, 0.9); border: 1px solid #e8ddcc; border-radius: 18px;
+    box-shadow: 0 14px 36px rgba(120, 95, 65, 0.08);
+  }
+  .files-card h2 { margin: 0 0 4px; font-size: 17px; font-family: inherit; }
+  .files-sub { margin: 0 0 14px; color: #8a7a68; font-size: 13px; }
+  .files-login { padding: 12px 14px; border: 1px dashed #d8c9b5; border-radius: 12px; background: #fffdf9; color: #8a7a68; font-size: 14px; }
+  .files-login a { color: #9c6b4a; }
+  .upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .upload-row input[type=file] { border: 1px solid #dfcfba; border-radius: 10px; padding: 8px; background: #fffdf9; color: inherit; max-width: 100%; }
+  .upload-row button { border: 0; border-radius: 10px; padding: 9px 18px; background: #9c6b4a; color: #fff; cursor: pointer; font: inherit; }
+  .upload-row button:disabled { opacity: .5; cursor: not-allowed; }
+  .upload-msg { font-size: 13px; color: #8a7a68; }
+  .file-list { display: grid; gap: 8px; }
+  .file-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid #eadfd0; border-radius: 11px; background: #fffdf9; }
+  .file-name { font-size: 14px; word-break: break-all; }
+  .file-meta { font-size: 12px; color: #8a7a68; }
+  .file-dl { color: #9c6b4a; text-decoration: none; font-size: 13px; border: 1px solid #d8c4ac; border-radius: 999px; padding: 4px 12px; }
+  .file-dl:hover { background: #f2e6d7; }
+  .empty { color: #a99c8b; font-size: 13px; padding: 8px 0; }
+  .hidden { display: none !important; }
   @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
   @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
   @media (prefers-color-scheme: dark) {
     body { color: #ece4d8; background: radial-gradient(circle at 50% 15%, #221a14 0%, #171310 55%, #100d0a 100%); }
     .back { color: #a99c8b; }
     .back:hover { color: #d9b28e; border-color: #d9b28e; }
+    .files-card { background: rgba(29, 23, 18, 0.92); border-color: #33281f; }
+    .files-login, .upload-row input[type=file], .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
+    .files-sub, .upload-msg, .file-meta, .empty { color: #a99c8b; }
+    .file-dl { color: #dcb894; border-color: #4a3829; }
   }
   @media (prefers-reduced-motion: reduce) { main, .seal { animation: none; } }
 </style>
@@ -687,7 +724,146 @@ INTRO_HTML = """<!doctype html>
   <div class="seal">斋</div>
   <h1>慧英斋项目介绍</h1>
   <a class="back" href="/">← 返回主页</a>
+
+  <section class="files-card">
+    <h2>项目介绍资料</h2>
+    <div class="files-sub">仅 tutnt / zhl 登录后可上传和下载；单个文件 ≤ 20MB。</div>
+    <div id="files-login" class="files-login">登录后可上传/下载 · <a href="/me/?next=/intro/">去登录</a></div>
+    <div id="files-main" class="hidden">
+      <div id="upload-row" class="upload-row">
+        <input id="file-input" type="file">
+        <button id="upload-btn">上传</button>
+        <span id="upload-msg" class="upload-msg"></span>
+      </div>
+      <div id="file-list" class="file-list"><div class="empty">加载中…</div></div>
+    </div>
+  </section>
 </main>
+<script>
+(() => {
+  const CATEGORY = 'intro';
+  const $ = (id) => document.getElementById(id);
+  let csrf = '';
+  let perms = [];
+
+  function api(path, options) {
+    options = options || {};
+    const headers = Object.assign({}, options.headers || {});
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    return fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, options, { headers }));
+  }
+
+  function humanSize(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  function fmtTime(ms) {
+    if (!ms) return '';
+    try { return new Date(ms).toLocaleString('zh-CN', { hour12: false }); }
+    catch (err) { return ''; }
+  }
+
+  function render(files) {
+    const box = $('file-list');
+    box.textContent = '';
+    if (!files.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = '还没有资料';
+      box.appendChild(empty);
+      return;
+    }
+    files.forEach((file) => {
+      const row = document.createElement('div');
+      row.className = 'file-row';
+      const info = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'file-name';
+      name.textContent = file.name || '未命名文件';
+      const meta = document.createElement('div');
+      meta.className = 'file-meta';
+      meta.textContent = humanSize(file.size) + ' · ' + (file.uploadedBy || '') + ' · ' + fmtTime(file.uploadedAt);
+      info.appendChild(name);
+      info.appendChild(meta);
+      row.appendChild(info);
+      if (perms.indexOf('download') >= 0) {
+        const link = document.createElement('a');
+        link.className = 'file-dl';
+        link.textContent = '下载';
+        link.href = '/me/api/files/download?id=' + encodeURIComponent(file.id || '');
+        row.appendChild(link);
+      }
+      box.appendChild(row);
+    });
+  }
+
+  async function loadFiles() {
+    const box = $('file-list');
+    let resp;
+    try {
+      resp = await api('/me/api/files?category=' + CATEGORY);
+    } catch (err) {
+      box.textContent = '读取资料失败';
+      return;
+    }
+    if (resp.status === 401) { location.reload(); return; }
+    if (!resp.ok) { box.textContent = '读取资料失败'; return; }
+    const data = await resp.json();
+    perms = Array.isArray(data.perms) ? data.perms : perms;
+    $('upload-row').classList.toggle('hidden', perms.indexOf('upload') < 0);
+    render(Array.isArray(data.files) ? data.files : []);
+  }
+
+  async function upload() {
+    const input = $('file-input');
+    const file = input.files && input.files[0];
+    const msg = $('upload-msg');
+    msg.textContent = '';
+    if (!file) { msg.textContent = '请选择文件'; return; }
+    if (file.size > 20 * 1024 * 1024) { msg.textContent = '文件超过 20MB 限制'; return; }
+    const form = new FormData();
+    form.append('file', file);
+    $('upload-btn').disabled = true;
+    msg.textContent = '上传中…';
+    try {
+      const resp = await api('/me/api/files?category=' + CATEGORY, { method: 'POST', body: form });
+      if (resp.status === 401) { location.reload(); return; }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        msg.textContent = data.message || ('上传失败（HTTP ' + resp.status + '）');
+        return;
+      }
+      msg.textContent = '上传成功';
+      input.value = '';
+      await loadFiles();
+    } catch (err) {
+      msg.textContent = '网络错误，请重试';
+    } finally {
+      $('upload-btn').disabled = false;
+    }
+  }
+
+  async function init() {
+    try {
+      const resp = await fetch('/me/api/session', { credentials: 'same-origin', cache: 'no-store' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      csrf = data.csrf || '';
+      perms = Array.isArray(data.perms) ? data.perms : [];
+      $('files-login').classList.add('hidden');
+      $('files-main').classList.remove('hidden');
+      if (perms.indexOf('upload') < 0) $('upload-row').classList.add('hidden');
+      await loadFiles();
+    } catch (err) { /* ignore */ }
+  }
+
+  $('upload-btn').addEventListener('click', upload);
+  init();
+})();
+</script>
 </body>
 </html>
 """
@@ -748,6 +924,21 @@ MANUAL_HTML = """<!doctype html>
   .faq-a { max-height: 0; overflow: hidden; transition: max-height .38s ease, padding .38s ease; color: #6f675d; font-size: 14px; }
   .faq-item.open .faq-a { max-height: 600px; padding-bottom: 12px; }
   .faq-item.open .faq-q span { transform: rotate(45deg); }
+  .hidden { display: none !important; }
+  .files-login { margin-top: 10px; padding: 12px 14px; border: 1px dashed #d8c9b5; border-radius: 12px; background: #fffdf9; color: #6f675d; font-size: 14px; }
+  .files-login a { color: var(--brown); }
+  .upload-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0 12px; }
+  .upload-row input[type=file] { border: 1px solid #dfcfba; border-radius: 10px; padding: 8px; background: #fffdf9; color: inherit; max-width: 100%; }
+  .upload-row button { border: 0; border-radius: 10px; padding: 9px 18px; background: var(--brown); color: #fff; cursor: pointer; font: inherit; }
+  .upload-row button:disabled { opacity: .5; cursor: not-allowed; }
+  .upload-msg { font-size: 13px; color: var(--muted); }
+  .file-list { display: grid; gap: 8px; }
+  .file-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid #eadfd0; border-radius: 11px; background: #fffdf9; }
+  .file-name { font-size: 14px; word-break: break-all; }
+  .file-meta { font-size: 12px; color: var(--muted); }
+  .file-dl { color: var(--brown); text-decoration: none; font-size: 13px; border: 1px solid #d8c4ac; border-radius: 999px; padding: 4px 12px; }
+  .file-dl:hover { background: #f2e6d7; }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
   footer { text-align: center; padding: 30px 18px 50px; color: #9a8f80; font-size: 12px; letter-spacing: .08em; }
   footer a { color: var(--brown); text-decoration: none; }
   @keyframes rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
@@ -777,6 +968,8 @@ MANUAL_HTML = """<!doctype html>
     .step p, .role p, .faq-a { color: #b8aa99; }
     .tip { background: #2a2119; color: #d9c2a8; border-left-color: #a97a54; }
     .faq-item { border-bottom-color: #3a2d22; }
+    .files-login, .upload-row input[type=file], .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
+    .file-dl { color: #dcb894; border-color: #4a3829; }
     .hero-back { color: #c9b9a6; border-color: #4a3829; }
     .hero-back:hover { background: #241c16; color: #e0b993; border-color: var(--brown); }
   }
@@ -808,6 +1001,7 @@ MANUAL_HTML = """<!doctype html>
   <a href="#mine">我的</a>
   <a href="#web">网页端</a>
   <a href="#attach">附件规则</a>
+  <a href="#files">共享资料</a>
   <a href="#faq">常见问题</a>
 </nav>
 
@@ -914,7 +1108,7 @@ MANUAL_HTML = """<!doctype html>
     <p>除了小程序，班级还提供网页入口，用于查看说明和班级共享文件。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>主页</b><p>打开班级域名，可看到「慧英斋项目介绍」「慧英斋使用说明书」「我的」以及部署入口。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>我的</b><p>使用班级账号登录后，可以修改密码，并在「共享文件」里上传、下载班级文件（单个 ≤ 20MB）。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>我的</b><p>使用班级账号登录后可以修改密码；共享资料在「项目介绍」和「使用说明书」页面，登录后可上传/下载（单个 ≤ 20MB）。</p></div></div>
       <div class="step"><span class="step-num">3</span><div><b>账号</b><p>网页账号由管理员分配；忘记密码可在登录后自行修改，或联系管理员重置。</p></div></div>
     </div>
     <div class="tip">网页「我的」与小程序「我的」不是同一个登录体系：小程序用微信登录，网页用班级账号。</div>
@@ -930,8 +1124,22 @@ MANUAL_HTML = """<!doctype html>
     <div class="tip">上传前注意网络环境；大文件建议先压缩，避免超限或等待过久。</div>
   </section>
 
+  <section id="files" class="section reveal">
+    <div class="sec-head"><span class="sec-num">12</span><h2>共享资料</h2></div>
+    <p>仅 tutnt / zhl 登录后可上传和下载本页资料；单个文件 ≤ 20MB。项目介绍页也有独立的资料区。</p>
+    <div id="files-login" class="files-login">登录后可上传/下载 · <a href="/me/?next=/manual/">去登录</a></div>
+    <div id="files-main" class="hidden">
+      <div id="upload-row" class="upload-row">
+        <input id="file-input" type="file">
+        <button id="upload-btn">上传</button>
+        <span id="upload-msg" class="upload-msg"></span>
+      </div>
+      <div id="file-list" class="file-list"><div class="empty">加载中…</div></div>
+    </div>
+  </section>
+
   <section id="faq" class="section reveal">
-    <div class="sec-head"><span class="sec-num">12</span><h2>常见问题</h2></div>
+    <div class="sec-head"><span class="sec-num">13</span><h2>常见问题</h2></div>
     <div class="faq-item">
       <button class="faq-q">登记后职位不对怎么办？<span>＋</span></button>
       <div class="faq-a"><p>职位由班级名单按学号匹配。请确认学号填写正确；仍有问题请联系管理员更新名单。</p></div>
@@ -984,6 +1192,131 @@ MANUAL_HTML = """<!doctype html>
   });
 })();
 </script>
+<script>
+(() => {
+  const CATEGORY = 'manual';
+  const $ = (id) => document.getElementById(id);
+  let csrf = '';
+  let perms = [];
+
+  function api(path, options) {
+    options = options || {};
+    const headers = Object.assign({}, options.headers || {});
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    return fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, options, { headers }));
+  }
+
+  function humanSize(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  function fmtTime(ms) {
+    if (!ms) return '';
+    try { return new Date(ms).toLocaleString('zh-CN', { hour12: false }); }
+    catch (err) { return ''; }
+  }
+
+  function render(files) {
+    const box = $('file-list');
+    box.textContent = '';
+    if (!files.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = '还没有资料';
+      box.appendChild(empty);
+      return;
+    }
+    files.forEach((file) => {
+      const row = document.createElement('div');
+      row.className = 'file-row';
+      const info = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'file-name';
+      name.textContent = file.name || '未命名文件';
+      const meta = document.createElement('div');
+      meta.className = 'file-meta';
+      meta.textContent = humanSize(file.size) + ' · ' + (file.uploadedBy || '') + ' · ' + fmtTime(file.uploadedAt);
+      info.appendChild(name);
+      info.appendChild(meta);
+      row.appendChild(info);
+      if (perms.indexOf('download') >= 0) {
+        const link = document.createElement('a');
+        link.className = 'file-dl';
+        link.textContent = '下载';
+        link.href = '/me/api/files/download?id=' + encodeURIComponent(file.id || '');
+        row.appendChild(link);
+      }
+      box.appendChild(row);
+    });
+  }
+
+  async function loadFiles() {
+    const box = $('file-list');
+    let resp;
+    try {
+      resp = await api('/me/api/files?category=' + CATEGORY);
+    } catch (err) {
+      box.textContent = '读取资料失败';
+      return;
+    }
+    if (resp.status === 401) { location.reload(); return; }
+    if (!resp.ok) { box.textContent = '读取资料失败'; return; }
+    const data = await resp.json();
+    perms = Array.isArray(data.perms) ? data.perms : perms;
+    $('upload-row').classList.toggle('hidden', perms.indexOf('upload') < 0);
+    render(Array.isArray(data.files) ? data.files : []);
+  }
+
+  async function upload() {
+    const input = $('file-input');
+    const file = input.files && input.files[0];
+    const msg = $('upload-msg');
+    msg.textContent = '';
+    if (!file) { msg.textContent = '请选择文件'; return; }
+    if (file.size > 20 * 1024 * 1024) { msg.textContent = '文件超过 20MB 限制'; return; }
+    const form = new FormData();
+    form.append('file', file);
+    $('upload-btn').disabled = true;
+    msg.textContent = '上传中…';
+    try {
+      const resp = await api('/me/api/files?category=' + CATEGORY, { method: 'POST', body: form });
+      if (resp.status === 401) { location.reload(); return; }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        msg.textContent = data.message || ('上传失败（HTTP ' + resp.status + '）');
+        return;
+      }
+      msg.textContent = '上传成功';
+      input.value = '';
+      await loadFiles();
+    } catch (err) {
+      msg.textContent = '网络错误，请重试';
+    } finally {
+      $('upload-btn').disabled = false;
+    }
+  }
+
+  async function init() {
+    try {
+      const resp = await fetch('/me/api/session', { credentials: 'same-origin', cache: 'no-store' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      csrf = data.csrf || '';
+      perms = Array.isArray(data.perms) ? data.perms : [];
+      $('files-login').classList.add('hidden');
+      $('files-main').classList.remove('hidden');
+      if (perms.indexOf('upload') < 0) $('upload-row').classList.add('hidden');
+      await loadFiles();
+    } catch (err) { /* ignore */ }
+  }
+
+  $('upload-btn').addEventListener('click', upload);
+  init();
+})();
+</script>
 </body>
 </html>
 """
@@ -1017,27 +1350,18 @@ MY_HTML = """<!doctype html>
   label { font-size: 13px; color: #8a7a68; display: block; margin: 10px 0 6px; }
   .msg { margin-top: 10px; font-size: 13px; color: #8a7a68; min-height: 1.4em; }
   .who { font-size: 13px; color: #8a7a68; }
-  .badge { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: #f2e6d7; color: #7d5a40; margin-left: 6px; }
   .hidden { display: none !important; }
-  .file-upload { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; border: 1px dashed #d8c9b5; border-radius: 12px; background: #fffdf9; }
-  .file-upload input[type=file] { border: 0; background: transparent; padding: 0; max-width: 100%; }
-  .file-list { margin-top: 14px; display: grid; gap: 8px; }
-  .file-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 11px 13px; border: 1px solid #eadfd0; border-radius: 11px; background: #fffdf9; }
-  .file-name { font-size: 14px; word-break: break-all; }
-  .file-meta { font-size: 12px; color: #8a7a68; }
-  .file-dl { flex: none; color: #9c6b4a; text-decoration: none; font-size: 13px; border: 1px solid #d8c4ac; border-radius: 999px; padding: 4px 12px; }
-  .file-dl:hover { background: #f2e6d7; }
-  .empty { color: #a99c8b; font-size: 13px; padding: 10px 0; }
   .kv { display: grid; grid-template-columns: 86px 1fr; gap: 4px 12px; font-size: 13px; }
   .kv div:nth-child(odd) { color: #8a7a68; }
+  .sub a { color: #9c6b4a; }
+  .sub a:hover { text-decoration: underline; }
   @media (prefers-color-scheme: dark) {
     body { background: #14100d; color: #ece4d8; }
     .card { background: #1d1712; border-color: #33281f; }
-    input, .file-upload, .file-row { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
+    input { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
     button.secondary { background: #33261c; color: #d9c8b3; }
-    .home, .sub, label, .msg, .who, .kv div:nth-child(odd), .file-meta, .empty { color: #a99c8b; }
-    .badge { background: #33261c; color: #dcb894; }
-    .file-dl { color: #dcb894; border-color: #4a3829; }
+    .home, .sub, label, .msg, .who, .kv div:nth-child(odd) { color: #a99c8b; }
+    .sub a { color: #dcb894; }
   }
 </style>
 </head>
@@ -1045,7 +1369,7 @@ MY_HTML = """<!doctype html>
 <main>
   <div class="top"><a class="home" href="/">← tuTNT's home</a><a class="home" href="/deploy/">部署控制台 →</a></div>
   <h1>我的</h1>
-  <div class="sub">登录后可修改密码、上传和下载班级共享文件。</div>
+  <div class="sub">登录后可修改密码；共享资料请到「项目介绍」和「使用说明书」页面。</div>
 
   <section id="login" class="card hidden">
     <h2>登录</h2>
@@ -1062,24 +1386,20 @@ MY_HTML = """<!doctype html>
   <section id="account" class="hidden">
     <div class="card">
       <div class="row" style="justify-content: space-between">
-        <div><span class="who">已登录：</span><b id="who"></b><span id="perm-badge" class="badge"></span></div>
+        <div><span class="who">已登录：</span><b id="who"></b></div>
         <button id="logout" class="secondary">退出</button>
       </div>
       <div class="kv" style="margin-top: 14px">
         <div>账号</div><div id="acc-user">—</div>
-        <div>权限</div><div id="acc-perms">—</div>
       </div>
     </div>
 
     <div class="card">
-      <h2>共享文件</h2>
-      <div class="sub" style="margin: 0 0 12px">班级账号都可以上传和下载；单个文件不超过 20MB。</div>
-      <div id="upload-wrap" class="file-upload">
-        <input id="file-input" type="file">
-        <button id="upload-btn" class="primary">上传</button>
-        <span id="upload-msg" class="msg" style="margin: 0"></span>
+      <h2>共享资料</h2>
+      <div class="sub" style="margin: 0">
+        上传与下载已移到 <a href="/intro/">项目介绍</a> 和 <a href="/manual/">使用说明书</a> 页面，
+        仅 tutnt / zhl 登录后可用。
       </div>
-      <div id="file-list" class="file-list"><div class="empty">加载中…</div></div>
     </div>
 
     <div class="card">
@@ -1102,7 +1422,6 @@ MY_HTML = """<!doctype html>
   const $ = (id) => document.getElementById(id);
   let csrf = '';
   let user = '';
-  let perms = [];
   const next = (() => {
     const value = new URLSearchParams(location.search).get('next') || '';
     return value.startsWith('/') && !value.startsWith('//') ? value : '';
@@ -1116,7 +1435,7 @@ MY_HTML = """<!doctype html>
   }
 
   function showLogin(message) {
-    csrf = ''; user = ''; perms = [];
+    csrf = ''; user = '';
     $('account').classList.add('hidden');
     $('login').classList.remove('hidden');
     $('login-msg').textContent = message || '';
@@ -1124,18 +1443,13 @@ MY_HTML = """<!doctype html>
     setTimeout(() => $('username').focus(), 30);
   }
 
-  function showAccount(name, list) {
+  function showAccount(name) {
     user = name || '';
-    perms = Array.isArray(list) ? list : [];
     $('who').textContent = user;
     $('acc-user').textContent = user;
-    $('acc-perms').textContent = perms.length ? perms.map((p) => p === 'upload' ? '上传' : '下载').join(' / ') : '无文件权限';
-    $('perm-badge').textContent = perms.length ? (perms.indexOf('upload') >= 0 ? '可上传' : '只读') : '只读';
     $('login').classList.add('hidden');
     $('account').classList.remove('hidden');
-    $('upload-wrap').classList.toggle('hidden', perms.indexOf('upload') < 0);
     $('pwd-msg').textContent = '';
-    loadFiles();
   }
 
   async function checkSession() {
@@ -1145,7 +1459,7 @@ MY_HTML = """<!doctype html>
         const data = await resp.json();
         csrf = data.csrf || '';
         if (next) { location.href = next; return; }
-        showAccount(data.user || '', data.perms || []);
+        showAccount(data.user || '');
         return;
       }
     } catch (err) { /* ignore */ }
@@ -1176,7 +1490,7 @@ MY_HTML = """<!doctype html>
       csrf = data.csrf || '';
       $('password').value = '';
       if (next) { location.href = next; return; }
-      showAccount(data.user || username, data.perms || []);
+      showAccount(data.user || username);
     } catch (err) {
       $('login-msg').textContent = '网络错误，请重试';
     } finally {
@@ -1193,106 +1507,6 @@ MY_HTML = """<!doctype html>
       });
     } catch (err) { /* ignore */ }
     showLogin('');
-  }
-
-  function humanSize(bytes) {
-    const n = Number(bytes) || 0;
-    if (n < 1024) return n + ' B';
-    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-    return (n / 1024 / 1024).toFixed(1) + ' MB';
-  }
-
-  function fmtTime(ms) {
-    if (!ms) return '';
-    try { return new Date(ms).toLocaleString('zh-CN', { hour12: false }); }
-    catch (err) { return ''; }
-  }
-
-  async function loadFiles() {
-    const box = $('file-list');
-    let resp;
-    try {
-      resp = await api('api/files');
-    } catch (err) {
-      box.textContent = '读取文件列表失败';
-      return;
-    }
-    if (resp.status === 401) { showLogin('登录已过期，请重新登录'); return; }
-    if (!resp.ok) {
-      box.textContent = '读取文件列表失败（HTTP ' + resp.status + '）';
-      return;
-    }
-    const data = await resp.json();
-    perms = Array.isArray(data.perms) ? data.perms : perms;
-    showPerms();
-    const files = Array.isArray(data.files) ? data.files : [];
-    box.textContent = '';
-    if (files.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = '还没有共享文件';
-      box.appendChild(empty);
-      return;
-    }
-    files.forEach((file) => {
-      const row = document.createElement('div');
-      row.className = 'file-row';
-      const info = document.createElement('div');
-      const name = document.createElement('div');
-      name.className = 'file-name';
-      name.textContent = file.name || '未命名文件';
-      const meta = document.createElement('div');
-      meta.className = 'file-meta';
-      meta.textContent = humanSize(file.size) + ' · ' + (file.uploadedBy || '') + ' · ' + fmtTime(file.uploadedAt);
-      info.appendChild(name);
-      info.appendChild(meta);
-      row.appendChild(info);
-      if (perms.indexOf('download') >= 0) {
-        const link = document.createElement('a');
-        link.className = 'file-dl';
-        link.textContent = '下载';
-        link.href = 'api/files/download?id=' + encodeURIComponent(file.id || '');
-        row.appendChild(link);
-      }
-      box.appendChild(row);
-    });
-  }
-
-  function showPerms() {
-    $('acc-perms').textContent = perms.length ? perms.map((p) => p === 'upload' ? '上传' : '下载').join(' / ') : '无文件权限';
-    $('perm-badge').textContent = perms.length ? (perms.indexOf('upload') >= 0 ? '可上传' : '只读') : '只读';
-    $('upload-wrap').classList.toggle('hidden', perms.indexOf('upload') < 0);
-  }
-
-  async function uploadFile() {
-    const input = $('file-input');
-    const file = input.files && input.files[0];
-    const msg = $('upload-msg');
-    msg.style.color = '';
-    if (!file) { msg.textContent = '请选择文件'; return; }
-    if (file.size > 20 * 1024 * 1024) { msg.textContent = '文件超过 20MB 限制'; return; }
-    const form = new FormData();
-    form.append('file', file);
-    $('upload-btn').disabled = true;
-    msg.textContent = '上传中…';
-    try {
-      const resp = await api('api/files', { method: 'POST', body: form });
-      if (resp.status === 401) { showLogin('登录已过期，请重新登录'); return; }
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        msg.style.color = '#b4453a';
-        msg.textContent = data.message || ('上传失败（HTTP ' + resp.status + '）');
-        return;
-      }
-      msg.textContent = '上传成功';
-      input.value = '';
-      await loadFiles();
-    } catch (err) {
-      msg.style.color = '#b4453a';
-      msg.textContent = '网络错误，请重试';
-    } finally {
-      $('upload-btn').disabled = false;
-    }
   }
 
   async function savePassword() {
@@ -1334,7 +1548,6 @@ MY_HTML = """<!doctype html>
   $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
   $('username').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('password').focus(); });
   $('logout').addEventListener('click', logout);
-  $('upload-btn').addEventListener('click', uploadFile);
   $('pwd-save').addEventListener('click', savePassword);
 
   checkSession();
@@ -1588,7 +1801,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(429, json.dumps({"ok": False, "message": "尝试过于频繁，请稍后再试"}, ensure_ascii=False))
             return
         users = load_accounts()
-        record = users.get(username)
+        record = users.get(username) if username in allowed_users() else None
         valid = bool(record) and verify_password(record, password)
         if not valid:
             if not record:
@@ -1680,10 +1893,16 @@ class Handler(BaseHTTPRequestHandler):
         if "download" not in perms and "upload" not in perms:
             self._send(403, json.dumps({"ok": False, "message": "没有文件权限"}, ensure_ascii=False))
             return
+        query = parse_qs(urlparse(self.path).query)
+        category = (query.get("category") or [""])[0].strip()
+        if category and category not in ("intro", "manual"):
+            self._send(400, json.dumps({"ok": False, "message": "资料分类不正确"}, ensure_ascii=False))
+            return
         entries = [
             entry
             for entry in load_file_entries()
-            if (FILES_DIR / str(entry.get("id", ""))).is_file()
+            if (not category or entry.get("category") == category)
+            and (FILES_DIR / str(entry.get("id", ""))).is_file()
         ]
         entries.sort(key=lambda entry: int(entry.get("uploadedAt") or 0), reverse=True)
         self._send(
@@ -1700,6 +1919,12 @@ class Handler(BaseHTTPRequestHandler):
         user = record["user"]
         if not has_perm(user, "upload"):
             self._send(403, json.dumps({"ok": False, "message": "没有上传权限"}, ensure_ascii=False))
+            return
+
+        query = parse_qs(urlparse(self.path).query)
+        category = (query.get("category") or [""])[0].strip()
+        if category not in ("intro", "manual"):
+            self._send(400, json.dumps({"ok": False, "message": "缺少资料分类"}, ensure_ascii=False))
             return
 
         content_type = self.headers.get("Content-Type") or ""
@@ -1778,6 +2003,7 @@ class Handler(BaseHTTPRequestHandler):
             "id": file_id,
             "name": original,
             "size": size,
+            "category": category,
             "uploadedBy": user,
             "uploadedAt": _now_ms(),
         }
