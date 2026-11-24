@@ -91,29 +91,15 @@ fi
 chown root:root "${DEPLOY_CONF}"
 chmod 600 "${DEPLOY_CONF}"
 
-if [[ ! -f "${PANEL_CONF}" ]]; then
-  PANEL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-  cat > "${PANEL_CONF}" <<EOF
-# 由 install.sh 生成；修改口令后执行 systemctl restart huiyingzhai-panel
+cat > "${PANEL_CONF}" <<EOF
+# 由 install.sh 生成；账号保存在 ${PANEL_HOME}/accounts.json
 PANEL_PORT=3999
-PANEL_TOKEN=${PANEL_TOKEN}
 PANEL_QUEUE_DIR=${PANEL_HOME}
+PANEL_ACCOUNTS_FILE=${PANEL_HOME}/accounts.json
 PANEL_STATUS_FILE=${DEPLOY_STATE_DIR}/status.json
 PANEL_CURRENT_FILE=${DEPLOY_STATE_DIR}/current.json
 PANEL_LOG_FILE=/var/log/huiyingzhai-deploy.log
 EOF
-fi
-chown root:root "${PANEL_CONF}"
-chmod 600 "${PANEL_CONF}"
-PANEL_TOKEN="$(sed -n 's/^PANEL_TOKEN=//p' "${PANEL_CONF}" | tail -n1)"
-if [[ -z "${PANEL_TOKEN}" ]]; then
-  PANEL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-  if grep -q '^PANEL_TOKEN=' "${PANEL_CONF}"; then
-    sed -i "s/^PANEL_TOKEN=.*/PANEL_TOKEN=${PANEL_TOKEN}/" "${PANEL_CONF}"
-  else
-    printf 'PANEL_TOKEN=%s\n' "${PANEL_TOKEN}" >>"${PANEL_CONF}"
-  fi
-fi
 chown root:root "${PANEL_CONF}"
 chmod 600 "${PANEL_CONF}"
 
@@ -123,6 +109,8 @@ install -m 755 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.sh" \
 install -d -m 755 /usr/local/lib/huiyingzhai
 install -m 755 "${REPO_ROOT}/server/deploy/deploy_panel.py" \
   /usr/local/lib/huiyingzhai/deploy_panel.py
+install -m 755 "${REPO_ROOT}/server/deploy/manage_accounts.py" \
+  /usr/local/lib/huiyingzhai/manage_accounts.py
 
 install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.service" \
   /etc/systemd/system/huiyingzhai-deploy.service
@@ -130,6 +118,18 @@ install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.path" \
   /etc/systemd/system/huiyingzhai-deploy.path
 install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-panel.service" \
   /etc/systemd/system/huiyingzhai-panel.service
+
+ACCOUNTS_FILE="${PANEL_HOME}/accounts.json"
+ACCOUNT_INFO=""
+if [[ ! -f "${ACCOUNTS_FILE}" ]]; then
+  ACCOUNT_INFO="$(runuser -u "${PANEL_USER}" -- \
+    env PANEL_ACCOUNTS_FILE="${ACCOUNTS_FILE}" \
+    python3 /usr/local/lib/huiyingzhai/manage_accounts.py init tutnt zhl)"
+fi
+ACCOUNT_SUMMARY="$(printf '%s\n' "${ACCOUNT_INFO}" | sed 's/^/    /')"
+if [[ -z "${ACCOUNT_SUMMARY}" ]]; then
+  ACCOUNT_SUMMARY="    账号文件已存在，未修改：${ACCOUNTS_FILE}"
+fi
 
 rm -f "${PANEL_HOME}/deploy.request"
 systemctl daemon-reload
@@ -167,18 +167,22 @@ else
 fi
 
 NGINX_SITE="/etc/nginx/sites-enabled/huiyingzhai"
-if [[ -f "${NGINX_SITE}" ]] && ! grep -q 'location /deploy/' "${NGINX_SITE}"; then
-  echo "提示：现有 Nginx 站点缺少 /deploy/ 反向代理，请按 server/README.md 更新后 reload nginx"
+if [[ -f "${NGINX_SITE}" ]] && \
+  ! grep -Eq 'huiyingzhai-panel\.conf|location = /' "${NGINX_SITE}"; then
+  echo "提示：现有 Nginx 站点缺少个人主页/部署面板反代（见 server/README.md），请更新后 reload nginx"
 fi
 
 cat <<EOF
 
-==> 网页部署面板已安装
-  访问地址：https://<你的域名>/deploy/（Nginx 需包含 /deploy/ 反代）
-  部署口令：${PANEL_TOKEN}
+==> 个人主页与部署面板已安装
+  个人主页：https://<你的域名>/（Nginx 需包含 location = / 反代）
+  部署页：  https://<你的域名>/deploy/
+  登录账号（登录后可修改密码）：
+${ACCOUNT_SUMMARY}
+  账号管理：python3 /usr/local/lib/huiyingzhai/manage_accounts.py
   面板配置：${PANEL_CONF}（600）
   部署参数：${DEPLOY_CONF}（600，可改仓库/分支/镜像）
   部署日志：/var/log/huiyingzhai-deploy.log
 
-  口令泄露等同于允许别人触发“拉取当前仓库代码并重启服务”，请勿外传。
+  账号密码只保存 PBKDF2 哈希；修改密码请登录后在部署页操作。
 EOF

@@ -149,9 +149,21 @@ sudo systemctl restart huiyingzhai
 
 也可以使用下面的网页一键部署。
 
-### 网页一键部署（部署面板）
+### 个人主页与网页部署
 
-在浏览器打开 `https://<后端域名>/deploy/`，输入安装时生成的口令，点击「部署最新代码」即可：
+浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），页面只有一个「Deploy」按钮；点击进入 `https://<后端域名>/deploy/`，用账号登录后即可部署。
+
+`install.sh` 首次运行会创建账号文件并打印随机密码（默认两个账号 `tutnt`、`zhl`）。密码只以 PBKDF2-HMAC-SHA256 哈希保存在 `/var/lib/huiyingzhai-panel/accounts.json`。登录后页面里有「修改密码」；忘记密码可用命令重置：
+
+```bash
+# 列出账号
+sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py list
+
+# 重置密码（从 stdin 读取，避免密码出现在 ps）
+printf '%s\n' '新密码' | sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py set tutnt
+```
+
+点击「部署最新代码」后：
 
 1. 从 GitHub 下载当前分支的源码压缩包（默认 `tuTNTywz/huiyingzhai` 的 `main`）；
 2. 校验代码包结构，备份当前版本（保留最近 5 份）；
@@ -172,20 +184,30 @@ journalctl -u huiyingzhai-deploy -n 50 --no-pager
 
 **权限模型**（为什么不把部署直接写进 FastAPI）：
 
-- 网页面板 `huiyingzhai-panel` 以独立用户运行，只监听 `127.0.0.1:3999`，只能往 `/var/lib/huiyingzhai-panel/` 写一个请求文件；
-- `huiyingzhai-deploy.path` 监听该文件，触发 root 的 `huiyingzhai-deploy.service` 执行 `/usr/local/sbin/huiyingzhai-deploy`；
+- 个人主页/部署面板 `huiyingzhai-panel` 以独立用户运行，只监听 `127.0.0.1:3999`；账号会话为 12 小时 HttpOnly Cookie，所有写操作还要求 CSRF Token；
+- 面板只能往 `/var/lib/huiyingzhai-panel/` 写一个请求文件，`huiyingzhai-deploy.path` 监听到后触发 root 的 `huiyingzhai-deploy.service` 执行 `/usr/local/sbin/huiyingzhai-deploy`；
 - FastAPI 服务本身仍然是无特权用户 + `NoNewPrivileges=true`，即使应用被攻破也不能直接提权重启服务；
-- 部署脚本由 root 拥有，**不会**从 GitHub 自动更新；修改 `server/deploy/` 下的部署脚本、面板或 systemd 单元后，需要重新执行 `sudo bash server/deploy/install.sh` 才生效。
+- 部署脚本、面板代码和 systemd 单元都由 root 安装，**不会**从 GitHub 自动更新；修改 `server/deploy/` 后需要重新执行 `sudo bash server/deploy/install.sh` 才生效。
 
 **安装与 Nginx**
 
-`install.sh` 会自动创建面板用户、配置、systemd 单元并启动，结束后打印访问口令。首次升级旧部署时，还需要给 Nginx 增加 `/deploy/` 反代。`deploy/nginx.conf` 已包含；已有站点可手动加入：
+`install.sh` 会自动创建面板用户、配置、账号、systemd 单元并启动，结束后打印初始账号密码。首次升级旧部署时，还需要给 Nginx 增加个人主页和部署面板反代。`deploy/nginx.conf` 已包含；已有站点可手动加入：
 
 ```nginx
 # http 上下文（sites-enabled 文件顶部）
 limit_req_zone $binary_remote_addr zone=huiyingzhai_deploy:10m rate=120r/m;
 
 # server 块内
+location = / {
+    proxy_pass http://127.0.0.1:3999;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+}
+
 location = /deploy {
     return 301 /deploy/;
 }
@@ -209,21 +231,25 @@ location /deploy/ {
 
 ```bash
 sudo nano /etc/huiyingzhai/deploy.conf   # 仓库、分支、私有仓库 token、GitHub 镜像
-sudo nano /etc/huiyingzhai/panel.env     # 面板端口与口令（修改后重启 huiyingzhai-panel）
+sudo nano /etc/huiyingzhai/panel.env     # 面板端口与账号文件路径（无密钥）
 ```
 
 - 私有仓库：在 `deploy.conf` 中设置 `GITHUB_TOKEN`（`Contents` 只读即可）。
 - 服务器直连 GitHub 慢：设置 `DEPLOY_ARCHIVE_URL_TEMPLATE`，例如
   `https://ghproxy.example.com/https://github.com/%REPO%/archive/refs/heads/%BRANCH%.tar.gz`。
-- 口令泄露等于允许别人触发「拉取当前仓库代码并重启服务」，请使用 HTTPS 并尽量再加 Nginx IP 白名单。
+- 账号密码只保存哈希；请使用 HTTPS，并尽量再加 Nginx IP 白名单。
+- 账号文件权限 600、属主 `huiyingzhai-panel`；如需增删账号，使用 `manage_accounts.py`。
 
 **故障排查**
 
 | 现象 | 处理 |
 | --- | --- |
+| `/` 404 | Nginx 未加 `location = /` 反代，或未 reload |
 | `/deploy/` 404 | Nginx 未加 `/deploy/` 反代，或未 reload |
 | `/deploy/` 502 | `systemctl status huiyingzhai-panel`，看端口是否为 3999 |
-| 页面提示 401 | 口令不对；查看 `/etc/huiyingzhai/panel.env` 的 `PANEL_TOKEN` |
+| 登录提示用户名或密码不正确 | 确认账号；忘记密码用 `manage_accounts.py set` 重置 |
+| 登录提示尝试过于频繁 | 5 分钟内失败次数过多，等待几分钟再试 |
+| 页面提示 401 | 会话过期或面板重启，重新登录即可 |
 | 提示已有任务 | 等待当前部署结束；超过 15 分钟可 `sudo systemctl stop huiyingzhai-deploy` 后再试 |
 | 点了没反应 | `systemctl status huiyingzhai-deploy.path`、`journalctl -u huiyingzhai-deploy` |
 | 部署失败已回滚 | 看日志中的具体步骤；修复后重新部署，备份在 `/opt/huiyingzhai/backups/` |
