@@ -580,10 +580,8 @@ HOME_HTML = """<!doctype html>
 <main>
   <h1>tuTNT's home</h1>
   <div class="actions">
-    <a class="btn primary" href="/deploy/">Deploy</a>
-    <a class="btn" href="/intro/">汇英斋项目介绍</a>
+    <a class="btn primary" href="/intro/">汇英斋项目介绍</a>
     <a class="btn" href="/manual/">汇英斋使用说明书</a>
-    <a class="btn" href="/me/">我的</a>
   </div>
 </main>
 </body>
@@ -1155,16 +1153,8 @@ UPLOAD_HTML = """<!doctype html>
     return hit ? hit.name : key;
   }
 
-  function isManager() {
-    return !!identity && (identity.role === 'committee' || identity.role === 'admin');
-  }
-
   function repSubjects() {
     return identity && Array.isArray(identity.repSubjects) ? identity.repSubjects : [];
-  }
-
-  function canSubject() {
-    return isManager() || repSubjects().length > 0;
   }
 
   function renderIdentity(appError) {
@@ -1182,18 +1172,27 @@ UPLOAD_HTML = """<!doctype html>
     $('identity-tag').textContent = roleText;
     if (appError) setMsg('app-msg', appError, true);
     else setMsg('app-msg', '');
-    $('homework-card').classList.toggle('hidden', !isManager());
-    $('activity-card').classList.toggle('hidden', !isManager());
-    $('subject-card').classList.toggle('hidden', !canSubject());
+
+    const admin = identity.role === 'admin';
+    const committee = identity.role === 'committee' || admin;
+    const study = admin || identity.position === '学习委员';
+    const reps = repSubjects();
+    const canSub = admin || reps.length > 0;
+    $('homework-card').classList.toggle('hidden', !study);
+    $('activity-card').classList.toggle('hidden', !committee);
+    $('subject-card').classList.toggle('hidden', !canSub);
     const select = $('sub-subject');
     select.textContent = '';
-    const allowed = isManager() ? subjects : subjects.filter((item) => repSubjects().indexOf(item.key) >= 0);
+    const allowed = admin ? subjects : subjects.filter((item) => reps.indexOf(item.key) >= 0);
     allowed.forEach((item) => {
       const option = document.createElement('option');
       option.value = item.key;
       option.textContent = item.name;
       select.appendChild(option);
     });
+    if (!study && !committee && !canSub) {
+      setMsg('app-msg', '当前身份没有上传权限；仅班委/课代表可上传', true);
+    }
   }
 
   async function checkSession() {
@@ -1946,6 +1945,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._require_csrf(record):
             return
+        identity = record.get("identity") or {}
+        reps = identity.get("repSubjects") if isinstance(identity.get("repSubjects"), list) else []
+        if identity.get("role") not in ("committee", "admin") and not reps:
+            self._send(403, json.dumps({"ok": False, "message": "仅班委/课代表可上传"}, ensure_ascii=False))
+            return
         app_token = self._app_token_for(record)
         if not app_token:
             self._send(400, json.dumps({"ok": False, "message": "请先绑定学号并同步小程序身份"}, ensure_ascii=False))
@@ -1995,6 +1999,21 @@ class Handler(BaseHTTPRequestHandler):
             "action": action,
             "data": data.get("data") if isinstance(data.get("data"), dict) else {},
         }
+        identity = record.get("identity") or {}
+        role = identity.get("role")
+        position = identity.get("position")
+        reps = identity.get("repSubjects") if isinstance(identity.get("repSubjects"), list) else []
+        if action == "publishHomework" and not (role == "admin" or position == "学习委员"):
+            self._send(403, json.dumps({"ok": False, "message": "仅学习委员或管理员可发布作业"}, ensure_ascii=False))
+            return
+        if action == "publishActivity" and role not in ("committee", "admin"):
+            self._send(403, json.dumps({"ok": False, "message": "仅班委或管理员可发布活动"}, ensure_ascii=False))
+            return
+        if action == "publishSubjectTask":
+            subject = str(payload["data"].get("subject") or "")
+            if role != "admin" and subject not in reps:
+                self._send(403, json.dumps({"ok": False, "message": "只能发布你负责的科目"}, ensure_ascii=False))
+                return
         status, result = app_json("/api/action", payload, token=app_token)
         if status == 401:
             new_token = refresh_app_token(record)
@@ -2006,8 +2025,9 @@ class Handler(BaseHTTPRequestHandler):
         _token, record = self._require_session()
         if not record:
             return
-        if not has_perm(record["user"], "download"):
-            self._send(403, json.dumps({"ok": False, "message": "没有下载权限"}, ensure_ascii=False))
+        identity = record.get("identity") or {}
+        if identity.get("role") != "admin":
+            self._send(403, json.dumps({"ok": False, "message": "仅管理员可下载页面"}, ensure_ascii=False))
             return
         query = parse_qs(urlparse(self.path).query)
         slug = (query.get("page") or [""])[0].strip()
@@ -2028,9 +2048,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._require_csrf(record):
             return
-        user = record["user"]
-        if not has_perm(user, "upload"):
-            self._send(403, json.dumps({"ok": False, "message": "没有上传权限"}, ensure_ascii=False))
+        identity = record.get("identity") or {}
+        if identity.get("role") != "admin":
+            self._send(403, json.dumps({"ok": False, "message": "仅管理员可编辑页面"}, ensure_ascii=False))
             return
         query = parse_qs(urlparse(self.path).query)
         slug = (query.get("page") or [""])[0].strip()
