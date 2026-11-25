@@ -165,6 +165,25 @@ async def web_committee(request: Request):
     return {"ok": True, "list": rows, "subjects": _subject_list()}
 
 
+# 网页上传页：用小程序 token 换取当前身份（web-view 自动登录）
+@app.get("/api/web/me")
+async def web_me(request: Request):
+    user, error = _require_user(request)
+    if error:
+        return error
+    if not user.get("registered"):
+        return {"ok": False, "msg": "请先在小程序完成登记"}
+    student_id = str(user.get("studentId") or "")
+    roster = store.find_one("roster", lambda r: r.get("studentId") == student_id)
+    return {
+        "ok": True,
+        "user": user,
+        "roster": roster,
+        "repSubjects": (roster or {}).get("repSubjects") or [],
+        "subjects": _subject_list(),
+    }
+
+
 # 微信登录：code 换 openid，首次登录自动建档
 @app.post("/api/login")
 async def login(request: Request):

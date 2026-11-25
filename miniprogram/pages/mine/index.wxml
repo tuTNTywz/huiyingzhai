@@ -3,6 +3,16 @@
   <view class="page-sub">「 温故而知新 」</view>
 </view>
 
+<!-- 数据上传入口（仅班委/课代表） -->
+<view class="card upload-entry" wx:if="{{isCommittee || hasRep}}" bindtap="goUpload">
+  <view class="upload-entry-icon">📤</view>
+  <view class="upload-entry-main">
+    <view class="upload-entry-title">汇英斋数据上传</view>
+    <view class="upload-entry-sub">在网页端发布作业、活动、学科任务</view>
+  </view>
+  <view class="upload-entry-arrow">›</view>
+</view>
+
 <!-- 个人信息 -->
 <view class="card">
   <view class="section-title">个人信息</view>
@@ -31,7 +41,7 @@
 
 <view class="card tip-card">
   <view class="section-title">说明</view>
-  <view class="tip-text">· 首次登录只需登记姓名与学号，班级和职位自动填好\n· 也可随时在此处打开登记窗口修改个人信息\n· 班委可发布作业与活动，管理员拥有全部权限并负责课程设置\n· 各学科课代表由班级名单（roster 集合）指定\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
+  <view class="tip-text">· 首次登录只需登记姓名与学号，班级和职位自动填好\n· 也可随时在此处打开登记窗口修改个人信息\n· 班委 / 课代表可通过上方「汇英斋数据上传」在网页端发布作业、活动、学科任务\n· 各学科课代表由班级名单（roster 集合）指定\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
 </view>
 
 <!-- 注册窗口 -->

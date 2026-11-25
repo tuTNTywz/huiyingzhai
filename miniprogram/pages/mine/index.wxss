@@ -125,3 +125,37 @@
 .modal-actions button {
   flex: 1;
 }
+
+/* 数据上传入口 */
+.upload-entry {
+  display: flex;
+  align-items: center;
+}
+.upload-entry-icon {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
+  background: #f2e6d7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  margin-right: 20rpx;
+}
+.upload-entry-main {
+  flex: 1;
+}
+.upload-entry-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #9c6b4a;
+}
+.upload-entry-sub {
+  margin-top: 4rpx;
+  font-size: 23rpx;
+  color: #8a8478;
+}
+.upload-entry-arrow {
+  font-size: 38rpx;
+  color: #c0b5a5;
+}

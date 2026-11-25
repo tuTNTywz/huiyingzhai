@@ -48,10 +48,6 @@ Page({
     wx.stopPullDownRefresh();
   },
 
-  goCreate() {
-    wx.navigateTo({ url: "/pages/activity/create" });
-  },
-
   goDetail(e) {
     wx.navigateTo({ url: `/pages/activity/detail?id=${e.currentTarget.dataset.id}` });
   },

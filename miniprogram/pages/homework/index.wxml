@@ -30,9 +30,6 @@
 </view>
 
 <view class="section-head class-hw-head">班级作业</view>
-<block wx:if="{{isCommittee}}">
-  <view class="btn-primary create-btn" bindtap="goCreate">＋ 发布作业</view>
-</block>
 
 <view wx:if="{{!loading && list.length === 0}}" class="empty">
   暂无班级作业，静候先生布置

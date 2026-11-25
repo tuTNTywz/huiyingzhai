@@ -1296,7 +1296,7 @@ UPLOAD_HTML = """<!doctype html>
   <section id="dashboard" class="hidden">
     <div class="card">
       <div class="row space">
-        <div>网页账号：<b id="who"></b><span id="identity-tag" class="tag hidden"></span></div>
+        <div>当前登录：<b id="who"></b><span id="identity-tag" class="tag hidden"></span></div>
         <button id="logout" class="secondary">退出</button>
       </div>
       <div id="identity" class="kv hidden" style="margin-top: 12px">
@@ -1307,14 +1307,17 @@ UPLOAD_HTML = """<!doctype html>
         <div>身份</div><div id="id-role">—</div>
         <div>负责科目</div><div id="id-reps">—</div>
       </div>
-      <div id="no-identity" class="msg">还没有绑定学号，请在下方名单中点击「绑定此学号」。</div>
+      <div id="no-identity" class="msg">还没有同步小程序身份，请填写学号同步。</div>
       <div id="app-msg" class="msg"></div>
     </div>
 
-    <div class="card">
-      <h2>班委 / 课代表 · 身份与网页登录</h2>
-      <div class="sub" style="margin-bottom: 10px">名单来自小程序班级名单；右侧显示已绑定的网页账号。</div>
-      <div id="committee-list"><div class="msg">加载中…</div></div>
+    <div id="identity-form" class="card hidden">
+      <h2>同步小程序身份</h2>
+      <div class="sub" style="margin-bottom: 10px">填写你在小程序登记的学号，系统会自动同步姓名、职位和课代表科目。</div>
+      <label for="bind-sid">学号</label>
+      <input id="bind-sid" inputmode="numeric" placeholder="小程序登记的学号">
+      <div class="row" style="margin-top: 12px"><button id="bind-btn" class="primary">同步身份</button></div>
+      <div id="bind-msg" class="msg"></div>
     </div>
 
     <div id="forms" class="hidden">
@@ -1370,10 +1373,7 @@ UPLOAD_HTML = """<!doctype html>
   let csrf = '';
   let user = '';
   let identity = null;
-  let currentStudentId = '';
   let subjects = [];
-  let committee = [];
-  let appReady = false;
 
   function api(path, options) {
     options = options || {};
@@ -1389,7 +1389,7 @@ UPLOAD_HTML = """<!doctype html>
   }
 
   function showLogin(message) {
-    csrf = ''; user = ''; identity = null; currentStudentId = '';
+    csrf = ''; user = ''; identity = null;
     $('dashboard').classList.add('hidden');
     $('login').classList.remove('hidden');
     $('login-msg').textContent = message || '';
@@ -1406,9 +1406,11 @@ UPLOAD_HTML = """<!doctype html>
     csrf = data.csrf || '';
     user = data.user || '';
     identity = data.identity || null;
-    appReady = !!data.appReady;
     if (identity && Array.isArray(identity.subjects) && identity.subjects.length) {
       subjects = identity.subjects;
+    }
+    if (identity && identity.name && (!user || user.indexOf('mp:') === 0)) {
+      user = identity.name;
     }
     $('who').textContent = user;
   }
@@ -1439,12 +1441,14 @@ UPLOAD_HTML = """<!doctype html>
       no.classList.remove('hidden');
       tag.classList.add('hidden');
       $('forms').classList.add('hidden');
+      $('identity-form').classList.remove('hidden');
       if (appError) setMsg('app-msg', appError, true);
       return;
     }
     no.classList.add('hidden');
     box.classList.remove('hidden');
     $('forms').classList.remove('hidden');
+    $('identity-form').classList.add('hidden');
     $('id-name').textContent = identity.name || '—';
     $('id-sid').textContent = identity.studentId || '—';
     $('id-class').textContent = identity.className || '—';
@@ -1470,73 +1474,6 @@ UPLOAD_HTML = """<!doctype html>
     });
   }
 
-  function renderCommittee() {
-    const box = $('committee-list');
-    box.textContent = '';
-    if (!Array.isArray(committee) || committee.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'msg';
-      empty.textContent = '没有可显示的班委/课代表名单';
-      box.appendChild(empty);
-      return;
-    }
-    committee.forEach((row) => {
-      const card = document.createElement('div');
-      card.className = 'person';
-      const main = document.createElement('div');
-      main.className = 'person-main';
-      const name = document.createElement('div');
-      name.className = 'person-name';
-      name.textContent = (row.name || '未命名') + ' · ' + (row.studentId || '');
-      if (row.studentId && row.studentId === currentStudentId) {
-        const tag = document.createElement('span');
-        tag.className = 'tag current';
-        tag.textContent = '当前绑定';
-        name.appendChild(tag);
-      }
-      const meta = document.createElement('div');
-      meta.className = 'person-meta';
-      const roles = [];
-      if (row.position) roles.push(row.position);
-      if (Array.isArray(row.repSubjects) && row.repSubjects.length) {
-        roles.push('课代表：' + row.repSubjects.map(subjectName).join('、'));
-      }
-      roles.push(row.registered ? '小程序已注册' : '小程序未注册');
-      const accounts = Array.isArray(row.webAccounts) && row.webAccounts.length ? row.webAccounts.join('、') : '未绑定网页账号';
-      meta.textContent = roles.join(' · ') + ' · 网页登录：' + accounts;
-      main.appendChild(name);
-      main.appendChild(meta);
-      card.appendChild(main);
-      if (row.registered) {
-        const button = document.createElement('button');
-        button.className = 'small ' + (row.studentId === currentStudentId ? 'secondary' : 'primary');
-        button.textContent = row.studentId === currentStudentId ? '已绑定' : '绑定此学号';
-        button.disabled = row.studentId === currentStudentId;
-        button.addEventListener('click', () => bindStudent(row.studentId));
-        card.appendChild(button);
-      }
-      box.appendChild(card);
-    });
-  }
-
-  async function loadCommittee(appError) {
-    try {
-      const resp = await api('/me/api/app/committee');
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || !data.ok) {
-        setMsg('app-msg', data.message || ('读取名单失败（HTTP ' + resp.status + '）'), true);
-        return;
-      }
-      committee = Array.isArray(data.list) ? data.list : [];
-      if (Array.isArray(data.subjects) && data.subjects.length) subjects = data.subjects;
-      currentStudentId = data.currentStudentId || '';
-      renderCommittee();
-      renderIdentity(appError);
-    } catch (err) {
-      setMsg('app-msg', '读取名单失败，请检查网络', true);
-    }
-  }
-
   async function checkSession() {
     try {
       const resp = await fetch('/me/api/session', { credentials: 'same-origin', cache: 'no-store' });
@@ -1545,7 +1482,6 @@ UPLOAD_HTML = """<!doctype html>
       applySession(data);
       showDashboard();
       renderIdentity('');
-      await loadCommittee('');
     } catch (err) {
       showLogin('网络错误，请重试');
     }
@@ -1569,7 +1505,6 @@ UPLOAD_HTML = """<!doctype html>
       applySession(data);
       showDashboard();
       renderIdentity(data.appError || '');
-      await loadCommittee(data.appError || '');
     } catch (err) {
       $('login-msg').textContent = '网络错误，请重试';
     } finally {
@@ -1588,24 +1523,32 @@ UPLOAD_HTML = """<!doctype html>
     showLogin('');
   }
 
-  async function bindStudent(studentId) {
-    if (!studentId) return;
-    setMsg('app-msg', '正在同步小程序身份…');
+  async function bindIdentity() {
+    const studentId = $('bind-sid').value.trim();
+    const msg = $('bind-msg');
+    if (!studentId) { msg.textContent = '请填写学号'; return; }
+    msg.style.color = '';
+    msg.textContent = '正在同步…';
     try {
       const resp = await api('/me/api/account/bind', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ studentId: studentId })
       });
+      if (resp.status === 401) { showLogin('登录已过期，请重新登录'); return; }
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || !data.ok) { setMsg('app-msg', data.message || '绑定失败', true); return; }
+      if (!resp.ok || !data.ok) {
+        msg.style.color = '#b4453a';
+        msg.textContent = data.message || '同步失败';
+        return;
+      }
       identity = data.identity || null;
-      currentStudentId = data.studentId || studentId;
-      setMsg('app-msg', '');
+      msg.textContent = '';
+      $('bind-sid').value = '';
       renderIdentity('');
-      await loadCommittee('');
     } catch (err) {
-      setMsg('app-msg', '网络错误，请重试', true);
+      msg.style.color = '#b4453a';
+      msg.textContent = '网络错误，请重试';
     }
   }
 
@@ -1726,14 +1669,46 @@ UPLOAD_HTML = """<!doctype html>
     }
   }
 
+  async function ticketLogin(ticket) {
+    try {
+      const resp = await fetch('/me/api/ticket-login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket: ticket })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) {
+        showLogin(data.message || '小程序登录已失效，请返回小程序重新进入');
+        return;
+      }
+      applySession(data);
+      showDashboard();
+      renderIdentity('');
+    } catch (err) {
+      showLogin('网络错误，请重试');
+    }
+  }
+
   $('login-btn').addEventListener('click', login);
   $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
   $('logout').addEventListener('click', logout);
+  $('bind-btn').addEventListener('click', bindIdentity);
+  $('bind-sid').addEventListener('keydown', (e) => { if (e.key === 'Enter') bindIdentity(); });
   $('hw-submit').addEventListener('click', submitHomework);
   $('act-submit').addEventListener('click', submitActivity);
   $('sub-submit').addEventListener('click', submitSubject);
 
-  checkSession();
+  let ticket = '';
+  try {
+    const hash = location.hash || '';
+    const match = hash.match(/(?:^#|&)ticket=([^&]+)/);
+    if (match) {
+      ticket = decodeURIComponent(match[1]);
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  } catch (err) { /* ignore */ }
+  if (ticket) ticketLogin(ticket); else checkSession();
 })();
 </script>
 </body>
@@ -2220,6 +2195,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/login":
             self._handle_login()
             return
+        if path == "/api/ticket-login":
+            self._handle_ticket_login()
+            return
         if path == "/api/logout":
             self._handle_logout()
             return
@@ -2298,6 +2276,45 @@ class Handler(BaseHTTPRequestHandler):
                     "bound": bool(student_id),
                     "appReady": bool(APP_SECRET),
                     "appError": app_error,
+                },
+                ensure_ascii=False,
+            ),
+            extra_headers=[self._session_cookie(token), self._legacy_expired_cookie()],
+        )
+
+    def _handle_ticket_login(self):
+        data = self._read_json()
+        if data is None:
+            return
+        ticket = str(data.get("ticket") or "").strip()
+        if not ticket:
+            self._send(400, json.dumps({"ok": False, "message": "缺少小程序登录凭证"}, ensure_ascii=False))
+            return
+        status, app_data = app_json("/api/web/me", token=ticket, method="GET")
+        if status != 200 or not app_data.get("ok"):
+            self._send(
+                401,
+                json.dumps(
+                    {"ok": False, "message": app_data.get("msg") or "小程序登录已失效，请返回小程序重新进入"},
+                    ensure_ascii=False,
+                ),
+            )
+            return
+        identity = identity_from_app(app_data)
+        session_user = "mp:" + (identity.get("studentId") or "user")
+        token, csrf = create_session(session_user, ticket, identity)
+        self._send(
+            200,
+            json.dumps(
+                {
+                    "ok": True,
+                    "user": identity.get("name") or "小程序用户",
+                    "csrf": csrf,
+                    "identity": identity,
+                    "perms": ["upload", "download"],
+                    "bound": True,
+                    "appReady": bool(APP_SECRET),
+                    "ticket": True,
                 },
                 ensure_ascii=False,
             ),

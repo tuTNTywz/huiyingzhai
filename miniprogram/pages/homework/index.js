@@ -80,10 +80,6 @@ Page({
     wx.stopPullDownRefresh();
   },
 
-  goCreate() {
-    wx.navigateTo({ url: "/pages/homework/create" });
-  },
-
   goDetail(e) {
     wx.navigateTo({
       url: `/pages/homework/detail?id=${e.currentTarget.dataset.id}`,

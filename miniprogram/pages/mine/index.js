@@ -13,6 +13,7 @@ Page({
     isAdmin: false,
     initial: "同",
     registered: false,
+    hasRep: false,
     subjectDisplayName: "—",
     showModal: false,
     form: emptyForm(),
@@ -51,8 +52,15 @@ Page({
       const names = keys
         .map((k) => subjectName(k))
         .filter(Boolean);
-      this.setData({ subjectDisplayName: names.join("、") || "—" });
+      this.setData({
+        hasRep: keys.length > 0,
+        subjectDisplayName: names.join("、") || "—",
+      });
     });
+  },
+
+  goUpload() {
+    wx.navigateTo({ url: "/pages/upload/index" });
   },
 
   // 打开注册窗口，已登记时预填个人信息（职务按名单自动匹配）
