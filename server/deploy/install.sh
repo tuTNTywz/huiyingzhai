@@ -91,10 +91,20 @@ fi
 chown root:root "${DEPLOY_CONF}"
 chmod 600 "${DEPLOY_CONF}"
 
+APP_SECRET="$(sed -n 's/^WEB_PANEL_SECRET=//p' "${TARGET}/.env" 2>/dev/null | tail -n1)"
+if [[ -z "${APP_SECRET}" ]]; then
+  APP_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+  printf '\n# 网页数据上传页共享密钥\nWEB_PANEL_SECRET=%s\n' "${APP_SECRET}" >>"${TARGET}/.env"
+  chown "${APP_USER}:${APP_USER}" "${TARGET}/.env"
+  chmod 600 "${TARGET}/.env"
+fi
+
 cat > "${PANEL_CONF}" <<EOF
 # 由 install.sh 生成；账号保存在 ${PANEL_HOME}/accounts.json
 PANEL_PORT=3999
 PANEL_ALLOWED_USERS=tutnt,zhl
+PANEL_APP_URL=http://127.0.0.1:3000
+PANEL_APP_SECRET=${APP_SECRET}
 PANEL_QUEUE_DIR=${PANEL_HOME}
 PANEL_ACCOUNTS_FILE=${PANEL_HOME}/accounts.json
 PANEL_STATUS_FILE=${DEPLOY_STATE_DIR}/status.json
@@ -138,6 +148,8 @@ systemctl enable huiyingzhai-deploy.path
 systemctl restart huiyingzhai-deploy.path
 systemctl enable huiyingzhai-panel.service
 systemctl restart huiyingzhai-panel.service
+# 让小程序后端加载共享密钥 / 新代码
+systemctl restart huiyingzhai
 
 if ! systemctl is-active --quiet huiyingzhai-panel.service; then
   echo "警告：部署面板启动失败，执行 journalctl -u huiyingzhai-panel 查看原因"

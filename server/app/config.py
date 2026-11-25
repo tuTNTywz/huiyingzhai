@@ -65,5 +65,8 @@ class Config:
         # 微信接口地址（测试时可替换为 mock）
         self.wx_api_base = _str("WX_API_BASE", "https://api.weixin.qq.com").rstrip("/")
 
+        # 网页数据上传页与小程序之间的内部共享密钥（install.sh 生成）
+        self.web_panel_secret = _str("WEB_PANEL_SECRET")
+
 
 config = Config()

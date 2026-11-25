@@ -22,6 +22,7 @@ with warnings.catch_warnings():
 
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import secrets
@@ -48,6 +49,9 @@ LOG_FILE = Path(os.environ.get("PANEL_LOG_FILE") or "/var/log/huiyingzhai-deploy
 REQUEST_FILE = QUEUE_DIR / "deploy.request"
 PAGES_DIR = QUEUE_DIR / "pages"
 MAX_PAGE_BYTES = 2 * 1024 * 1024
+
+APP_URL = (os.environ.get("PANEL_APP_URL") or "http://127.0.0.1:3000").rstrip("/")
+APP_SECRET = (os.environ.get("PANEL_APP_SECRET") or "").strip()
 
 SESSION_COOKIE = "hyz_session"
 SESSION_TTL = 12 * 3600
@@ -313,10 +317,101 @@ def inject_page_toolbar(content: bytes, slug: str) -> bytes:
     return text.encode("utf-8")
 
 
+# ---------- 小程序后端 ----------
+
+
+def _app_conn(timeout: int = 20):
+    parsed = urlparse(APP_URL)
+    return http.client.HTTPConnection(
+        parsed.hostname or "127.0.0.1", parsed.port or 3000, timeout=timeout
+    )
+
+
+def app_json(path: str, payload=None, token: str = "", method: str = ""):
+    conn = _app_conn()
+    headers = {"Content-Type": "application/json"}
+    if APP_SECRET:
+        headers["X-Panel-Secret"] = APP_SECRET
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    body = (
+        json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        if payload is not None
+        else None
+    )
+    try:
+        conn.request(method or ("POST" if body is not None else "GET"), path, body=body, headers=headers)
+        resp = conn.getresponse()
+        raw = resp.read()
+        status = resp.status
+    except OSError as exc:
+        return 502, {"ok": False, "msg": "无法连接小程序后端：%s" % exc}
+    finally:
+        conn.close()
+    try:
+        data = json.loads(raw.decode("utf-8")) if raw else {}
+    except (ValueError, UnicodeDecodeError):
+        data = {"ok": False, "msg": "后端返回格式异常"}
+    return status, data
+
+
+def app_upload(raw: bytes, content_type: str, token: str):
+    conn = _app_conn(timeout=120)
+    headers = {
+        "Content-Type": content_type,
+        "Content-Length": str(len(raw)),
+        "Authorization": "Bearer " + token,
+    }
+    try:
+        conn.request("POST", "/api/upload", body=raw, headers=headers)
+        resp = conn.getresponse()
+        body = resp.read()
+        status = resp.status
+    except OSError as exc:
+        return 502, {"ok": False, "msg": "无法连接小程序后端：%s" % exc}
+    finally:
+        conn.close()
+    try:
+        data = json.loads(body.decode("utf-8")) if body else {}
+    except (ValueError, UnicodeDecodeError):
+        data = {"ok": False, "msg": "后端返回格式异常"}
+    return status, data
+
+
+def identity_from_app(data: dict) -> dict:
+    user = data.get("user") or {}
+    roster = data.get("roster") or {}
+    rep = data.get("repSubjects") or roster.get("repSubjects") or []
+    return {
+        "studentId": str(user.get("studentId") or roster.get("studentId") or ""),
+        "name": user.get("name") or roster.get("name") or "",
+        "className": user.get("className") or roster.get("className") or "",
+        "position": user.get("position") or roster.get("position") or "",
+        "role": user.get("role") or "",
+        "repSubjects": rep if isinstance(rep, list) else [],
+        "subjects": data.get("subjects") or [],
+        "registered": bool(user.get("registered")),
+    }
+
+
+def fetch_app_identity(student_id: str):
+    status, data = app_json("/api/web/token", {"studentId": student_id})
+    if status == 200 and data.get("ok"):
+        return data, ""
+    return None, data.get("msg") or "无法同步小程序身份（检查共享密钥）"
+
+
+def fetch_app_committee():
+    status, data = app_json("/api/web/committee", method="GET")
+    if status == 200 and data.get("ok"):
+        return data.get("list") or [], data.get("subjects") or [], ""
+    return [], [], data.get("msg") or "无法读取班委/课代表名单"
+
+
 # ---------- 会话 ----------
 
 
-def create_session(username: str) -> tuple[str, str]:
+def create_session(username: str, app_token: str = "", identity=None) -> tuple[str, str]:
     token = secrets.token_urlsafe(32)
     csrf = secrets.token_urlsafe(32)
     now = time.time()
@@ -324,10 +419,32 @@ def create_session(username: str) -> tuple[str, str]:
         _sessions[token] = {
             "user": username,
             "csrf": csrf,
+            "app_token": app_token,
+            "identity": identity,
             "expires": now + SESSION_TTL,
             "created": now,
         }
     return token, csrf
+
+
+def refresh_app_token(record: dict) -> str:
+    account = load_accounts().get(record.get("user") or "") or {}
+    student_id = str(account.get("studentId") or "").strip()
+    if not student_id:
+        return ""
+    data, _err = fetch_app_identity(student_id)
+    if not data:
+        return ""
+    record["app_token"] = str(data.get("token") or "")
+    record["identity"] = identity_from_app(data)
+    return record["app_token"]
+
+
+def ensure_app_token(record: dict) -> str:
+    token = str(record.get("app_token") or "")
+    if token:
+        return token
+    return refresh_app_token(record)
 
 
 def get_session(token: str):
@@ -463,10 +580,7 @@ HOME_HTML = """<!doctype html>
 <main>
   <h1>tuTNT's home</h1>
   <div class="actions">
-    <a class="btn primary" href="/deploy/">Deploy</a>
-    <a class="btn" href="/intro/">慧英斋项目介绍</a>
-    <a class="btn" href="/manual/">慧英斋使用说明书</a>
-    <a class="btn" href="/me/">我的</a>
+    <a class="btn primary" href="/upload/">汇英斋数据上传</a>
   </div>
 </main>
 </body>
@@ -767,7 +881,7 @@ INTRO_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>慧英斋项目介绍</title>
+<title>汇英斋项目介绍</title>
 <link rel="icon" href="data:,">
 <style>
   :root { color-scheme: light dark; }
@@ -807,7 +921,7 @@ INTRO_HTML = """<!doctype html>
 <body>
 <main>
   <div class="seal">斋</div>
-  <h1>慧英斋项目介绍</h1>
+  <h1>汇英斋项目介绍</h1>
   <a class="back" href="/">← 返回主页</a>
 </main>
 </body>
@@ -818,7 +932,7 @@ MANUAL_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>慧英斋使用说明书</title>
+<title>汇英斋使用说明书</title>
 <link rel="icon" href="data:,">
 <style>
   :root { color-scheme: light dark; --brown: #9c6b4a; --ink: #3f3a32; --muted: #8a8478; --paper: #f5f1e8; --card: #fffaf2; --line: #e8ddcc; }
@@ -910,7 +1024,7 @@ MANUAL_HTML = """<!doctype html>
   <div class="orb orb-b"></div>
   <div class="hero-inner">
     <div class="seal">斋</div>
-    <h1>慧英斋 · 使用说明书</h1>
+    <h1>汇英斋 · 使用说明书</h1>
     <p class="hero-sub">作业 · 活动 · 交流 · 班务，一册在手</p>
     <a class="hero-back" href="/">← 返回主页</a>
     <div class="scroll-hint">向下滑动阅读 ↓</div>
@@ -936,7 +1050,7 @@ MANUAL_HTML = """<!doctype html>
   <section id="start" class="section reveal">
     <div class="sec-head"><span class="sec-num">01</span><h2>快速开始</h2></div>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>进入小程序</b><p>在微信中打开「慧英斋」小程序（老师或班委发的入口 / 二维码）。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>进入小程序</b><p>在微信中打开「汇英斋」小程序（老师或班委发的入口 / 二维码）。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>微信登录</b><p>首次进入会自动完成微信登录，无需注册账号密码。</p></div></div>
       <div class="step"><span class="step-num">3</span><div><b>入斋登记</b><p>进入底部「我的」→「立即登记」，填写真实姓名和学号。班级会自动带出，职位按班级名单自动匹配。</p></div></div>
       <div class="step"><span class="step-num">4</span><div><b>开始使用</b><p>登记完成后即可查看作业、活动、交流，并在「通知」里开启作业提醒。</p></div></div>
@@ -1034,7 +1148,7 @@ MANUAL_HTML = """<!doctype html>
     <div class="sec-head"><span class="sec-num">10</span><h2>网页端</h2></div>
     <p>除了小程序，班级还提供网页入口，用于查看项目介绍和使用说明书。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>主页</b><p>打开班级域名，可看到「慧英斋项目介绍」「慧英斋使用说明书」「我的」以及部署入口。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>主页</b><p>打开班级域名，可看到「汇英斋项目介绍」「汇英斋使用说明书」「我的」以及部署入口。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>我的</b><p>使用班级账号登录后可以修改密码；项目介绍和使用说明书的编辑入口在对应页面，仅 tutnt / zhl 登录后可见。</p></div></div>
       <div class="step"><span class="step-num">3</span><div><b>账号</b><p>网页账号由管理员分配；忘记密码可在登录后自行修改，或联系管理员重置。</p></div></div>
     </div>
@@ -1076,7 +1190,7 @@ MANUAL_HTML = """<!doctype html>
   </section>
 </main>
 
-<footer>慧英斋 · 使用说明书 · <a href="/">返回主页</a></footer>
+<footer>汇英斋 · 使用说明书 · <a href="/">返回主页</a></footer>
 
 <script>
 (() => {
@@ -1106,6 +1220,522 @@ MANUAL_HTML = """<!doctype html>
 })();
 </script>
 
+</body>
+</html>
+"""
+
+UPLOAD_HTML = """<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>汇英斋数据上传</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; background: #f5f1e8; color: #2f2a24; }
+  main { max-width: 960px; margin: 0 auto; padding: 26px 16px 64px; }
+  h1 { font-size: 23px; margin: 0 0 4px; font-family: "Songti SC", "Noto Serif CJK SC", serif; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: #8a7a68; font-size: 13px; margin: 0 0 18px; }
+  .card { background: #fffaf2; border: 1px solid #e8ddcc; border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(120,95,65,.05); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .space { justify-content: space-between; }
+  button { font: inherit; border: 0; border-radius: 10px; padding: 9px 16px; cursor: pointer; }
+  button.primary { background: #9c6b4a; color: #fff; }
+  button.secondary { background: #f0e6d8; color: #5f4a37; }
+  button.small { padding: 5px 12px; font-size: 12px; border-radius: 999px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  input, textarea, select { font: inherit; border: 1px solid #dfcfba; border-radius: 10px; padding: 9px 12px; width: 100%; max-width: 380px; background: #fffdf9; color: inherit; }
+  textarea { max-width: 100%; min-height: 76px; resize: vertical; }
+  label { font-size: 13px; color: #8a7a68; display: block; margin: 10px 0 6px; }
+  .msg { margin-top: 10px; font-size: 13px; color: #8a7a68; min-height: 1.4em; }
+  .hidden { display: none !important; }
+  .kv { display: grid; grid-template-columns: 88px 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv div:nth-child(odd) { color: #8a7a68; }
+  .person { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; padding: 11px 13px; border: 1px solid #eadfd0; border-radius: 12px; background: #fffdf9; margin-bottom: 8px; }
+  .person-main { min-width: 220px; }
+  .person-name { font-size: 14px; font-weight: 700; }
+  .person-meta { font-size: 12px; color: #8a7a68; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f2e6d7; color: #7d5a40; margin-left: 5px; }
+  .tag.current { background: #9c6b4a; color: #fff; }
+  .form-card { display: grid; gap: 0; }
+  .form-actions { margin-top: 14px; }
+  .role-note { margin-top: 8px; font-size: 12px; color: #8a7a68; }
+  @media (max-width: 640px) {
+    .person { align-items: flex-start; }
+    input { max-width: 100%; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #14100d; color: #ece4d8; }
+    .card { background: #1d1712; border-color: #33281f; }
+    input, textarea, select, .person { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
+    button.secondary { background: #33261c; color: #d9c8b3; }
+    .sub, label, .msg, .kv div:nth-child(odd), .person-meta, .role-note { color: #a99c8b; }
+    .tag { background: #33261c; color: #dcb894; }
+    .tag.current { background: #9c6b4a; color: #fff; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>汇英斋数据上传</h1>
+  <div class="sub">在这里发布作业、活动和学科任务；身份、权限与小程序完全同步。</div>
+
+  <section id="login" class="card hidden">
+    <h2>登录</h2>
+    <label for="username">用户名</label>
+    <input id="username" autocomplete="username" autocapitalize="off" spellcheck="false">
+    <label for="password">密码</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <div class="row" style="margin-top: 14px"><button id="login-btn" class="primary">登录</button></div>
+    <div id="login-msg" class="msg"></div>
+  </section>
+
+  <section id="dashboard" class="hidden">
+    <div class="card">
+      <div class="row space">
+        <div>网页账号：<b id="who"></b><span id="identity-tag" class="tag hidden"></span></div>
+        <button id="logout" class="secondary">退出</button>
+      </div>
+      <div id="identity" class="kv hidden" style="margin-top: 12px">
+        <div>姓名</div><div id="id-name">—</div>
+        <div>学号</div><div id="id-sid">—</div>
+        <div>班级</div><div id="id-class">—</div>
+        <div>职位</div><div id="id-position">—</div>
+        <div>身份</div><div id="id-role">—</div>
+        <div>负责科目</div><div id="id-reps">—</div>
+      </div>
+      <div id="no-identity" class="msg">还没有绑定学号，请在下方名单中点击「绑定此学号」。</div>
+      <div id="app-msg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>班委 / 课代表 · 身份与网页登录</h2>
+      <div class="sub" style="margin-bottom: 10px">名单来自小程序班级名单；右侧显示已绑定的网页账号。</div>
+      <div id="committee-list"><div class="msg">加载中…</div></div>
+    </div>
+
+    <div id="forms" class="hidden">
+      <div id="homework-card" class="card form-card hidden">
+        <h2>发布作业</h2>
+        <label for="hw-title">作业标题</label>
+        <input id="hw-title" placeholder="如：《论语》第三篇诵读">
+        <label for="hw-desc">作业说明（选填）</label>
+        <textarea id="hw-desc" placeholder="简述作业要求…"></textarea>
+        <label for="hw-deadline">截止时间</label>
+        <input id="hw-deadline" type="datetime-local">
+        <label for="hw-files">附件（最多 5 个，单个 ≤20MB）</label>
+        <input id="hw-files" type="file" multiple>
+        <div class="form-actions"><button id="hw-submit" class="primary">发布作业</button></div>
+        <div id="hw-msg" class="msg"></div>
+      </div>
+
+      <div id="activity-card" class="card form-card hidden">
+        <h2>发布活动</h2>
+        <label for="act-title">活动名称</label>
+        <input id="act-title" placeholder="如：春日雅集 · 诗会">
+        <label for="act-time">活动时间</label>
+        <input id="act-time" type="datetime-local">
+        <label for="act-place">活动地点</label>
+        <input id="act-place" placeholder="如：教学楼 305">
+        <label for="act-content">活动说明（选填）</label>
+        <textarea id="act-content" placeholder="简述活动安排与注意事项…"></textarea>
+        <div class="form-actions"><button id="act-submit" class="primary">发布活动</button></div>
+        <div id="act-msg" class="msg"></div>
+      </div>
+
+      <div id="subject-card" class="card form-card hidden">
+        <h2>发布学科任务</h2>
+        <label for="sub-subject">科目</label>
+        <select id="sub-subject"></select>
+        <label for="sub-title">标题</label>
+        <input id="sub-title" placeholder="如：第三单元作业提交提醒">
+        <label for="sub-content">内容</label>
+        <textarea id="sub-content" placeholder="填写任务要求、提交方式等…"></textarea>
+        <label for="sub-deadline">截止时间（选填）</label>
+        <input id="sub-deadline" type="datetime-local">
+        <label for="sub-files">附件（最多 5 个，单个 ≤20MB）</label>
+        <input id="sub-files" type="file" multiple>
+        <div class="form-actions"><button id="sub-submit" class="primary">发布学科任务</button></div>
+        <div id="sub-msg" class="msg"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let csrf = '';
+  let user = '';
+  let identity = null;
+  let currentStudentId = '';
+  let subjects = [];
+  let committee = [];
+  let appReady = false;
+
+  function api(path, options) {
+    options = options || {};
+    const headers = Object.assign({}, options.headers || {});
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    return fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, options, { headers }));
+  }
+
+  function setMsg(id, text, isError) {
+    const el = $(id);
+    el.textContent = text || '';
+    el.style.color = isError ? '#b4453a' : '';
+  }
+
+  function showLogin(message) {
+    csrf = ''; user = ''; identity = null; currentStudentId = '';
+    $('dashboard').classList.add('hidden');
+    $('login').classList.remove('hidden');
+    $('login-msg').textContent = message || '';
+    $('password').value = '';
+    setTimeout(() => $('username').focus(), 30);
+  }
+
+  function showDashboard() {
+    $('login').classList.add('hidden');
+    $('dashboard').classList.remove('hidden');
+  }
+
+  function applySession(data) {
+    csrf = data.csrf || '';
+    user = data.user || '';
+    identity = data.identity || null;
+    appReady = !!data.appReady;
+    if (identity && Array.isArray(identity.subjects) && identity.subjects.length) {
+      subjects = identity.subjects;
+    }
+    $('who').textContent = user;
+  }
+
+  function subjectName(key) {
+    const hit = subjects.find((item) => item.key === key);
+    return hit ? hit.name : key;
+  }
+
+  function isManager() {
+    return !!identity && (identity.role === 'committee' || identity.role === 'admin');
+  }
+
+  function repSubjects() {
+    return identity && Array.isArray(identity.repSubjects) ? identity.repSubjects : [];
+  }
+
+  function canSubject() {
+    return isManager() || repSubjects().length > 0;
+  }
+
+  function renderIdentity(appError) {
+    const box = $('identity');
+    const no = $('no-identity');
+    const tag = $('identity-tag');
+    if (!identity) {
+      box.classList.add('hidden');
+      no.classList.remove('hidden');
+      tag.classList.add('hidden');
+      $('forms').classList.add('hidden');
+      if (appError) setMsg('app-msg', appError, true);
+      return;
+    }
+    no.classList.add('hidden');
+    box.classList.remove('hidden');
+    $('forms').classList.remove('hidden');
+    $('id-name').textContent = identity.name || '—';
+    $('id-sid').textContent = identity.studentId || '—';
+    $('id-class').textContent = identity.className || '—';
+    $('id-position').textContent = identity.position || '—';
+    const roleText = identity.role === 'admin' ? '管理员' : identity.role === 'committee' ? '班委' : identity.role === 'student' ? '普通同学' : '—';
+    $('id-role').textContent = roleText;
+    $('id-reps').textContent = repSubjects().length ? repSubjects().map(subjectName).join('、') : '—';
+    tag.classList.remove('hidden');
+    tag.textContent = roleText;
+    if (appError) setMsg('app-msg', appError, true);
+    else setMsg('app-msg', '');
+    $('homework-card').classList.toggle('hidden', !isManager());
+    $('activity-card').classList.toggle('hidden', !isManager());
+    $('subject-card').classList.toggle('hidden', !canSubject());
+    const select = $('sub-subject');
+    select.textContent = '';
+    const allowed = isManager() ? subjects : subjects.filter((item) => repSubjects().indexOf(item.key) >= 0);
+    allowed.forEach((item) => {
+      const option = document.createElement('option');
+      option.value = item.key;
+      option.textContent = item.name;
+      select.appendChild(option);
+    });
+  }
+
+  function renderCommittee() {
+    const box = $('committee-list');
+    box.textContent = '';
+    if (!Array.isArray(committee) || committee.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'msg';
+      empty.textContent = '没有可显示的班委/课代表名单';
+      box.appendChild(empty);
+      return;
+    }
+    committee.forEach((row) => {
+      const card = document.createElement('div');
+      card.className = 'person';
+      const main = document.createElement('div');
+      main.className = 'person-main';
+      const name = document.createElement('div');
+      name.className = 'person-name';
+      name.textContent = (row.name || '未命名') + ' · ' + (row.studentId || '');
+      if (row.studentId && row.studentId === currentStudentId) {
+        const tag = document.createElement('span');
+        tag.className = 'tag current';
+        tag.textContent = '当前绑定';
+        name.appendChild(tag);
+      }
+      const meta = document.createElement('div');
+      meta.className = 'person-meta';
+      const roles = [];
+      if (row.position) roles.push(row.position);
+      if (Array.isArray(row.repSubjects) && row.repSubjects.length) {
+        roles.push('课代表：' + row.repSubjects.map(subjectName).join('、'));
+      }
+      roles.push(row.registered ? '小程序已注册' : '小程序未注册');
+      const accounts = Array.isArray(row.webAccounts) && row.webAccounts.length ? row.webAccounts.join('、') : '未绑定网页账号';
+      meta.textContent = roles.join(' · ') + ' · 网页登录：' + accounts;
+      main.appendChild(name);
+      main.appendChild(meta);
+      card.appendChild(main);
+      if (row.registered) {
+        const button = document.createElement('button');
+        button.className = 'small ' + (row.studentId === currentStudentId ? 'secondary' : 'primary');
+        button.textContent = row.studentId === currentStudentId ? '已绑定' : '绑定此学号';
+        button.disabled = row.studentId === currentStudentId;
+        button.addEventListener('click', () => bindStudent(row.studentId));
+        card.appendChild(button);
+      }
+      box.appendChild(card);
+    });
+  }
+
+  async function loadCommittee(appError) {
+    try {
+      const resp = await api('/me/api/app/committee');
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) {
+        setMsg('app-msg', data.message || ('读取名单失败（HTTP ' + resp.status + '）'), true);
+        return;
+      }
+      committee = Array.isArray(data.list) ? data.list : [];
+      if (Array.isArray(data.subjects) && data.subjects.length) subjects = data.subjects;
+      currentStudentId = data.currentStudentId || '';
+      renderCommittee();
+      renderIdentity(appError);
+    } catch (err) {
+      setMsg('app-msg', '读取名单失败，请检查网络', true);
+    }
+  }
+
+  async function checkSession() {
+    try {
+      const resp = await fetch('/me/api/session', { credentials: 'same-origin', cache: 'no-store' });
+      if (!resp.ok) { showLogin(''); return; }
+      const data = await resp.json();
+      applySession(data);
+      showDashboard();
+      renderIdentity('');
+      await loadCommittee('');
+    } catch (err) {
+      showLogin('网络错误，请重试');
+    }
+  }
+
+  async function login() {
+    const username = $('username').value.trim();
+    const password = $('password').value;
+    if (!username || !password) { $('login-msg').textContent = '请输入用户名和密码'; return; }
+    $('login-btn').disabled = true;
+    $('login-msg').textContent = '登录中…';
+    try {
+      const resp = await fetch('/me/api/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username, password: password })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) { $('login-msg').textContent = data.message || ('登录失败（HTTP ' + resp.status + '）'); return; }
+      applySession(data);
+      showDashboard();
+      renderIdentity(data.appError || '');
+      await loadCommittee(data.appError || '');
+    } catch (err) {
+      $('login-msg').textContent = '网络错误，请重试';
+    } finally {
+      $('login-btn').disabled = false;
+    }
+  }
+
+  async function logout() {
+    try {
+      await api('/me/api/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      });
+    } catch (err) { /* ignore */ }
+    showLogin('');
+  }
+
+  async function bindStudent(studentId) {
+    if (!studentId) return;
+    setMsg('app-msg', '正在同步小程序身份…');
+    try {
+      const resp = await api('/me/api/account/bind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: studentId })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) { setMsg('app-msg', data.message || '绑定失败', true); return; }
+      identity = data.identity || null;
+      currentStudentId = data.studentId || studentId;
+      setMsg('app-msg', '');
+      renderIdentity('');
+      await loadCommittee('');
+    } catch (err) {
+      setMsg('app-msg', '网络错误，请重试', true);
+    }
+  }
+
+  function toMs(value) {
+    if (!value) return 0;
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  async function uploadFiles(input, dir) {
+    const files = Array.from(input.files || []);
+    if (files.length > 5) throw new Error('最多 5 个附件');
+    const uploaded = [];
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) throw new Error('单个附件不能超过 20MB');
+      const form = new FormData();
+      form.append('file', file);
+      form.append('dir', dir);
+      const resp = await api('/me/api/app/upload', { method: 'POST', body: form });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) throw new Error(data.msg || data.message || '附件上传失败');
+      uploaded.push({ fileID: data.fileID, name: data.name, size: data.size, type: data.type });
+    }
+    return uploaded;
+  }
+
+  async function publishAction(action, data, msgId) {
+    const resp = await api('/me/api/app/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: action, data: data })
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok || !result.ok) throw new Error(result.msg || result.message || '发布失败');
+    return result;
+  }
+
+  async function submitHomework() {
+    const title = $('hw-title').value.trim();
+    const deadline = toMs($('hw-deadline').value);
+    if (!title || !deadline) { setMsg('hw-msg', '请填写标题和截止时间', true); return; }
+    const button = $('hw-submit');
+    button.disabled = true;
+    try {
+      setMsg('hw-msg', '正在上传附件…');
+      const attachments = await uploadFiles($('hw-files'), 'homework');
+      setMsg('hw-msg', '正在发布…');
+      await publishAction('publishHomework', {
+        title: title,
+        desc: $('hw-desc').value.trim(),
+        deadline: deadline,
+        attachments: attachments
+      }, 'hw-msg');
+      setMsg('hw-msg', '作业已发布');
+      $('hw-title').value = '';
+      $('hw-desc').value = '';
+      $('hw-deadline').value = '';
+      $('hw-files').value = '';
+    } catch (err) {
+      setMsg('hw-msg', err.message || '发布失败', true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function submitActivity() {
+    const title = $('act-title').value.trim();
+    const activityTime = toMs($('act-time').value);
+    if (!title || !activityTime) { setMsg('act-msg', '请填写活动名称和时间', true); return; }
+    const button = $('act-submit');
+    button.disabled = true;
+    try {
+      setMsg('act-msg', '正在发布…');
+      await publishAction('publishActivity', {
+        title: title,
+        activityTime: activityTime,
+        place: $('act-place').value.trim() || '待定',
+        content: $('act-content').value.trim()
+      }, 'act-msg');
+      setMsg('act-msg', '活动已发布');
+      $('act-title').value = '';
+      $('act-time').value = '';
+      $('act-place').value = '';
+      $('act-content').value = '';
+    } catch (err) {
+      setMsg('act-msg', err.message || '发布失败', true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function submitSubject() {
+    const subject = $('sub-subject').value;
+    const title = $('sub-title').value.trim();
+    if (!subject || !title) { setMsg('sub-msg', '请填写科目和标题', true); return; }
+    const button = $('sub-submit');
+    button.disabled = true;
+    try {
+      setMsg('sub-msg', '正在上传附件…');
+      const attachments = await uploadFiles($('sub-files'), 'subject');
+      setMsg('sub-msg', '正在发布…');
+      await publishAction('publishSubjectTask', {
+        subject: subject,
+        title: title,
+        content: $('sub-content').value.trim(),
+        deadline: toMs($('sub-deadline').value),
+        attachments: attachments
+      }, 'sub-msg');
+      setMsg('sub-msg', '学科任务已发布');
+      $('sub-title').value = '';
+      $('sub-content').value = '';
+      $('sub-deadline').value = '';
+      $('sub-files').value = '';
+    } catch (err) {
+      setMsg('sub-msg', err.message || '发布失败', true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  $('login-btn').addEventListener('click', login);
+  $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+  $('logout').addEventListener('click', logout);
+  $('hw-submit').addEventListener('click', submitHomework);
+  $('act-submit').addEventListener('click', submitActivity);
+  $('sub-submit').addEventListener('click', submitSubject);
+
+  checkSession();
+})();
+</script>
 </body>
 </html>
 """
@@ -1507,7 +2137,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         raw_path = urlparse(self.path).path
-        for prefix in ("/deploy", "/me", "/intro", "/manual"):
+        for prefix in ("/deploy", "/me", "/intro", "/manual", "/upload"):
             if raw_path == prefix:
                 self._send(301, "", extra_headers=[("Location", prefix + "/")])
                 return
@@ -1534,6 +2164,9 @@ class Handler(BaseHTTPRequestHandler):
         if area == "/me" and path in ("/", "/index.html"):
             self._send(200, MY_HTML, "text/html; charset=utf-8")
             return
+        if area == "" and path in ("/upload", "/upload/", "/upload/index.html"):
+            self._send(200, UPLOAD_HTML, "text/html; charset=utf-8")
+            return
         if path == "/healthz":
             self._send(200, json.dumps({"ok": True}))
             return
@@ -1542,6 +2175,8 @@ class Handler(BaseHTTPRequestHandler):
             if not record:
                 self._send(401, json.dumps({"ok": False, "message": "未登录"}, ensure_ascii=False))
                 return
+            account = load_accounts().get(record["user"]) or {}
+            student_id = str(account.get("studentId") or "").strip()
             self._send(
                 200,
                 json.dumps(
@@ -1550,6 +2185,10 @@ class Handler(BaseHTTPRequestHandler):
                         "user": record["user"],
                         "csrf": record["csrf"],
                         "perms": user_perms(record["user"]),
+                        "identity": record.get("identity"),
+                        "studentId": student_id,
+                        "bound": bool(student_id),
+                        "appReady": bool(APP_SECRET),
                     },
                     ensure_ascii=False,
                 ),
@@ -1569,6 +2208,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/pages/download":
             self._handle_page_download()
             return
+        if path == "/api/app/committee":
+            self._handle_app_committee()
+            return
         self._send(404, json.dumps({"ok": False, "message": "接口不存在"}, ensure_ascii=False))
 
     def do_POST(self):
@@ -1583,6 +2225,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/account/password":
             self._handle_password()
+            return
+        if path == "/api/account/bind":
+            self._handle_bind()
+            return
+        if path == "/api/app/upload":
+            self._handle_app_upload()
+            return
+        if path == "/api/app/action":
+            self._handle_app_action()
             return
         if path == "/api/deploy":
             self._handle_deploy()
@@ -1620,7 +2271,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send(401, json.dumps({"ok": False, "message": "用户名或密码不正确"}, ensure_ascii=False))
             return
         _login_succeeded(ip)
-        token, csrf = create_session(username)
+        account = load_accounts().get(username) or {}
+        student_id = str(account.get("studentId") or "").strip()
+        app_token = ""
+        identity = None
+        app_error = ""
+        if student_id:
+            if not APP_SECRET:
+                app_error = "网页上传未启用（缺少共享密钥）"
+            else:
+                app_data, app_error = fetch_app_identity(student_id)
+                if app_data:
+                    app_token = str(app_data.get("token") or "")
+                    identity = identity_from_app(app_data)
+        token, csrf = create_session(username, app_token, identity)
         self._send(
             200,
             json.dumps(
@@ -1629,6 +2293,11 @@ class Handler(BaseHTTPRequestHandler):
                     "user": username,
                     "csrf": csrf,
                     "perms": user_perms(username),
+                    "identity": identity,
+                    "studentId": student_id,
+                    "bound": bool(student_id),
+                    "appReady": bool(APP_SECRET),
+                    "appError": app_error,
                 },
                 ensure_ascii=False,
             ),
@@ -1676,7 +2345,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"ok": False, "message": "当前密码不正确"}, ensure_ascii=False))
                 return
             updated = make_record(new_password)
-            updated["perms"] = saved.get("perms") or list(DEFAULT_PERMS)
+            if "perms" in saved:
+                updated["perms"] = saved["perms"]
+            if "studentId" in saved:
+                updated["studentId"] = saved["studentId"]
             users[record["user"]] = updated
             try:
                 save_accounts(users)
@@ -1689,6 +2361,148 @@ class Handler(BaseHTTPRequestHandler):
         # 让该账号的其他登录会话失效，保留当前会话
         drop_user_sessions(record["user"], keep=token)
         self._send(200, json.dumps({"ok": True, "message": "密码已更新"}, ensure_ascii=False))
+
+    def _app_token_for(self, record: dict) -> str:
+        token = str(record.get("app_token") or "")
+        if token:
+            return token
+        return refresh_app_token(record)
+
+    def _handle_bind(self):
+        _token, record = self._require_session()
+        if not record:
+            return
+        if not self._require_csrf(record):
+            return
+        data = self._read_json()
+        if data is None:
+            return
+        student_id = str(data.get("studentId") or "").strip()
+        if not student_id or len(student_id) > 30:
+            self._send(400, json.dumps({"ok": False, "message": "请填写学号"}, ensure_ascii=False))
+            return
+        if not APP_SECRET:
+            self._send(503, json.dumps({"ok": False, "message": "网页上传未启用（缺少共享密钥）"}, ensure_ascii=False))
+            return
+        app_data, error = fetch_app_identity(student_id)
+        if not app_data:
+            self._send(400, json.dumps({"ok": False, "message": error}, ensure_ascii=False))
+            return
+        with _accounts_lock:
+            users = load_accounts()
+            account = users.get(record["user"])
+            if not account:
+                self._send(400, json.dumps({"ok": False, "message": "账号不存在"}, ensure_ascii=False))
+                return
+            account["studentId"] = student_id
+            try:
+                save_accounts(users)
+            except OSError as exc:
+                self._send(500, json.dumps({"ok": False, "message": "保存绑定失败：%s" % exc}, ensure_ascii=False))
+                return
+        identity = identity_from_app(app_data)
+        record["app_token"] = str(app_data.get("token") or "")
+        record["identity"] = identity
+        self._send(
+            200,
+            json.dumps(
+                {"ok": True, "identity": identity, "studentId": student_id, "appReady": True},
+                ensure_ascii=False,
+            ),
+        )
+
+    def _handle_app_committee(self):
+        _token, record = self._require_session()
+        if not record:
+            return
+        rows, subjects, error = fetch_app_committee()
+        if error:
+            self._send(502, json.dumps({"ok": False, "message": error}, ensure_ascii=False))
+            return
+        bindings: dict[str, list[str]] = {}
+        for name, account in load_accounts().items():
+            student_id = str(account.get("studentId") or "").strip()
+            if student_id:
+                bindings.setdefault(student_id, []).append(name)
+        for row in rows:
+            student_id = str(row.get("studentId") or "")
+            row["webAccounts"] = sorted(bindings.get(student_id, []))
+        current = (record.get("identity") or {}).get("studentId") or ""
+        self._send(
+            200,
+            json.dumps(
+                {
+                    "ok": True,
+                    "list": rows,
+                    "subjects": subjects,
+                    "bindings": bindings,
+                    "currentStudentId": current,
+                },
+                ensure_ascii=False,
+            ),
+        )
+
+    def _handle_app_upload(self):
+        _token, record = self._require_session()
+        if not record:
+            return
+        if not self._require_csrf(record):
+            return
+        app_token = self._app_token_for(record)
+        if not app_token:
+            self._send(400, json.dumps({"ok": False, "message": "请先绑定学号并同步小程序身份"}, ensure_ascii=False))
+            return
+        content_type = self.headers.get("Content-Type") or ""
+        if not content_type.lower().startswith("multipart/form-data"):
+            self._send(415, json.dumps({"ok": False, "message": "请使用表单上传附件"}, ensure_ascii=False))
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            length = 0
+        if length <= 0:
+            self._send(400, json.dumps({"ok": False, "message": "没有选择文件"}, ensure_ascii=False))
+            return
+        if length > 25 * 1024 * 1024:
+            self.close_connection = True
+            self._send(413, json.dumps({"ok": False, "message": "附件超过 20MB 限制"}, ensure_ascii=False))
+            return
+        raw = self.rfile.read(length)
+        status, data = app_upload(raw, content_type, app_token)
+        if status == 401:
+            new_token = refresh_app_token(record)
+            if new_token:
+                status, data = app_upload(raw, content_type, new_token)
+        self._send(status, json.dumps(data, ensure_ascii=False))
+
+    def _handle_app_action(self):
+        _token, record = self._require_session()
+        if not record:
+            return
+        if not self._require_csrf(record):
+            return
+        data = self._read_json()
+        if data is None:
+            return
+        action = str(data.get("action") or "")
+        allowed = {"publishHomework", "publishActivity", "publishSubjectTask"}
+        if action not in allowed:
+            self._send(400, json.dumps({"ok": False, "message": "不支持的操作"}, ensure_ascii=False))
+            return
+        app_token = self._app_token_for(record)
+        if not app_token:
+            self._send(400, json.dumps({"ok": False, "message": "请先绑定学号并同步小程序身份"}, ensure_ascii=False))
+            return
+        payload = {
+            "action": action,
+            "data": data.get("data") if isinstance(data.get("data"), dict) else {},
+        }
+        status, result = app_json("/api/action", payload, token=app_token)
+        if status == 401:
+            new_token = refresh_app_token(record)
+            if new_token:
+                status, result = app_json("/api/action", payload, token=new_token)
+        self._send(status, json.dumps(result, ensure_ascii=False))
 
     def _handle_page_download(self):
         _token, record = self._require_session()

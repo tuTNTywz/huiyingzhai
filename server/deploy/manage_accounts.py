@@ -143,6 +143,8 @@ def command_set(args) -> None:
     record = make_record(password)
     if isinstance(old.get("perms"), list):
         record["perms"] = old["perms"]
+    if old.get("studentId"):
+        record["studentId"] = old["studentId"]
     users[args.username] = record
     save_users(users)
     print("已更新账号：%s" % args.username)

@@ -1,6 +1,7 @@
 # 汇英斋自建后端入口：FastAPI + SQLite
 from __future__ import annotations
 
+import hmac
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -9,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import auth, db as store, files
-from .api import handle_action
+from .api import SUBJECT_KEYS, SUBJECT_NAMES, handle_action
 from .config import config
 
 INLINE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
@@ -82,6 +83,86 @@ async def health():
         "devMode": config.dev_mode,
         "push": bool(config.homework_tmpl_id and config.appid and config.secret),
     }
+
+
+def _panel_secret_ok(request: Request) -> bool:
+    expected = config.web_panel_secret
+    if not expected:
+        return False
+    supplied = str(request.headers.get("x-panel-secret") or "")
+    try:
+        return hmac.compare_digest(supplied, expected)
+    except TypeError:
+        return False
+
+
+def _subject_list() -> list[dict]:
+    return [
+        {"key": key, "name": SUBJECT_NAMES.get(key, key)}
+        for key in SUBJECT_KEYS
+    ]
+
+
+# 网页数据上传页专用：用共享密钥换取某个学号对应的小程序会话
+@app.post("/api/web/token")
+async def web_token(request: Request):
+    if not _panel_secret_ok(request):
+        return JSONResponse({"ok": False, "msg": "网页上传未启用"}, status_code=403)
+    body = await _json_body(request)
+    student_id = str(body.get("studentId") or "").strip()
+    if not student_id:
+        return {"ok": False, "msg": "缺少学号"}
+    user = store.find_one("users", lambda u: u.get("studentId") == student_id)
+    if not user or not user.get("registered"):
+        return {"ok": False, "msg": "该学号尚未在小程序完成登记"}
+    openid = user.get("_openid")
+    if not openid:
+        return {"ok": False, "msg": "该账号缺少微信身份"}
+    roster = store.find_one("roster", lambda r: r.get("studentId") == student_id)
+    token = store.create_session(openid)
+    return {
+        "ok": True,
+        "token": token,
+        "user": user,
+        "roster": roster,
+        "repSubjects": (roster or {}).get("repSubjects") or [],
+        "subjects": _subject_list(),
+    }
+
+
+# 网页数据上传页专用：同步班委 / 课代表名单及注册身份
+@app.get("/api/web/committee")
+async def web_committee(request: Request):
+    if not _panel_secret_ok(request):
+        return JSONResponse({"ok": False, "msg": "网页上传未启用"}, status_code=403)
+    rows = []
+    for item in store.find("roster"):
+        position = str(item.get("position") or "").strip()
+        reps = item.get("repSubjects") if isinstance(item.get("repSubjects"), list) else []
+        if (not position or position == "普通同学") and not reps:
+            continue
+        student_id = str(item.get("studentId") or "")
+        user = store.find_one(
+            "users", lambda u, sid=student_id: u.get("studentId") == sid
+        )
+        rows.append(
+            {
+                "studentId": student_id,
+                "name": item.get("name") or "",
+                "className": item.get("className") or "",
+                "position": position,
+                "repSubjects": reps,
+                "registered": bool(user and user.get("registered")),
+                "role": (user or {}).get("role") or "",
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            0 if row.get("role") in ("admin", "committee") else 1,
+            str(row.get("studentId") or ""),
+        )
+    )
+    return {"ok": True, "list": rows, "subjects": _subject_list()}
 
 
 # 微信登录：code 换 openid，首次登录自动建档

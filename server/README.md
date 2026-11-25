@@ -151,12 +151,7 @@ sudo systemctl restart huiyingzhai
 
 ### 个人主页与网页部署
 
-浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），有四个按钮：
-
-- **Deploy** → `https://<后端域名>/deploy/`：部署控制台，需要登录（登录入口在「我的」）；
-- **慧英斋项目介绍** → `/intro/`：默认是标题页；`tutnt` / `zhl` 登录后右下角出现「页面编辑」工具条；
-- **慧英斋使用说明书** → `/manual/`：带动画的完整说明；同样带「页面编辑」工具条（仅 `tutnt` / `zhl` 可见）；
-- **我的** → `/me/`：只负责登录、修改密码和退出。
+浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），主页只有一个 **「汇英斋数据上传」** 按钮，进入 `/upload/`。其它页面仍可直接访问：`/deploy/` 部署、`/intro/` 项目介绍、`/manual/` 使用说明书、`/me/` 登录改密。
 
 `install.sh` 首次运行会创建账号文件并打印随机密码（默认两个账号 `tutnt`、`zhl`）。密码只以 PBKDF2-HMAC-SHA256 哈希保存在 `/var/lib/huiyingzhai-panel/accounts.json`。登录与修改密码都在「我的」；部署页不再单独显示登录表单，未登录时会提示前往「我的」。忘记密码可用命令重置：
 
@@ -168,9 +163,29 @@ sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py 
 printf '%s\n' '新密码' | sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py set tutnt
 ```
 
+**汇英斋数据上传（`/upload/`）**
+
+网页上传直接复用小程序同一套作业、活动、学科任务数据和权限：
+
+1. 用 `tutnt` 或 `zhl` 登录 `/upload/`；
+2. 首次登录后在「班委 / 课代表」名单里点击自己的学号「绑定此学号」，身份（姓名、职位、课代表科目、role）从小程序名单和用户记录同步；
+3. 绑定后按身份显示表单：
+   - 班委 / 管理员：发布作业、发布活动；
+   - 课代表 / 班委 / 管理员：发布学科任务；
+4. 作业与学科任务支持附件（最多 5 个、单个 ≤20MB）；发布成功后小程序里立即可见，站内通知和微信推送同样生效。
+
+名单会显示班委/课代表、职位、负责科目、小程序注册状态，以及绑定的网页账号（`tutnt` / `zhl` / 未绑定）。网页账号只用于登录；发布身份以绑定学号对应的小程序用户为准。
+
+实现方式：网页面板用共享密钥向小程序后端换取该学号的会话，再代理 `/api/upload` 与 `/api/action`；小程序 token 不暴露给浏览器。`install.sh` 会自动生成两端密钥：
+
+- 小程序 `/opt/huiyingzhai/server/.env` 的 `WEB_PANEL_SECRET`；
+- 面板 `/etc/huiyingzhai/panel.env` 的 `PANEL_APP_SECRET`。
+
+两端必须一致；手动修改后需重启 `huiyingzhai` 与 `huiyingzhai-panel`。
+
 **我的 / 页面编辑**
 
-「我的」只保留登录、修改密码和退出。项目介绍和使用说明书的内容直接在对应页面上编辑：
+「我的」只保留登录、修改密码和退出。项目介绍和使用说明书的内容可以直接在对应页面上编辑（主页不再放这些入口，直接访问 URL）：
 
 1. 用 `tutnt` 或 `zhl` 登录「我的」；
 2. 打开 `/intro/` 或 `/manual/`，右下角出现「页面编辑」工具条（其他访客完全看不到，工具条由服务端只对这两个账号注入）；
@@ -271,6 +286,18 @@ location /manual/ {
 
 location = /me { return 301 /me/; }
 location /me/ {
+    limit_req zone=huiyingzhai_deploy burst=40 nodelay;
+    proxy_pass http://127.0.0.1:3999;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+}
+
+location = /upload { return 301 /upload/; }
+location /upload/ {
     limit_req zone=huiyingzhai_deploy burst=40 nodelay;
     proxy_pass http://127.0.0.1:3999;
     proxy_http_version 1.1;
