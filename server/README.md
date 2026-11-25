@@ -149,57 +149,51 @@ sudo systemctl restart huiyingzhai
 
 也可以使用下面的网页一键部署。
 
-### 个人主页与网页部署
+### 个人主页与网页操作
 
-浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），主页只有一个 **「汇英斋数据上传」** 按钮，进入 `/upload/`。其它页面仍可直接访问：`/deploy/` 部署、`/intro/` 项目介绍、`/manual/` 使用说明书、`/me/` 登录改密。
+浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），恢复 **4 个按钮**：
 
-`install.sh` 首次运行会创建账号文件并打印随机密码（默认两个账号 `tutnt`、`zhl`）。密码只以 PBKDF2-HMAC-SHA256 哈希保存在 `/var/lib/huiyingzhai-panel/accounts.json`。登录与修改密码都在「我的」；部署页不再单独显示登录表单，未登录时会提示前往「我的」。忘记密码可用命令重置：
+- **Deploy** → `/deploy/`：已合并到小程序「我的」控制页面，网页只显示提示；
+- **汇英斋项目介绍** → `/intro/`：公开页面；
+- **汇英斋使用说明书** → `/manual/`：公开页面；
+- **我的** → `/me/`：已合并到小程序「我的」控制页面，网页只显示提示。
 
-```bash
-# 列出账号
-sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py list
+**统一登录（姓名 + 学号）**
 
-# 重置密码（从 stdin 读取，避免密码出现在 ps）
-printf '%s\n' '新密码' | sudo -u huiyingzhai-panel python3 /usr/local/lib/huiyingzhai/manage_accounts.py set tutnt
-```
+已删除 `tutnt`、`zhl` 两个网页账号，不再有独立网页密码。网页上传使用小程序用户表里的 **姓名 + 学号** 匹配身份；发布权限仍以小程序用户角色和名单为准。
 
-**汇英斋数据上传（`/upload/`）**
+- 小程序「我的」页面顶部点「汇英斋数据上传」，会**复制上传链接**；
+- 在浏览器打开该链接（`/upload/`），填写小程序登记的姓名 + 学号；
+- 按身份显示发布表单：班委/管理员可发作业、活动；课代表/班委/管理员可发学科任务；
+- 附件最多 5 个、单个 ≤20MB，发布后小程序立即可见，通知/推送同样生效。
 
-小程序内的作业/活动/学科任务发布入口已移除，只保留网页端；网页上传直接复用小程序同一套数据和权限。
+小程序不再使用 web-view，因此**不需要配置业务域名**；小程序内的部署控制台用 `wx.request` 访问 `https://tutnt.com/me/api/...`，使用现有「服务器域名」即可。
 
-- **小程序入口**：在「我的」页面顶部点「汇英斋数据上传」，通过 web-view 打开网页上传页，自动带上小程序登录 token，身份直接同步，不需要再登录，也不需要从名单里选择/绑定学号。该入口只对班委/管理员/课代表显示。
-- **浏览器入口**：主页「汇英斋数据上传」按钮进入 `/upload/`，用 `tutnt` / `zhl` 登录；首次需要填写你在小程序登记的学号同步身份（类似小程序「我的」的登记页，不再显示班委名单选择），之后直接显示身份。
-- 身份同步后按角色显示表单：
-  - 班委 / 管理员：发布作业、发布活动；
-  - 课代表 / 班委 / 管理员：发布学科任务；
-- 作业与学科任务支持附件（最多 5 个、单个 ≤20MB）；发布成功后小程序里立即可见，站内通知和微信推送同样生效。
-- 小程序内「发布作业 / 发布活动 / 发布任务通知」按钮和创建页已删除；交流区的普通附件仍保留。
-- 小程序须在微信公众平台把 `https://tutnt.com` 加入 **业务域名**，否则 web-view 无法打开上传页。
+**小程序控制页面（我的）**
 
-实现方式：web-view 把小程序 token 放在 URL fragment（不会进入 Nginx 访问日志），网页面板用 token 换取当前身份，再代理 `/api/upload` 与 `/api/action`；浏览器登录则用共享密钥换取学号对应的小程序会话。小程序 token 不会暴露给页面脚本。`install.sh` 会自动生成两端密钥：
+- 班委 / 课代表：显示「汇英斋数据上传」（复制网页上传链接）；
+- 管理员：额外显示「部署控制台」，可在小程序内直接部署最新代码并查看状态/日志；
+- 「我的」页同时保留账号资料、登记/修改资料。
+
+网页 `/deploy/` 和 `/me/` 只显示「已合并到小程序我的控制页面」提示；部署统一在管理员的小程序「部署控制台」完成。
+
+**页面编辑（管理员）**
+
+1. 在浏览器打开 `/upload/`，用管理员姓名 + 学号登录；
+2. 打开 `/intro/` 或 `/manual/`，右下角出现「页面编辑」工具条；
+3. 下载当前页面 HTML，修改后上传，页面立即更新；
+4. 页面保存在 `/var/lib/huiyingzhai-panel/pages/`，删除对应文件恢复内置页；单个 ≤2MB，UTF-8 完整 HTML。
+
+**共享密钥**
+
+网页姓名+学号登录仍会通过共享密钥向小程序后端换取该学号的会话（只用于服务端校验，不下发 token 给页面）。`install.sh` 自动生成：
 
 - 小程序 `/opt/huiyingzhai/server/.env` 的 `WEB_PANEL_SECRET`；
 - 面板 `/etc/huiyingzhai/panel.env` 的 `PANEL_APP_SECRET`。
 
-两端必须一致；手动修改后需重启 `huiyingzhai` 与 `huiyingzhai-panel`。
+两端必须一致；修改后重启 `huiyingzhai` 与 `huiyingzhai-panel`。
 
-**我的 / 页面编辑**
-
-「我的」只保留登录、修改密码和退出。项目介绍和使用说明书的内容可以直接在对应页面上编辑（主页不再放这些入口，直接访问 URL）：
-
-1. 用 `tutnt` 或 `zhl` 登录「我的」；
-2. 打开 `/intro/` 或 `/manual/`，右下角出现「页面编辑」工具条（其他访客完全看不到，工具条由服务端只对这两个账号注入）；
-3. 点「下载当前页面」拿到当前 HTML，在电脑上修改；
-4. 点「上传新版本」选择修改后的 `.html` 文件，上传成功后页面立即刷新。
-
-- 上传后的页面保存在 `/var/lib/huiyingzhai-panel/pages/intro.html` / `manual.html`；删除对应文件即恢复内置默认页面；
-- 页面须为 UTF-8 完整 HTML，单个不超过 2MB；为保证安全，外部脚本/样式/图片会被 CSP 拦截，建议页面保持自包含；
-- 只有 `tutnt`、`zhl` 两个账号可以登录（`/etc/huiyingzhai/panel.env` 的 `PANEL_ALLOWED_USERS`，默认 `tutnt,zhl`）；其它账号不会被记录或放行；
-- 接口：`GET /me/api/pages/download?page=intro|manual`、`POST /me/api/pages?page=intro|manual`（需登录 + CSRF）。
-
-`manage_accounts.py` 同样只会写入 `PANEL_ALLOWED_USERS` 中的账号；设置其它账号会直接报错。
-
-点击「部署最新代码」后：
+在**小程序「我的」→ 部署控制台**点击部署后：
 
 1. 从 GitHub 下载当前分支的源码压缩包（默认 `tuTNTywz/huiyingzhai` 的 `main`）；
 2. 校验代码包结构，备份当前版本（保留最近 5 份）；
@@ -210,7 +204,7 @@ printf '%s\n' '新密码' | sudo -u huiyingzhai-panel python3 /usr/local/lib/hui
 
 > 这里的自动备份只保留**代码**（不含 `.env`、`data/`、`uploads/`）；数据库与附件仍需按本节末尾「备份」定期备份。
 
-页面会显示当前部署的提交、上次部署结果和实时日志。部署脚本与日志：
+小程序部署页会显示当前提交、上次结果和实时日志。部署脚本与日志：
 
 ```bash
 sudo /usr/local/sbin/huiyingzhai-deploy        # 手动执行一次（等价于点按钮）
@@ -227,7 +221,7 @@ journalctl -u huiyingzhai-deploy -n 50 --no-pager
 
 **安装与 Nginx**
 
-`install.sh` 会自动创建面板用户、配置、账号、systemd 单元并启动，结束后打印初始账号密码。
+`install.sh` 会自动创建面板用户、配置、systemd 单元并启动。
 
 新服务器可以直接把 `deploy/nginx.conf` 作为站点配置（已包含限速 zone 和 location）。已有站点建议用独立文件，避免改动 certbot 生成的配置：
 
@@ -319,15 +313,15 @@ include /etc/nginx/snippets/huiyingzhai-panel.conf;
 
 ```bash
 sudo nano /etc/huiyingzhai/deploy.conf   # 仓库、分支、私有仓库 token、GitHub 镜像
-sudo nano /etc/huiyingzhai/panel.env     # 面板端口、允许账号（PANEL_ALLOWED_USERS）、账号文件路径
+sudo nano /etc/huiyingzhai/panel.env     # 面板端口、小程序共享密钥、状态路径
 ```
 
 - 私有仓库：在 `deploy.conf` 中设置 `GITHUB_TOKEN`（`Contents` 只读即可）。
 - 服务器直连 GitHub 慢：设置 `DEPLOY_ARCHIVE_URL_TEMPLATE`，例如
   `https://ghproxy.example.com/https://github.com/%REPO%/archive/refs/heads/%BRANCH%.tar.gz`。
-- 账号密码只保存哈希；请使用 HTTPS，并尽量再加 Nginx IP 白名单。
-- 账号文件权限 600、属主 `huiyingzhai-panel`；当前只允许 `tutnt`、`zhl`（`PANEL_ALLOWED_USERS`），其它账号不会被记录。
-- 如需修改密码，使用 `manage_accounts.py set`；如需调整允许账号，同时修改 `panel.env` 并重启面板。
+- 网页上传用小程序用户表里的姓名 + 学号匹配，不再有独立网页账号/密码。
+- 部署控制仅限小程序用户角色为管理员（管理员/班长）的账号。
+- 请使用 HTTPS，并尽量再加 Nginx IP 白名单。
 
 **故障排查**
 
@@ -337,20 +331,20 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、允许账号（PANEL_A
 | `/intro/` 或 `/manual/` 404 | Nginx 未加对应 location，或未 reload |
 | `/me/` 404 | Nginx 未加 `/me/` location，或未 reload |
 | `/upload/` 404 | Nginx 未加 `/upload/` location，或未 reload |
-| 小程序「我的」里的 web-view 打不开 | 微信公众平台未把 `https://tutnt.com` 加入**业务域名** |
-| 上传页要求登录/同步身份 | 浏览器访问需 `tutnt`/`zhl` 登录并填写学号；小程序 web-view 应自动登录，失败时回小程序「我的」重进 |
+| 上传页登录失败 | 填写小程序登记的姓名 + 学号；未登记或姓名不匹配会拒绝 |
+| 小程序「部署控制台」打不开 | 仅管理员可见；确认小程序「服务器域名」包含 `https://tutnt.com` |
 | 上传页没有发布表单 | 绑定学号不是班委/课代表，或未在小程序完成登记 |
 | 共享密钥不匹配 | `WEB_PANEL_SECRET` 与 `PANEL_APP_SECRET` 必须一致，修改后重启两个服务 |
 | 附件上传 413 / 超过 20MB | 单个附件上限 20MB；Nginx `client_max_body_size` 需 ≥ 25m |
 | `/deploy/` 404 | Nginx 未加 `/deploy/` 反代，或未 reload |
 | `/deploy/` 502 | `systemctl status huiyingzhai-panel`，看端口是否为 3999 |
 | 部署页提示「请先登录」 | 正常，先到 `/me/` 登录；登录后会回到部署页 |
-| 登录提示用户名或密码不正确 | 确认账号；忘记密码用 `manage_accounts.py set` 重置 |
+| 提示姓名与学号不匹配 | 确认与小程序「我的」登记信息一致；只有已登记用户可登录 |
 | 登录提示尝试过于频繁 | 5 分钟内失败次数过多，等待几分钟再试 |
 | 页面提示 401 | 会话过期或面板重启，重新登录即可 |
 | 上传提示 413 / 超过 2MB | 页面 HTML 单文件上限 2MB；Nginx `client_max_body_size` 需 ≥ 25m |
 | 上传后页面没变化 | 确认上传的是完整 `.html` 文件；刷新页面；检查 `/var/lib/huiyingzhai-panel/pages/` 权限 |
-| 看不到「页面编辑」工具条 | 正常，仅 `tutnt` / `zhl` 登录后由服务端注入；其他访客看不到 |
+| 看不到「页面编辑」工具条 | 先在 `/upload/` 用管理员姓名 + 学号登录，再打开 `/intro/` 或 `/manual/` |
 | 提示已有任务 | 等待当前部署结束；超过 15 分钟可 `sudo systemctl stop huiyingzhai-deploy` 后再试 |
 | 点了没反应 | `systemctl status huiyingzhai-deploy.path`、`journalctl -u huiyingzhai-deploy` |
 | 部署失败已回滚 | 看日志中的具体步骤；修复后重新部署，备份在 `/opt/huiyingzhai/backups/` |
@@ -376,7 +370,7 @@ sudo systemctl start huiyingzhai
 # 附件
 sudo tar czf /root/uploads-$(date +%F).tar.gz -C /opt/huiyingzhai/server uploads
 
-# 网页账号、项目介绍/使用说明书的自定义页面
+# 项目介绍/使用说明书的自定义页面
 sudo tar czf /root/huiyingzhai-panel-$(date +%F).tar.gz -C /var/lib/huiyingzhai-panel .
 ```
 

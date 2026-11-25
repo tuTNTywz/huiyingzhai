@@ -8,7 +8,17 @@
   <view class="upload-entry-icon">📤</view>
   <view class="upload-entry-main">
     <view class="upload-entry-title">汇英斋数据上传</view>
-    <view class="upload-entry-sub">在网页端发布作业、活动、学科任务</view>
+    <view class="upload-entry-sub">复制链接，在浏览器用姓名 + 学号登录</view>
+  </view>
+  <view class="upload-entry-arrow">›</view>
+</view>
+
+<!-- 部署控制台（仅管理员） -->
+<view class="card upload-entry" wx:if="{{isAdmin}}" bindtap="goDeploy">
+  <view class="upload-entry-icon">🚀</view>
+  <view class="upload-entry-main">
+    <view class="upload-entry-title">部署控制台</view>
+    <view class="upload-entry-sub">在小程序内发布最新代码并查看日志</view>
   </view>
   <view class="upload-entry-arrow">›</view>
 </view>
@@ -41,7 +51,7 @@
 
 <view class="card tip-card">
   <view class="section-title">说明</view>
-  <view class="tip-text">· 首次登录只需登记姓名与学号，班级和职位自动填好\n· 也可随时在此处打开登记窗口修改个人信息\n· 班委 / 课代表可通过上方「汇英斋数据上传」在网页端发布作业、活动、学科任务\n· 各学科课代表由班级名单（roster 集合）指定\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
+  <view class="tip-text">· 首次登录只需登记姓名与学号，班级和职位自动填好\n· 也可随时在此处打开登记窗口修改个人信息\n· 班委 / 课代表点上方「汇英斋数据上传」复制链接，在浏览器用姓名 + 学号登录后发布\n· 管理员可在上方「部署控制台」直接发布最新代码\n· 各学科课代表由班级名单（roster 集合）指定\n· 学号与微信账号一一对应，请勿冒用他人学籍</view>
 </view>
 
 <!-- 注册窗口 -->

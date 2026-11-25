@@ -1,5 +1,6 @@
 // 我的：个人信息 + 页内登记/修改资料弹窗
 const app = getApp();
+const { BASE_URL } = require("../../config");
 const { requireRegistered } = require("../../utils/guard");
 const { validateProfile, saveProfile, matchPosition, matchRepSubjects, DEFAULT_CLASS } = require("../../utils/profile");
 const { subjectName } = require("../../utils/subjects");
@@ -60,7 +61,20 @@ Page({
   },
 
   goUpload() {
-    wx.navigateTo({ url: "/pages/upload/index" });
+    const url = BASE_URL + "/upload/";
+    wx.setClipboardData({
+      data: url,
+      success: () => wx.showToast({
+        title: "上传链接已复制，请在浏览器打开",
+        icon: "none",
+        duration: 2500,
+      }),
+      fail: () => wx.showModal({ title: "上传地址", content: url, showCancel: false }),
+    });
+  },
+
+  goDeploy() {
+    wx.navigateTo({ url: "/pages/deploy/index" });
   },
 
   // 打开注册窗口，已登记时预填个人信息（职务按名单自动匹配）

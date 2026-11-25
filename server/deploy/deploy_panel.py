@@ -580,7 +580,10 @@ HOME_HTML = """<!doctype html>
 <main>
   <h1>tuTNT's home</h1>
   <div class="actions">
-    <a class="btn primary" href="/upload/">汇英斋数据上传</a>
+    <a class="btn primary" href="/deploy/">Deploy</a>
+    <a class="btn" href="/intro/">汇英斋项目介绍</a>
+    <a class="btn" href="/manual/">汇英斋使用说明书</a>
+    <a class="btn" href="/me/">我的</a>
   </div>
 </main>
 </body>
@@ -592,289 +595,30 @@ DEPLOY_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>部署控制台 · tuTNT's home</title>
+<title>Deploy · 汇英斋</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; background: #f4f6f8; color: #1f2937; }
-  main { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
-  .top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-  .home { color: #6b7280; text-decoration: none; font-size: 13px; }
-  .button-link {
-    display: inline-block;
-    padding: 9px 16px;
-    border-radius: 8px;
-    background: #2563eb;
-    color: #fff;
-    text-decoration: none;
-    font-size: 15px;
-  }
-  .home:hover { color: #111827; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0 0 14px; }
-  .sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
-  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  button { font: inherit; border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer; }
-  button.primary { background: #2563eb; color: #fff; }
-  button.danger { background: #dc2626; color: #fff; }
-  button.secondary { background: #eef2f7; color: #1f2937; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  input { font: inherit; border: 1px solid #d1d5db; border-radius: 8px; padding: 9px 12px; width: 100%; max-width: 360px; background: #fff; color: inherit; }
-  label { font-size: 13px; color: #6b7280; display: block; margin: 10px 0 6px; }
-  #login label:first-child, .form label:first-child { margin-top: 0; }
-  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #e5e7eb; color: #374151; }
-  .badge.running { background: #fef3c7; color: #92400e; }
-  .badge.success { background: #dcfce7; color: #166534; }
-  .badge.failed { background: #fee2e2; color: #991b1b; }
-  pre { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; overflow: auto; max-height: 360px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
-  .kv { display: grid; grid-template-columns: 96px 1fr; gap: 4px 12px; font-size: 13px; }
-  .kv div:nth-child(odd) { color: #6b7280; }
-  .msg { margin-top: 10px; font-size: 13px; color: #6b7280; min-height: 1.4em; }
-  .who { font-size: 12px; color: #6b7280; margin-left: 8px; }
-  .hidden { display: none !important; }
-  code { font-size: 12px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #0f172a; color: #e5e7eb; }
-    .card { background: #111c33; border-color: #23314f; }
-    input, pre, code { background: #0b1324; color: #e5e7eb; border-color: #23314f; }
-    button.secondary { background: #1f2c47; color: #e5e7eb; }
-    .sub, label, .msg, .kv div:nth-child(odd), .who, .home { color: #94a3b8; }
-    .home:hover { color: #e5e7eb; }
-  }
+  body { margin: 0; font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; background: #f5f1e8; color: #2f2a24; }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 18px; }
+  .home { color: #8a7a68; text-decoration: none; font-size: 13px; }
+  h1 { font-family: "Songti SC", "Noto Serif CJK SC", serif; font-size: 28px; margin: 14px 0 8px; }
+  .card { background: #fffaf2; border: 1px solid #e8ddcc; border-radius: 16px; padding: 22px; margin-top: 18px; }
+  .card p { margin: 0 0 8px; }
+  .card p:last-child { margin-bottom: 0; }
+  @media (prefers-color-scheme: dark) { body { background: #14100d; color: #ece4d8; } .card { background: #1d1712; border-color: #33281f; } .home { color: #a99c8b; } }
 </style>
 </head>
 <body>
 <main>
-  <div class="top"><a class="home" href="/">← tuTNT's home</a><a class="home" href="/me/">我的</a></div>
-  <h1>部署控制台</h1>
-  <div class="sub">登录后可查看部署状态、更新服务端代码。登录与修改密码请到「我的」。</div>
-
-  <section id="need-login" class="card hidden">
-    <h2>请先登录</h2>
-    <div class="sub" style="margin: 0 0 14px">部署控制台需要登录后才能使用。</div>
-    <a class="button-link" href="/me/?next=/deploy/">前往「我的」登录</a>
-  </section>
-
-  <section id="app" class="hidden">
-    <div class="card">
-      <div class="row" style="justify-content: space-between">
-        <div>
-          <span id="state-badge" class="badge">加载中</span>
-          <span class="who">已登录：<b id="who"></b></span>
-        </div>
-        <button id="refresh" class="secondary">刷新</button>
-      </div>
-      <div class="kv" style="margin-top: 14px">
-        <div>当前版本</div><div id="current">—</div>
-        <div>上次部署</div><div id="last">—</div>
-      </div>
-      <div class="row" style="margin-top: 16px">
-        <button id="deploy" class="danger">部署最新代码</button>
-      </div>
-      <div id="msg" class="msg"></div>
-    </div>
-
-    <div class="card">
-      <div class="row" style="justify-content: space-between; margin-bottom: 10px">
-        <strong style="font-size: 14px">部署日志</strong>
-        <button id="toggle-log" class="secondary">隐藏</button>
-      </div>
-      <pre id="log" class="hidden">—</pre>
-    </div>
-  </section>
+  <a class="home" href="/">← 汇英斋</a>
+  <h1>Deploy</h1>
+  <div class="card">
+    <p>部署控制已合并到 <b>微信小程序「我的」→ 部署控制台</b>。</p>
+    <p>网页端不再单独提供部署入口。</p>
+  </div>
 </main>
-<script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  let csrf = '';
-  let currentUser = '';
-  let pollTimer = null;
-  let forcePollUntil = 0;
-  let busy = false;
-  let lastLog = '';
-
-  function api(path, options) {
-    options = options || {};
-    const headers = Object.assign({}, options.headers || {});
-    if (csrf) headers['X-CSRF-Token'] = csrf;
-    return fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, options, { headers }));
-  }
-
-  function showNeedLogin() {
-    csrf = '';
-    currentUser = '';
-    stopPolling();
-    $('app').classList.add('hidden');
-    $('need-login').classList.remove('hidden');
-  }
-
-  async function showApp(user) {
-    currentUser = user || '';
-    $('who').textContent = currentUser;
-    $('need-login').classList.add('hidden');
-    $('app').classList.remove('hidden');
-    await loadStatus();
-  }
-
-  async function checkSession() {
-    try {
-      const resp = await fetch('api/session', { credentials: 'same-origin', cache: 'no-store' });
-      if (resp.ok) {
-        const data = await resp.json();
-        csrf = data.csrf || '';
-        await showApp(data.user || '');
-        return;
-      }
-    } catch (err) { /* ignore */ }
-    showNeedLogin();
-  }
-
-  function setMsg(text, isError) {
-    $('msg').textContent = text || '';
-    $('msg').style.color = isError ? '#dc2626' : '';
-  }
-
-  function fmtTime(ms) {
-    if (!ms) return '—';
-    try { return new Date(ms).toLocaleString('zh-CN', { hour12: false }); }
-    catch (err) { return '—'; }
-  }
-
-  function commitText(obj) {
-    if (!obj) return '—';
-    const sha = obj.commit ? obj.commit.slice(0, 12) : '';
-    const msg = obj.commitMessage ? ' · ' + obj.commitMessage : '';
-    const when = obj.deployedAt || obj.finishedAt;
-    return (sha || '未知提交') + msg + (when ? '（' + fmtTime(when) + '）' : '');
-  }
-
-  function setBadge(state) {
-    const labels = { running: '部署中', success: '已完成', failed: '部署失败', idle: '空闲' };
-    const classes = { running: 'running', success: 'success', failed: 'failed' };
-    const el = $('state-badge');
-    const cls = classes[state] || '';
-    el.className = 'badge' + (cls ? ' ' + cls : '');
-    el.textContent = labels[state] || '未知';
-  }
-
-  async function loadStatus() {
-    if (!currentUser) return;
-    let resp;
-    try {
-      resp = await api('api/status');
-    } catch (err) {
-      $('current').textContent = '无法连接部署面板';
-      return;
-    }
-    if (resp.status === 401) {
-      showNeedLogin();
-      return;
-    }
-    if (!resp.ok) {
-      $('current').textContent = '读取状态失败（HTTP ' + resp.status + '）';
-      return;
-    }
-    const data = await resp.json();
-    const last = data.last || null;
-    const current = data.current || null;
-    setBadge(last ? last.state : 'idle');
-    $('current').textContent = commitText(current);
-    if (last) {
-      const extra = last.finishedAt ? '（' + fmtTime(last.finishedAt) + '）' : '';
-      $('last').textContent = (last.message || last.step || '—') + extra;
-    } else {
-      $('last').textContent = '—';
-    }
-    $('deploy').disabled = !!data.running || busy;
-    await loadLog();
-    if (data.running) {
-      forcePollUntil = Date.now() + 10000;
-      startPolling();
-    } else if (Date.now() < forcePollUntil) {
-      startPolling();
-    } else {
-      stopPolling();
-    }
-  }
-
-  async function loadLog() {
-    try {
-      const resp = await api('api/log');
-      if (resp.status === 401) {
-        showNeedLogin();
-        return;
-      }
-      if (!resp.ok) return;
-      const text = await resp.text();
-      if (text !== lastLog) {
-        lastLog = text;
-        const el = $('log');
-        el.textContent = text || '（暂无日志）';
-        el.scrollTop = el.scrollHeight;
-      }
-    } catch (err) { /* ignore */ }
-  }
-
-  function startPolling() {
-    if (pollTimer) return;
-    pollTimer = setInterval(loadStatus, 2500);
-  }
-
-  function stopPolling() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  }
-
-  async function deploy() {
-    if (busy) return;
-    if (!confirm('确定从 GitHub 拉取最新代码并重启服务吗？\\n\\n部署期间服务会短暂中断；失败会自动回滚。')) return;
-    busy = true;
-    $('deploy').disabled = true;
-    setMsg('已提交部署请求，等待执行…');
-    forcePollUntil = Date.now() + 30000;
-    try {
-      const resp = await api('api/deploy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}'
-      });
-      if (resp.status === 401) {
-        showNeedLogin();
-        return;
-      }
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        setMsg(data.message || ('请求失败（HTTP ' + resp.status + '）'), true);
-      } else {
-        setMsg('部署已开始，页面会自动刷新状态。');
-        startPolling();
-      }
-    } catch (err) {
-      setMsg('网络错误，请重试', true);
-    } finally {
-      busy = false;
-      loadStatus();
-    }
-  }
-
-  $('refresh').addEventListener('click', loadStatus);
-  $('deploy').addEventListener('click', deploy);
-  $('toggle-log').addEventListener('click', () => {
-    const el = $('log');
-    el.classList.toggle('hidden');
-    $('toggle-log').textContent = el.classList.contains('hidden') ? '显示' : '隐藏';
-  });
-
-  checkSession();
-})();
-</script>
 </body>
-</html>
-"""
+</html>"""
 
 INTRO_HTML = """<!doctype html>
 <html lang="zh-CN">
@@ -1284,12 +1028,13 @@ UPLOAD_HTML = """<!doctype html>
   <div class="sub">在这里发布作业、活动和学科任务；身份、权限与小程序完全同步。</div>
 
   <section id="login" class="card hidden">
-    <h2>登录</h2>
-    <label for="username">用户名</label>
-    <input id="username" autocomplete="username" autocapitalize="off" spellcheck="false">
-    <label for="password">密码</label>
-    <input id="password" type="password" autocomplete="current-password">
-    <div class="row" style="margin-top: 14px"><button id="login-btn" class="primary">登录</button></div>
+    <h2>用小程序身份登录</h2>
+    <div class="sub" style="margin-bottom: 10px">填写小程序「我的」里登记的姓名和学号。</div>
+    <label for="name">姓名</label>
+    <input id="name" autocomplete="name">
+    <label for="studentId">学号</label>
+    <input id="studentId" inputmode="numeric" placeholder="小程序登记的学号">
+    <div class="row" style="margin-top: 14px"><button id="login-btn" class="primary">进入</button></div>
     <div id="login-msg" class="msg"></div>
   </section>
 
@@ -1307,17 +1052,7 @@ UPLOAD_HTML = """<!doctype html>
         <div>身份</div><div id="id-role">—</div>
         <div>负责科目</div><div id="id-reps">—</div>
       </div>
-      <div id="no-identity" class="msg">还没有同步小程序身份，请填写学号同步。</div>
       <div id="app-msg" class="msg"></div>
-    </div>
-
-    <div id="identity-form" class="card hidden">
-      <h2>同步小程序身份</h2>
-      <div class="sub" style="margin-bottom: 10px">填写你在小程序登记的学号，系统会自动同步姓名、职位和课代表科目。</div>
-      <label for="bind-sid">学号</label>
-      <input id="bind-sid" inputmode="numeric" placeholder="小程序登记的学号">
-      <div class="row" style="margin-top: 12px"><button id="bind-btn" class="primary">同步身份</button></div>
-      <div id="bind-msg" class="msg"></div>
     </div>
 
     <div id="forms" class="hidden">
@@ -1393,8 +1128,8 @@ UPLOAD_HTML = """<!doctype html>
     $('dashboard').classList.add('hidden');
     $('login').classList.remove('hidden');
     $('login-msg').textContent = message || '';
-    $('password').value = '';
-    setTimeout(() => $('username').focus(), 30);
+    $('studentId').value = '';
+    setTimeout(() => $('name').focus(), 30);
   }
 
   function showDashboard() {
@@ -1409,7 +1144,7 @@ UPLOAD_HTML = """<!doctype html>
     if (identity && Array.isArray(identity.subjects) && identity.subjects.length) {
       subjects = identity.subjects;
     }
-    if (identity && identity.name && (!user || user.indexOf('mp:') === 0)) {
+    if (identity && identity.name && (!user || user.indexOf('mp:') === 0 || user.indexOf('web:') === 0)) {
       user = identity.name;
     }
     $('who').textContent = user;
@@ -1433,22 +1168,10 @@ UPLOAD_HTML = """<!doctype html>
   }
 
   function renderIdentity(appError) {
-    const box = $('identity');
-    const no = $('no-identity');
-    const tag = $('identity-tag');
-    if (!identity) {
-      box.classList.add('hidden');
-      no.classList.remove('hidden');
-      tag.classList.add('hidden');
-      $('forms').classList.add('hidden');
-      $('identity-form').classList.remove('hidden');
-      if (appError) setMsg('app-msg', appError, true);
-      return;
-    }
-    no.classList.add('hidden');
-    box.classList.remove('hidden');
+    if (!identity) { showLogin('请用姓名和学号登录'); return; }
+    $('identity').classList.remove('hidden');
+    $('identity-tag').classList.remove('hidden');
     $('forms').classList.remove('hidden');
-    $('identity-form').classList.add('hidden');
     $('id-name').textContent = identity.name || '—';
     $('id-sid').textContent = identity.studentId || '—';
     $('id-class').textContent = identity.className || '—';
@@ -1456,8 +1179,7 @@ UPLOAD_HTML = """<!doctype html>
     const roleText = identity.role === 'admin' ? '管理员' : identity.role === 'committee' ? '班委' : identity.role === 'student' ? '普通同学' : '—';
     $('id-role').textContent = roleText;
     $('id-reps').textContent = repSubjects().length ? repSubjects().map(subjectName).join('、') : '—';
-    tag.classList.remove('hidden');
-    tag.textContent = roleText;
+    $('identity-tag').textContent = roleText;
     if (appError) setMsg('app-msg', appError, true);
     else setMsg('app-msg', '');
     $('homework-card').classList.toggle('hidden', !isManager());
@@ -1488,9 +1210,9 @@ UPLOAD_HTML = """<!doctype html>
   }
 
   async function login() {
-    const username = $('username').value.trim();
-    const password = $('password').value;
-    if (!username || !password) { $('login-msg').textContent = '请输入用户名和密码'; return; }
+    const name = $('name').value.trim();
+    const studentId = $('studentId').value.trim();
+    if (!name || !studentId) { $('login-msg').textContent = '请输入姓名和学号'; return; }
     $('login-btn').disabled = true;
     $('login-msg').textContent = '登录中…';
     try {
@@ -1498,13 +1220,13 @@ UPLOAD_HTML = """<!doctype html>
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username, password: password })
+        body: JSON.stringify({ name: name, studentId: studentId })
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) { $('login-msg').textContent = data.message || ('登录失败（HTTP ' + resp.status + '）'); return; }
       applySession(data);
       showDashboard();
-      renderIdentity(data.appError || '');
+      renderIdentity('');
     } catch (err) {
       $('login-msg').textContent = '网络错误，请重试';
     } finally {
@@ -1521,35 +1243,6 @@ UPLOAD_HTML = """<!doctype html>
       });
     } catch (err) { /* ignore */ }
     showLogin('');
-  }
-
-  async function bindIdentity() {
-    const studentId = $('bind-sid').value.trim();
-    const msg = $('bind-msg');
-    if (!studentId) { msg.textContent = '请填写学号'; return; }
-    msg.style.color = '';
-    msg.textContent = '正在同步…';
-    try {
-      const resp = await api('/me/api/account/bind', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: studentId })
-      });
-      if (resp.status === 401) { showLogin('登录已过期，请重新登录'); return; }
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || !data.ok) {
-        msg.style.color = '#b4453a';
-        msg.textContent = data.message || '同步失败';
-        return;
-      }
-      identity = data.identity || null;
-      msg.textContent = '';
-      $('bind-sid').value = '';
-      renderIdentity('');
-    } catch (err) {
-      msg.style.color = '#b4453a';
-      msg.textContent = '网络错误，请重试';
-    }
   }
 
   function toMs(value) {
@@ -1691,10 +1384,9 @@ UPLOAD_HTML = """<!doctype html>
   }
 
   $('login-btn').addEventListener('click', login);
-  $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+  $('studentId').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+  $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('studentId').focus(); });
   $('logout').addEventListener('click', logout);
-  $('bind-btn').addEventListener('click', bindIdentity);
-  $('bind-sid').addEventListener('keydown', (e) => { if (e.key === 'Enter') bindIdentity(); });
   $('hw-submit').addEventListener('click', submitHomework);
   $('act-submit').addEventListener('click', submitActivity);
   $('sub-submit').addEventListener('click', submitSubject);
@@ -1720,237 +1412,36 @@ MY_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>我的 · tuTNT's home</title>
+<title>我的 · 汇英斋</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; background: #f5f1e8; color: #2f2a24; }
-  main { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
-  .top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  body { margin: 0; font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; background: #f5f1e8; color: #2f2a24; }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 18px; }
   .home { color: #8a7a68; text-decoration: none; font-size: 13px; }
-  .home:hover { color: #9c6b4a; }
-  h1 { font-size: 22px; margin: 0 0 4px; font-family: "Songti SC", "Noto Serif CJK SC", serif; }
-  h2 { font-size: 16px; margin: 0 0 14px; }
-  .sub { color: #8a7a68; font-size: 13px; margin-bottom: 20px; }
-  .card { background: #fffaf2; border: 1px solid #e8ddcc; border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(120,95,65,.05); }
-  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  button { font: inherit; border: 0; border-radius: 10px; padding: 9px 16px; cursor: pointer; }
-  button.primary { background: #9c6b4a; color: #fff; }
-  button.secondary { background: #f0e6d8; color: #5f4a37; }
-  button.danger { background: #b4453a; color: #fff; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  input { font: inherit; border: 1px solid #dfcfba; border-radius: 10px; padding: 9px 12px; width: 100%; max-width: 360px; background: #fffdf9; color: inherit; }
-  label { font-size: 13px; color: #8a7a68; display: block; margin: 10px 0 6px; }
-  .msg { margin-top: 10px; font-size: 13px; color: #8a7a68; min-height: 1.4em; }
-  .who { font-size: 13px; color: #8a7a68; }
-  .hidden { display: none !important; }
-  .kv { display: grid; grid-template-columns: 86px 1fr; gap: 4px 12px; font-size: 13px; }
-  .kv div:nth-child(odd) { color: #8a7a68; }
-  .sub a { color: #9c6b4a; }
-  .sub a:hover { text-decoration: underline; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #14100d; color: #ece4d8; }
-    .card { background: #1d1712; border-color: #33281f; }
-    input { background: #241c16; border-color: #3a2d22; color: #ece4d8; }
-    button.secondary { background: #33261c; color: #d9c8b3; }
-    .home, .sub, label, .msg, .who, .kv div:nth-child(odd) { color: #a99c8b; }
-    .sub a { color: #dcb894; }
-  }
+  h1 { font-family: "Songti SC", "Noto Serif CJK SC", serif; font-size: 28px; margin: 14px 0 8px; }
+  .card { background: #fffaf2; border: 1px solid #e8ddcc; border-radius: 16px; padding: 22px; margin-top: 18px; }
+  .card p { margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  .links { margin-top: 18px; }
+  .links a { display: inline-block; margin: 0 8px 8px 0; padding: 9px 16px; border-radius: 10px; background: #9c6b4a; color: #fff; text-decoration: none; font-size: 14px; }
+  @media (prefers-color-scheme: dark) { body { background: #14100d; color: #ece4d8; } .card { background: #1d1712; border-color: #33281f; } .home { color: #a99c8b; } }
 </style>
 </head>
 <body>
 <main>
-  <div class="top"><a class="home" href="/">← tuTNT's home</a><a class="home" href="/deploy/">部署控制台 →</a></div>
+  <a class="home" href="/">← 汇英斋</a>
   <h1>我的</h1>
-  <div class="sub">登录后可修改密码；页面编辑入口在「项目介绍」和「使用说明书」页面。</div>
-
-  <section id="login" class="card hidden">
-    <h2>登录</h2>
-    <label for="username">用户名</label>
-    <input id="username" autocomplete="username" autocapitalize="off" spellcheck="false">
-    <label for="password">密码</label>
-    <input id="password" type="password" autocomplete="current-password">
-    <div class="row" style="margin-top: 16px">
-      <button id="login-btn" class="primary">登录</button>
-    </div>
-    <div id="login-msg" class="msg"></div>
-  </section>
-
-  <section id="account" class="hidden">
-    <div class="card">
-      <div class="row" style="justify-content: space-between">
-        <div><span class="who">已登录：</span><b id="who"></b></div>
-        <button id="logout" class="secondary">退出</button>
-      </div>
-      <div class="kv" style="margin-top: 14px">
-        <div>账号</div><div id="acc-user">—</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>页面编辑</h2>
-      <div class="sub" style="margin: 0">
-        项目介绍和使用说明书的编辑入口在
-        <a href="/intro/">项目介绍</a> 和 <a href="/manual/">使用说明书</a> 页面，
-        仅 tutnt / zhl 登录后可见。
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>修改密码</h2>
-      <label for="pwd-current">当前密码</label>
-      <input id="pwd-current" type="password" autocomplete="current-password">
-      <label for="pwd-new">新密码（6-128 位）</label>
-      <input id="pwd-new" type="password" autocomplete="new-password">
-      <label for="pwd-confirm">确认新密码</label>
-      <input id="pwd-confirm" type="password" autocomplete="new-password">
-      <div class="row" style="margin-top: 14px">
-        <button id="pwd-save" class="primary">保存</button>
-      </div>
-      <div id="pwd-msg" class="msg"></div>
-    </div>
-  </section>
+  <div class="card">
+    <p>账号资料、数据上传和部署控制统一在 <b>微信小程序「我的」</b>。</p>
+    <p>网页数据上传：在小程序「我的」复制上传链接，在浏览器打开后用 <b>姓名 + 学号</b> 登录。</p>
+  </div>
+  <div class="links">
+    <a href="/intro/">项目介绍</a>
+    <a href="/manual/">使用说明书</a>
+  </div>
 </main>
-<script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  let csrf = '';
-  let user = '';
-  const next = (() => {
-    const value = new URLSearchParams(location.search).get('next') || '';
-    return value.startsWith('/') && !value.startsWith('//') ? value : '';
-  })();
-
-  function api(path, options) {
-    options = options || {};
-    const headers = Object.assign({}, options.headers || {});
-    if (csrf) headers['X-CSRF-Token'] = csrf;
-    return fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, options, { headers }));
-  }
-
-  function showLogin(message) {
-    csrf = ''; user = '';
-    $('account').classList.add('hidden');
-    $('login').classList.remove('hidden');
-    $('login-msg').textContent = message || '';
-    $('password').value = '';
-    setTimeout(() => $('username').focus(), 30);
-  }
-
-  function showAccount(name) {
-    user = name || '';
-    $('who').textContent = user;
-    $('acc-user').textContent = user;
-    $('login').classList.add('hidden');
-    $('account').classList.remove('hidden');
-    $('pwd-msg').textContent = '';
-  }
-
-  async function checkSession() {
-    try {
-      const resp = await fetch('api/session', { credentials: 'same-origin', cache: 'no-store' });
-      if (resp.ok) {
-        const data = await resp.json();
-        csrf = data.csrf || '';
-        if (next) { location.href = next; return; }
-        showAccount(data.user || '');
-        return;
-      }
-    } catch (err) { /* ignore */ }
-    showLogin('');
-  }
-
-  async function login() {
-    const username = $('username').value.trim();
-    const password = $('password').value;
-    if (!username || !password) {
-      $('login-msg').textContent = '请输入用户名和密码';
-      return;
-    }
-    $('login-btn').disabled = true;
-    $('login-msg').textContent = '登录中…';
-    try {
-      const resp = await fetch('api/login', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username, password: password })
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        $('login-msg').textContent = data.message || ('登录失败（HTTP ' + resp.status + '）');
-        return;
-      }
-      csrf = data.csrf || '';
-      $('password').value = '';
-      if (next) { location.href = next; return; }
-      showAccount(data.user || username);
-    } catch (err) {
-      $('login-msg').textContent = '网络错误，请重试';
-    } finally {
-      $('login-btn').disabled = false;
-    }
-  }
-
-  async function logout() {
-    try {
-      await api('api/logout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}'
-      });
-    } catch (err) { /* ignore */ }
-    showLogin('');
-  }
-
-  async function savePassword() {
-    const current = $('pwd-current').value;
-    const value = $('pwd-new').value;
-    const confirmValue = $('pwd-confirm').value;
-    const msg = $('pwd-msg');
-    msg.style.color = '';
-    if (!current || !value) { msg.textContent = '请填写当前密码和新密码'; return; }
-    if (value !== confirmValue) { msg.textContent = '两次输入的新密码不一致'; return; }
-    $('pwd-save').disabled = true;
-    msg.textContent = '保存中…';
-    try {
-      const resp = await api('api/account/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword: current, newPassword: value })
-      });
-      if (resp.status === 401) { showLogin('登录已过期，请重新登录'); return; }
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        msg.style.color = '#b4453a';
-        msg.textContent = data.message || ('修改失败（HTTP ' + resp.status + '）');
-        return;
-      }
-      msg.textContent = '密码已更新';
-      $('pwd-current').value = '';
-      $('pwd-new').value = '';
-      $('pwd-confirm').value = '';
-    } catch (err) {
-      msg.style.color = '#b4453a';
-      msg.textContent = '网络错误，请重试';
-    } finally {
-      $('pwd-save').disabled = false;
-    }
-  }
-
-  $('login-btn').addEventListener('click', login);
-  $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
-  $('username').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('password').focus(); });
-  $('logout').addEventListener('click', logout);
-  $('pwd-save').addEventListener('click', savePassword);
-
-  checkSession();
-})();
-</script>
 </body>
-</html>
-"""
+</html>"""
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -2052,15 +1543,12 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def _page_editor(self):
-        """已登录且允许编辑页面的账号才注入编辑工具条。"""
+        """仅管理员（姓名 + 学号登录）注入页面编辑工具条。"""
         _token, record = self._session_record()
         if not record:
             return None
-        user = record["user"]
-        if user not in allowed_users():
-            return None
-        perms = user_perms(user)
-        if "upload" not in perms and "download" not in perms:
+        identity = record.get("identity") or {}
+        if identity.get("role") != "admin":
             return None
         return record
 
@@ -2186,6 +1674,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/app/committee":
             self._handle_app_committee()
             return
+        if path == "/api/app/deploy/status":
+            self._handle_app_deploy_status()
+            return
         self._send(404, json.dumps({"ok": False, "message": "接口不存在"}, ensure_ascii=False))
 
     def do_POST(self):
@@ -2213,8 +1704,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/app/action":
             self._handle_app_action()
             return
-        if path == "/api/deploy":
-            self._handle_deploy()
+        if path == "/api/app/deploy":
+            self._handle_app_deploy()
             return
         if path == "/api/pages":
             self._handle_page_upload()
@@ -2225,57 +1716,47 @@ class Handler(BaseHTTPRequestHandler):
         data = self._read_json()
         if data is None:
             return
-        username = str(data.get("username") or "").strip()
-        password = str(data.get("password") or "")
-        if not username or not password or len(username) > 64 or len(password) > 256:
-            self._send(400, json.dumps({"ok": False, "message": "用户名或密码不正确"}, ensure_ascii=False))
+        name = str(data.get("name") or "").strip()
+        student_id = str(data.get("studentId") or "").strip()
+        if not name or not student_id or len(name) > 40 or len(student_id) > 30:
+            self._send(400, json.dumps({"ok": False, "message": "请填写姓名和学号"}, ensure_ascii=False))
             return
         ip = self._client_ip()
         if not _login_rate_ok(ip):
             time.sleep(0.5)
             self._send(429, json.dumps({"ok": False, "message": "尝试过于频繁，请稍后再试"}, ensure_ascii=False))
             return
-        users = load_accounts()
-        record = users.get(username) if username in allowed_users() else None
-        valid = bool(record) and verify_password(record, password)
-        if not valid:
-            if not record:
-                # 对不存在的用户也做一次哈希，减少用户名枚举的时序差异
-                hashlib.pbkdf2_hmac(
-                    "sha256", password.encode("utf-8"), b"\x00" * 16, PBKDF2_ITERATIONS
-                )
+        if not APP_SECRET:
+            self._send(503, json.dumps({"ok": False, "message": "网页登录未启用（缺少共享密钥）"}, ensure_ascii=False))
+            return
+        app_data, error = fetch_app_identity(student_id)
+        if not app_data:
             _login_failed(ip)
             time.sleep(0.4)
-            self._send(401, json.dumps({"ok": False, "message": "用户名或密码不正确"}, ensure_ascii=False))
+            self._send(401, json.dumps({"ok": False, "message": error or "学号尚未在小程序登记"}, ensure_ascii=False))
+            return
+        identity = identity_from_app(app_data)
+        if (identity.get("name") or "").strip() != name:
+            _login_failed(ip)
+            time.sleep(0.4)
+            self._send(401, json.dumps({"ok": False, "message": "姓名与学号不匹配"}, ensure_ascii=False))
             return
         _login_succeeded(ip)
-        account = load_accounts().get(username) or {}
-        student_id = str(account.get("studentId") or "").strip()
-        app_token = ""
-        identity = None
-        app_error = ""
-        if student_id:
-            if not APP_SECRET:
-                app_error = "网页上传未启用（缺少共享密钥）"
-            else:
-                app_data, app_error = fetch_app_identity(student_id)
-                if app_data:
-                    app_token = str(app_data.get("token") or "")
-                    identity = identity_from_app(app_data)
-        token, csrf = create_session(username, app_token, identity)
+        app_token = str(app_data.get("token") or "")
+        token, csrf = create_session("web:" + student_id, app_token, identity)
         self._send(
             200,
             json.dumps(
                 {
                     "ok": True,
-                    "user": username,
+                    "user": name,
                     "csrf": csrf,
-                    "perms": user_perms(username),
+                    "perms": ["upload", "download"],
                     "identity": identity,
                     "studentId": student_id,
-                    "bound": bool(student_id),
-                    "appReady": bool(APP_SECRET),
-                    "appError": app_error,
+                    "bound": True,
+                    "appReady": True,
+                    "nameLogin": True,
                 },
                 ensure_ascii=False,
             ),
@@ -2627,21 +2108,26 @@ class Handler(BaseHTTPRequestHandler):
             json.dumps({"ok": True, "page": slug, "size": len(data)}, ensure_ascii=False),
         )
 
-    def _handle_deploy(self):
+    def _app_identity_from_header(self):
+        auth = str(self.headers.get("Authorization") or "")
+        token = auth[7:].strip() if auth.startswith("Bearer ") else ""
+        if not token:
+            return None, "缺少小程序登录凭证", 401
+        status, data = app_json("/api/web/me", token=token, method="GET")
+        if status != 200 or not data.get("ok"):
+            return None, data.get("msg") or "小程序身份校验失败", 401
+        identity = identity_from_app(data)
+        if identity.get("role") != "admin":
+            return None, "仅管理员可执行部署", 403
+        return identity, "", 200
+
+    def _handle_app_deploy(self):
         global _last_deploy_request_at
 
-        _token, record = self._require_session()
-        if not record:
+        identity, error, code = self._app_identity_from_header()
+        if error:
+            self._send(code, json.dumps({"ok": False, "message": error}, ensure_ascii=False))
             return
-        if not self._require_csrf(record):
-            return
-        data = self._read_json()
-        if data is None:
-            return
-        if data:
-            self._send(400, json.dumps({"ok": False, "message": "不支持参数"}, ensure_ascii=False))
-            return
-
         with _deploy_lock:
             now = time.time()
             if now - _last_deploy_request_at < MIN_DEPLOY_INTERVAL_SECONDS:
@@ -2665,8 +2151,8 @@ class Handler(BaseHTTPRequestHandler):
                     json.dumps(
                         {
                             "requestedAt": _now_ms(),
-                            "client": self._client_ip(),
-                            "by": record["user"],
+                            "client": "miniprogram",
+                            "by": identity.get("name") or "admin",
                         },
                         ensure_ascii=False,
                     ),
@@ -2679,14 +2165,31 @@ class Handler(BaseHTTPRequestHandler):
                         tmp.unlink(missing_ok=True)
                     except OSError:
                         pass
-                self._send(
-                    500,
-                    json.dumps({"ok": False, "message": "写入部署请求失败：%s" % exc}, ensure_ascii=False),
-                )
+                self._send(500, json.dumps({"ok": False, "message": "写入部署请求失败：%s" % exc}, ensure_ascii=False))
                 return
             _last_deploy_request_at = now
-
         self._send(202, json.dumps({"ok": True, "message": "已提交部署请求"}, ensure_ascii=False))
+
+    def _handle_app_deploy_status(self):
+        identity, error, code = self._app_identity_from_header()
+        if error:
+            self._send(code, json.dumps({"ok": False, "message": error}, ensure_ascii=False))
+            return
+        status = _read_json(STATUS_FILE)
+        current = _read_json(CURRENT_FILE)
+        lines = _tail_text(LOG_FILE).splitlines()[-LOG_LINES:]
+        self._send(
+            200,
+            json.dumps(
+                {
+                    "ok": True,
+                    "status": status,
+                    "current": current,
+                    "log": "\n".join(lines),
+                },
+                ensure_ascii=False,
+            ),
+        )
 
 
 def main():

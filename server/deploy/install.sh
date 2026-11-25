@@ -100,13 +100,11 @@ if [[ -z "${APP_SECRET}" ]]; then
 fi
 
 cat > "${PANEL_CONF}" <<EOF
-# 由 install.sh 生成；账号保存在 ${PANEL_HOME}/accounts.json
+# 由 install.sh 生成
 PANEL_PORT=3999
-PANEL_ALLOWED_USERS=tutnt,zhl
 PANEL_APP_URL=http://127.0.0.1:3000
 PANEL_APP_SECRET=${APP_SECRET}
 PANEL_QUEUE_DIR=${PANEL_HOME}
-PANEL_ACCOUNTS_FILE=${PANEL_HOME}/accounts.json
 PANEL_STATUS_FILE=${DEPLOY_STATE_DIR}/status.json
 PANEL_CURRENT_FILE=${DEPLOY_STATE_DIR}/current.json
 PANEL_LOG_FILE=/var/log/huiyingzhai-deploy.log
@@ -120,8 +118,6 @@ install -m 755 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.sh" \
 install -d -m 755 /usr/local/lib/huiyingzhai
 install -m 755 "${REPO_ROOT}/server/deploy/deploy_panel.py" \
   /usr/local/lib/huiyingzhai/deploy_panel.py
-install -m 755 "${REPO_ROOT}/server/deploy/manage_accounts.py" \
-  /usr/local/lib/huiyingzhai/manage_accounts.py
 
 install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.service" \
   /etc/systemd/system/huiyingzhai-deploy.service
@@ -129,18 +125,6 @@ install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.path" \
   /etc/systemd/system/huiyingzhai-deploy.path
 install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-panel.service" \
   /etc/systemd/system/huiyingzhai-panel.service
-
-ACCOUNTS_FILE="${PANEL_HOME}/accounts.json"
-ACCOUNT_INFO=""
-if [[ ! -f "${ACCOUNTS_FILE}" ]]; then
-  ACCOUNT_INFO="$(runuser -u "${PANEL_USER}" -- \
-    env PANEL_ACCOUNTS_FILE="${ACCOUNTS_FILE}" \
-    python3 /usr/local/lib/huiyingzhai/manage_accounts.py init tutnt zhl)"
-fi
-ACCOUNT_SUMMARY="$(printf '%s\n' "${ACCOUNT_INFO}" | sed 's/^/    /')"
-if [[ -z "${ACCOUNT_SUMMARY}" ]]; then
-  ACCOUNT_SUMMARY="    账号文件已存在，未修改：${ACCOUNTS_FILE}"
-fi
 
 rm -f "${PANEL_HOME}/deploy.request"
 systemctl daemon-reload
@@ -190,12 +174,11 @@ cat <<EOF
 ==> 个人主页与部署面板已安装
   个人主页：https://<你的域名>/（Nginx 需包含 location = / 反代）
   部署页：  https://<你的域名>/deploy/
-  登录账号（登录后可修改密码）：
-${ACCOUNT_SUMMARY}
-  账号管理：python3 /usr/local/lib/huiyingzhai/manage_accounts.py
+  网页数据上传：小程序「我的」复制上传链接，浏览器用姓名 + 学号登录
+  部署控制台：小程序「我的」→ 部署控制台（仅管理员）
   面板配置：${PANEL_CONF}（600）
   部署参数：${DEPLOY_CONF}（600，可改仓库/分支/镜像）
   部署日志：/var/log/huiyingzhai-deploy.log
 
-  账号密码只保存 PBKDF2 哈希；修改密码请登录后在部署页操作。
+  网页登录身份来自小程序用户表，不再使用独立网页账号。
 EOF
