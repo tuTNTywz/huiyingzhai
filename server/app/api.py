@@ -6,11 +6,9 @@ from typing import Any, Optional
 
 from . import db as store
 from . import robot
-from .config import config
 from .files import delete_uploads
-from .push import push_subscribe_message
 
-# 学科板块白名单（与小程序端 utils/subjects.js 保持一致）
+# 学科板块白名单（与网页版保持一致）
 SUBJECT_KEYS = [
     "english",
     "math",
@@ -23,7 +21,7 @@ SUBJECT_KEYS = [
     "career",
 ]
 
-# 科目名称（与小程序端 utils/subjects.js 保持一致），用于推送消息备注
+# 科目名称（与网页版保持一致）
 SUBJECT_NAMES = {
     "english": "大学英语",
     "math": "高等数学",
@@ -114,48 +112,17 @@ def _to_ms(value: Any) -> int:
     return _int(value)
 
 
-# 班级作业推送：作业名称栏显示「班级作业：标题」，点击进入作业详情
-async def push_homework_notice(
-    *, homework_id: str, title: str, deadline: Any, content: Any, publisher_openid: str
-) -> None:
-    await push_subscribe_message(
-        page=f"pages/homework/detail?id={homework_id}",
-        title=f"班级作业：{title or ''}",
-        time=deadline,
-        remark=content,
-        exclude_openid=publisher_openid,
-    )
-
-
-# 学科任务推送：作业名称栏显示「科目名：标题」，点击进入对应学科板块
-async def push_subject_task_notice(
-    *, subject: str, title: str, deadline: Any, content: Any, publisher_openid: str
-) -> None:
-    await push_subscribe_message(
-        page=f"pages/subject/index?key={subject}",
-        title=f"{SUBJECT_NAMES.get(subject, '科目任务')}：{title or ''}",
-        time=deadline or _now_ms(),
-        remark=content,
-        exclude_openid=publisher_openid,
-    )
-
-
 # 未注册用户仍可浏览读接口，写操作一律拦截
 WRITE_ACTIONS = {
-    "setNickname",
-    "saveSubjectSettings",
     "publishSubjectTask",
     "deleteSubjectTask",
     "publishHomework",
     "deleteHomework",
-    "subscribeHomework",
-    "unsubscribeHomework",
     "publishActivity",
     "publishVolunteer",
     "deleteActivity",
     "createPost",
     "createReply",
-    "deletePost",
 }
 
 
@@ -163,94 +130,8 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
     data = data if isinstance(data, dict) else {}
     openid = user.get("_openid")
 
-    # 部署自检：小程序端可用 { action: "ping" } 验证服务是否正常
-    if action == "ping":
-        return {"ok": True, "pong": True, "openid": openid, "time": _now_ms()}
-
-    if action == "login":
-        return {"ok": True, "user": user, "registered": bool(user.get("registered"))}
-
     if action in WRITE_ACTIONS and not user.get("registered"):
-        return {"ok": False, "msg": "请先完成入斋登记"}
-
-    # ===== 学籍登记 =====
-    if action == "register":
-        name = _trim(data.get("name"))
-        student_id = _trim(data.get("studentId"))
-        class_name = _trim(data.get("className"))
-        if not name or not student_id or not class_name:
-            return {"ok": False, "msg": "请完整填写姓名、学号与班级"}
-
-        # 学号唯一，防止冒用他人学籍
-        duplicate = store.find(
-            "users",
-            lambda u: u.get("studentId") == student_id and u.get("_openid") != openid,
-        )
-        if duplicate:
-            return {"ok": False, "msg": "该学号已被注册"}
-
-        # 职务以数据库 roster 集合为准：学号命中则取库内职务，否则为普通同学
-        roster = store.find_one("roster", lambda r: r.get("studentId") == student_id)
-        position = (roster or {}).get("position") or "普通同学"
-        # 管理员/班长职务 → admin；其余班委职务 → committee
-        if position in ("管理员", "班长"):
-            role = "admin"
-        elif position == "普通同学":
-            role = "student"
-        else:
-            role = "committee"
-
-        updated = store.update(
-            "users",
-            user.get("_id"),
-            {
-                "name": name,
-                "studentId": student_id,
-                "className": class_name,
-                "position": position,
-                "role": role,
-                "nickname": name,
-                "registered": True,
-                "updateTime": _now_ms(),
-            },
-        )
-        return {"ok": True, "registered": True, "user": updated}
-
-    if action == "setNickname":
-        updated = store.update(
-            "users", user.get("_id"), {"nickname": _trim(data.get("nickname"))}
-        )
-        return {"ok": True, "user": updated}
-
-    # ===== 名单查询（登记页 / 我的 / 学科板块共用） =====
-    if action == "lookupRoster":
-        student_id = _trim(data.get("studentId"))
-        if not student_id:
-            return {"ok": True, "item": None}
-        item = store.find_one("roster", lambda r: r.get("studentId") == student_id)
-        return {"ok": True, "item": item}
-
-    # ===== 课程设置：仅管理员统一编辑 =====
-    if action == "saveSubjectSettings":
-        if user.get("role") != "admin":
-            return {"ok": False, "msg": "仅管理员可编辑课程设置"}
-        key = _str(data.get("subject"))
-        if key not in SUBJECT_KEYS:
-            return {"ok": False, "msg": "板块不存在"}
-        payload = {
-            "subject": key,
-            "teacher": _trim(data.get("teacher")),
-            "credit": _trim(data.get("credit")),
-            "schedule": _trim(data.get("schedule")),
-            "updaterName": user.get("nickname"),
-            "updateTime": _now_ms(),
-        }
-        exist = store.find_one("subject_settings", lambda s: s.get("subject") == key)
-        if exist:
-            store.update("subject_settings", exist.get("_id"), payload)
-        else:
-            store.insert("subject_settings", payload)
-        return {"ok": True, "settings": payload}
+        return {"ok": False, "msg": "请先登录"}
 
     if action == "getSubjectSettings":
         key = _str(data.get("subject"))
@@ -315,14 +196,6 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
         except Exception as exc:
             print("学科任务站内通知写入失败", exc)
 
-        # 微信服务通知：已订阅的同学收到学科任务提醒（发布者除外）
-        await push_subject_task_notice(
-            subject=subject,
-            title=title,
-            deadline=deadline,
-            content=content,
-            publisher_openid=openid,
-        )
         robot.notify_subject_task(
             subject_name=SUBJECT_NAMES.get(subject, subject),
             title=title,
@@ -401,13 +274,6 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                     "createTime": _now_ms(),
                 },
             )
-            await push_homework_notice(
-                homework_id=homework["_id"],
-                title=title,
-                deadline=deadline,
-                content=desc,
-                publisher_openid=openid,
-            )
         except Exception as exc:
             print("作业通知失败", exc)
         robot.notify_homework(
@@ -443,38 +309,6 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
         )
         # 删除附件
         await remove_files([homework])
-        return {"ok": True}
-
-    # 同学点击「开启作业提醒」授权后，登记一次可推送次数
-    if action == "subscribeHomework":
-        if not config.homework_tmpl_id:
-            return {"ok": False, "msg": "尚未配置订阅消息模板 ID"}
-        exist = store.find_one("subscriptions", lambda s: s.get("_openid") == openid)
-        if exist:
-            store.update(
-                "subscriptions",
-                exist.get("_id"),
-                {
-                    "remain": _int(exist.get("remain")) + 1,
-                    "updateTime": _now_ms(),
-                },
-            )
-        else:
-            store.insert(
-                "subscriptions",
-                {"_openid": openid, "remain": 1, "createTime": _now_ms()},
-            )
-        return {"ok": True}
-
-    # 关闭作业提醒：剩余推送次数清零（微信侧授权无法撤销，仅服务端不再推送）
-    if action == "unsubscribeHomework":
-        exist = store.find_one("subscriptions", lambda s: s.get("_openid") == openid)
-        if exist:
-            store.update(
-                "subscriptions",
-                exist.get("_id"),
-                {"remain": 0, "updateTime": _now_ms()},
-            )
         return {"ok": True}
 
     # 通知中心：站内通知统一由服务端返回
@@ -522,12 +356,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                     item["contact"] = doc.get("contact")
                     item["signupUrl"] = doc.get("signupUrl")
             notices.append(item)
-        sub = store.find_one("subscriptions", lambda s: s.get("_openid") == openid)
-        return {
-            "ok": True,
-            "list": notices,
-            "pushRemain": _int(sub.get("remain")) if sub else 0,
-        }
+        return {"ok": True, "list": notices}
 
     # ===== 活动栏目：班委或管理员发布 =====
     if action == "publishActivity":
@@ -738,24 +567,6 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             post.get("_id"),
             {"replyCount": _int(post.get("replyCount")) + 1},
         )
-        return {"ok": True}
-
-    if action == "deletePost":
-        post = get_doc_or_none("posts", data.get("id"))
-        if not post:
-            return {"ok": False, "msg": "帖子不存在"}
-        if post.get("_openid") != openid and not is_manager(user):
-            return {"ok": False, "msg": "只能删除自己的帖子"}
-
-        replies = store.find(
-            "post_replies", lambda r: r.get("postId") == post.get("_id"), limit=1000
-        )
-        store.remove("posts", post.get("_id"))
-        store.remove_where(
-            "post_replies", lambda r: r.get("postId") == post.get("_id")
-        )
-        # 帖子与全部回复的附件一并清理
-        await remove_files([post, *replies])
         return {"ok": True}
 
     return {"ok": False, "msg": "未知操作"}

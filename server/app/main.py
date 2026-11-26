@@ -25,10 +25,6 @@ async def lifespan(_app: FastAPI):
     print(f"对外地址：{config.base_url or '未配置（请填写 BASE_URL）'}")
     print(f"数据目录：{config.data_dir}")
     print(f"附件目录：{config.upload_dir}")
-    if config.dev_mode:
-        print(
-            f"当前为开发模式：登录固定使用 openid={config.dev_openid}（不会请求微信服务器）"
-        )
     yield
 
 
@@ -66,7 +62,7 @@ def _require_user(request: Request):
     openid, user = auth.resolve_user(_bearer_token(request))
     if not openid:
         return None, JSONResponse(
-            {"ok": False, "msg": "登录已过期，请重新进入小程序"}, status_code=401
+            {"ok": False, "msg": "登录已过期，请重新登录"}, status_code=401
         )
     if not user:
         return None, JSONResponse(
@@ -81,8 +77,6 @@ async def health():
         "ok": True,
         "time": store.now_ms(),
         "baseUrl": config.base_url or None,
-        "devMode": config.dev_mode,
-        "push": bool(config.homework_tmpl_id and config.appid and config.secret),
     }
 
 
@@ -139,7 +133,7 @@ def _subject_list() -> list[dict]:
 
 
 # 网页数据上传页专用：用共享密钥换取某个学号的会话
-# 小程序客户端已移除：名单内的学号首次登录时自动派生网页身份，无需微信 openid
+# 名单内的学号首次登录时自动派生网页身份
 @app.post("/api/web/token")
 async def web_token(request: Request):
     if not _panel_secret_ok(request):
@@ -194,93 +188,8 @@ async def web_token(request: Request):
     }
 
 
-# 网页数据上传页专用：同步班委 / 课代表名单及注册身份
-@app.get("/api/web/committee")
-async def web_committee(request: Request):
-    if not _panel_secret_ok(request):
-        return JSONResponse({"ok": False, "msg": "网页上传未启用"}, status_code=403)
-    rows = []
-    for item in store.find("roster"):
-        position = str(item.get("position") or "").strip()
-        reps = item.get("repSubjects") if isinstance(item.get("repSubjects"), list) else []
-        if (not position or position == "普通同学") and not reps:
-            continue
-        student_id = str(item.get("studentId") or "")
-        user = store.find_one(
-            "users", lambda u, sid=student_id: u.get("studentId") == sid
-        )
-        rows.append(
-            {
-                "studentId": student_id,
-                "name": item.get("name") or "",
-                "className": item.get("className") or "",
-                "position": position,
-                "repSubjects": reps,
-                "registered": bool(user and user.get("registered")),
-                "role": (user or {}).get("role") or "",
-            }
-        )
-    rows.sort(
-        key=lambda row: (
-            0 if row.get("role") in ("admin", "committee") else 1,
-            str(row.get("studentId") or ""),
-        )
-    )
-    return {"ok": True, "list": rows, "subjects": _subject_list()}
-
-
-# 网页上传页：用小程序 token 换取当前身份（web-view 自动登录）
-@app.get("/api/web/me")
-async def web_me(request: Request):
-    user, error = _require_user(request)
-    if error:
-        return error
-    if not user.get("registered"):
-        return {"ok": False, "msg": "请先在小程序完成登记"}
-    student_id = str(user.get("studentId") or "")
-    roster = store.find_one("roster", lambda r: r.get("studentId") == student_id)
-    return {
-        "ok": True,
-        "user": user,
-        "roster": roster,
-        "repSubjects": (roster or {}).get("repSubjects") or [],
-        "subjects": _subject_list(),
-    }
-
-
-# 微信登录：code 换 openid，首次登录自动建档
-@app.post("/api/login")
-async def login(request: Request):
-    body = await _json_body(request)
-    try:
-        result = await auth.code2session(str(body.get("code") or ""))
-        openid = result["openid"]
-        user = store.find_one("users", lambda u: u.get("_openid") == openid)
-        if not user:
-            user = store.insert(
-                "users",
-                {
-                    "_openid": openid,
-                    "nickname": "同窗",
-                    "role": "student",
-                    "registered": False,
-                    "createTime": store.now_ms(),
-                },
-            )
-        store.cleanup_sessions()
-        token = store.create_session(openid)
-        return {
-            "ok": True,
-            "token": token,
-            "user": user,
-            "registered": bool(user.get("registered")),
-        }
-    except Exception as exc:
-        print("登录失败", exc)
-        return {"ok": False, "msg": str(exc) or "登录失败，请稍后重试"}
-
-
-# 业务接口：与小程序端约定 { action, data }
+# 业务接口：网页通过分享密钥换取会话后调用
+# 业务接口：网页版与上传页共用 { action, data }
 @app.post("/api/action")
 async def action(request: Request):
     user, error = _require_user(request)
@@ -316,19 +225,6 @@ async def upload(
     except Exception as exc:
         print("保存附件失败", exc)
         return {"ok": False, "msg": str(exc) or "附件上传失败"}
-
-
-@app.post("/api/deleteFiles")
-async def delete_files(request: Request):
-    _user, error = _require_user(request)
-    if error:
-        return error
-    try:
-        body = await _json_body(request)
-        await files.delete_uploads(body.get("fileList"))
-        return {"ok": True}
-    except Exception:
-        return {"ok": False, "msg": "附件删除失败"}
 
 
 # 附件静态目录：图片可直接预览，其它类型强制下载，避免被当作网页执行

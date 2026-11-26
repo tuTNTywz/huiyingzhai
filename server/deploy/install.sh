@@ -138,7 +138,7 @@ systemctl enable huiyingzhai-deploy.path
 systemctl restart huiyingzhai-deploy.path
 systemctl enable huiyingzhai-panel.service
 systemctl restart huiyingzhai-panel.service
-# 让小程序后端加载共享密钥 / 新代码
+# 让后端加载共享密钥 / 新代码
 systemctl restart huiyingzhai
 
 if ! systemctl is-active --quiet huiyingzhai-panel.service; then
@@ -151,7 +151,7 @@ if [[ "${NEED_ENV}" -eq 1 ]]; then
 部署脚本已完成，但还需要：
 
 1. 编辑环境变量：sudo nano ${TARGET}/.env
-   填写 WX_APPID、WX_SECRET、BASE_URL，并将 WX_PUSH_STATE 设为实际版本
+   填写 BASE_URL；按需填写班级通知机器人配置
 2. 修改 Nginx 配置并启用：
    sudo cp ${TARGET}/deploy/nginx.conf /etc/nginx/sites-available/huiyingzhai
    sudo nano /etc/nginx/sites-available/huiyingzhai   # 替换 api.example.com
@@ -179,15 +179,14 @@ cat <<EOF
 
 ==> 个人主页与部署面板已安装
   个人主页：https://<你的域名>/（Nginx 需包含 location = / 反代）
-  小程序网页版：https://<你的域名>/huiyingzhai/（姓名 + 学号登录）
-  部署页：  https://<你的域名>/deploy/
-  网页数据上传：小程序「我的」复制上传链接，浏览器用姓名 + 学号登录
-  部署控制台：小程序「我的」→ 部署控制台（仅管理员）
+  网页版：  https://<你的域名>/huiyingzhai/（姓名 + 学号登录）
+  发布页：  https://<你的域名>/upload/（班委/课代表）
+  部署页：  https://<你的域名>/deploy/（管理员）
   面板配置：${PANEL_CONF}（600）
   部署参数：${DEPLOY_CONF}（600，可改仓库/分支/镜像）
   部署日志：/var/log/huiyingzhai-deploy.log
 
-  网页登录身份来自小程序用户表，不再使用独立网页账号。
+  网页登录按班级名单校验姓名 + 学号，名单内首次登录自动开户。
   班级通知机器人（可选）：微信填 PUSHPLUS_TOKEN + PUSHPLUS_TOPIC；
   QQ 官方机器人填 QQ_APP_ID + QQ_APP_SECRET + QQ_BOT_SECRET，重启 huiyingzhai。
 EOF

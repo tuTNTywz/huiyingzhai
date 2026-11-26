@@ -10,7 +10,6 @@
 /var/lib/huiyingzhai-panel/deploy.request，
 由 root 的 systemd path 单元触发 /usr/local/sbin/huiyingzhai-deploy 执行实际部署。
 
-账号保存在 /var/lib/huiyingzhai-panel/accounts.json，密码只存 PBKDF2 哈希。
 """
 from __future__ import annotations
 
@@ -20,7 +19,6 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore", DeprecationWarning)
     import cgi
 
-import hashlib
 import hmac
 import http.client
 import json
@@ -35,10 +33,6 @@ from urllib.parse import parse_qs, urlparse
 
 PORT = int(os.environ.get("PANEL_PORT") or "3999")
 QUEUE_DIR = Path(os.environ.get("PANEL_QUEUE_DIR") or "/var/lib/huiyingzhai-panel")
-ACCOUNTS_FILE = Path(
-    os.environ.get("PANEL_ACCOUNTS_FILE")
-    or "/var/lib/huiyingzhai-panel/accounts.json"
-)
 STATUS_FILE = Path(
     os.environ.get("PANEL_STATUS_FILE") or "/var/lib/huiyingzhai-deploy/status.json"
 )
@@ -55,9 +49,6 @@ APP_SECRET = (os.environ.get("PANEL_APP_SECRET") or "").strip()
 
 SESSION_COOKIE = "hyz_session"
 SESSION_TTL = 12 * 3600
-PBKDF2_ITERATIONS = 600_000
-MIN_PASSWORD_LEN = 6
-MAX_PASSWORD_LEN = 128
 LOGIN_MAX_FAILURES = 10
 LOGIN_WINDOW_SECONDS = 300
 MAX_LOG_BYTES = 64 * 1024
@@ -71,7 +62,6 @@ CSP = (
     "form-action 'none'; frame-ancestors 'none'"
 )
 
-_accounts_lock = threading.RLock()
 _sessions_lock = threading.Lock()
 _deploy_lock = threading.Lock()
 _login_lock = threading.Lock()
@@ -103,83 +93,6 @@ def _tail_text(path: Path, max_bytes: int = MAX_LOG_BYTES) -> str:
         return raw.decode("utf-8", "replace")
     except OSError:
         return ""
-
-
-# ---------- 账号 ----------
-
-
-DEFAULT_ALLOWED_USERS = ("tutnt", "zhl")
-
-
-def allowed_users() -> set[str]:
-    raw = os.environ.get("PANEL_ALLOWED_USERS") or ",".join(DEFAULT_ALLOWED_USERS)
-    return {part.strip() for part in raw.replace(" ", ",").split(",") if part.strip()}
-
-
-def load_accounts() -> dict:
-    try:
-        with ACCOUNTS_FILE.open("r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
-        return {}
-    users = data.get("users") if isinstance(data, dict) else None
-    return users if isinstance(users, dict) else {}
-
-
-def make_record(password: str) -> dict:
-    salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8"), bytes.fromhex(salt), PBKDF2_ITERATIONS
-    )
-    return {
-        "salt": salt,
-        "hash": digest.hex(),
-        "iterations": PBKDF2_ITERATIONS,
-        "perms": list(DEFAULT_PERMS),
-        "updatedAt": _now_ms(),
-    }
-
-
-def verify_password(record: dict, password: str) -> bool:
-    try:
-        salt = str(record["salt"])
-        expected = str(record["hash"])
-        iterations = int(record.get("iterations") or PBKDF2_ITERATIONS)
-        digest = hashlib.pbkdf2_hmac(
-            "sha256", password.encode("utf-8"), bytes.fromhex(salt), iterations
-        )
-        return hmac.compare_digest(digest.hex(), expected)
-    except (KeyError, TypeError, ValueError):
-        return False
-
-
-def save_accounts(users: dict) -> None:
-    ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = ACCOUNTS_FILE.with_name(ACCOUNTS_FILE.name + ".tmp")
-    payload = {"version": 1, "users": users}
-    with _accounts_lock:
-        with tmp.open("w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=2)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, ACCOUNTS_FILE)
-
-
-DEFAULT_PERMS = ("upload", "download")
-
-
-def user_perms(username: str) -> list[str]:
-    if username not in allowed_users():
-        return []
-    record = load_accounts().get(username) or {}
-    perms = record.get("perms")
-    if isinstance(perms, list):
-        return [str(p) for p in perms if p in DEFAULT_PERMS]
-    # 兼容旧账号文件：默认开放上传和下载
-    return list(DEFAULT_PERMS)
-
-
-def has_perm(username: str, perm: str) -> bool:
-    return perm in user_perms(username)
 
 
 # ---------- 页面内容（项目介绍 / 使用说明书） ----------
@@ -229,7 +142,7 @@ def save_page_bytes(slug: str, data: bytes) -> None:
     os.replace(tmp, page_path(slug))
 
 
-# ---------- 小程序网页版 ----------
+# ---------- 网页版 ----------
 
 WEB_HTML_PATH = Path(__file__).resolve().with_name("huiyingzhai_web.html")
 
@@ -367,7 +280,7 @@ def inject_page_toolbar(content: bytes, slug: str) -> bytes:
     return text.encode("utf-8")
 
 
-# ---------- 小程序后端 ----------
+# ---------- 后端接口 ----------
 
 
 def _app_conn(timeout: int = 20):
@@ -395,7 +308,7 @@ def app_json(path: str, payload=None, token: str = "", method: str = ""):
         raw = resp.read()
         status = resp.status
     except OSError as exc:
-        return 502, {"ok": False, "msg": "无法连接小程序后端：%s" % exc}
+        return 502, {"ok": False, "msg": "无法连接后端：%s" % exc}
     finally:
         conn.close()
     try:
@@ -418,7 +331,7 @@ def app_upload(raw: bytes, content_type: str, token: str):
         body = resp.read()
         status = resp.status
     except OSError as exc:
-        return 502, {"ok": False, "msg": "无法连接小程序后端：%s" % exc}
+        return 502, {"ok": False, "msg": "无法连接后端：%s" % exc}
     finally:
         conn.close()
     try:
@@ -448,14 +361,7 @@ def fetch_app_identity(student_id: str):
     status, data = app_json("/api/web/token", {"studentId": student_id})
     if status == 200 and data.get("ok"):
         return data, ""
-    return None, data.get("msg") or "无法同步小程序身份（检查共享密钥）"
-
-
-def fetch_app_committee():
-    status, data = app_json("/api/web/committee", method="GET")
-    if status == 200 and data.get("ok"):
-        return data.get("list") or [], data.get("subjects") or [], ""
-    return [], [], data.get("msg") or "无法读取班委/课代表名单"
+    return None, data.get("msg") or "无法同步班级身份（检查共享密钥）"
 
 
 # ---------- 会话 ----------
@@ -478,8 +384,8 @@ def create_session(username: str, app_token: str = "", identity=None) -> tuple[s
 
 
 def refresh_app_token(record: dict) -> str:
-    account = load_accounts().get(record.get("user") or "") or {}
-    student_id = str(account.get("studentId") or "").strip()
+    identity = record.get("identity") or {}
+    student_id = str(identity.get("studentId") or "").strip()
     if not student_id:
         return ""
     data, _err = fetch_app_identity(student_id)
@@ -514,16 +420,6 @@ def get_session(token: str):
 def drop_session(token: str) -> None:
     with _sessions_lock:
         _sessions.pop(token, None)
-
-
-def drop_user_sessions(username: str, keep: str | None = None) -> None:
-    with _sessions_lock:
-        for token in [
-            token
-            for token, record in _sessions.items()
-            if record.get("user") == username and token != keep
-        ]:
-            _sessions.pop(token, None)
 
 
 def _login_rate_ok(ip: str) -> bool:
@@ -731,100 +627,92 @@ MANUAL_HTML = """<!doctype html>
 <title>汇英斋使用说明书</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { color-scheme: light dark; --brown: #9c6b4a; --ink: #3f3a32; --muted: #8a8478; --paper: #f5f1e8; --card: #fffaf2; --line: #e8ddcc; }
+  :root { color-scheme: light dark; --brown:#9c6b4a; --ink:#3f3a32; --muted:#8a8478; --paper:#f5f1e8; --card:#fffaf2; --line:#e8ddcc; }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  body { margin: 0; font: 16px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; color: var(--ink); background: var(--paper); }
-  .hero { position: relative; min-height: 62vh; display: grid; place-items: center; overflow: hidden; text-align: center; padding: 70px 20px 90px; background: radial-gradient(circle at 50% 20%, #fffdf8 0%, #f7f1e6 48%, #efe6d7 100%); }
-  .orb { position: absolute; border-radius: 50%; filter: blur(46px); opacity: .55; pointer-events: none; }
-  .orb-a { width: 300px; height: 300px; background: #e8c9a8; top: -60px; left: -50px; animation: drift 11s ease-in-out infinite; }
-  .orb-b { width: 260px; height: 260px; background: #d9e3d0; bottom: -70px; right: -40px; animation: drift 13s ease-in-out infinite reverse; }
-  .hero-inner { position: relative; z-index: 1; animation: rise .9s cubic-bezier(.2,.7,.2,1) both; }
-  .seal { width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 24px; background: linear-gradient(145deg, #ad7a55, #8f5f3f); color: #fff; font-size: 32px; font-weight: 700; box-shadow: 0 14px 34px rgba(156,107,74,.3); animation: float 4.5s ease-in-out infinite; }
-  .hero h1 { margin: 0 0 10px; font-size: clamp(30px, 6vw, 50px); letter-spacing: -.02em; font-family: "Songti SC", "Noto Serif CJK SC", serif; }
-  .hero-sub { margin: 0 0 26px; color: var(--muted); letter-spacing: .12em; font-size: 14px; }
-  .hero-back { display: inline-block; padding: 10px 22px; border-radius: 999px; border: 1px solid #d8c9b5; color: #6f6153; text-decoration: none; font-size: 14px; transition: .2s; }
-  .hero-back:hover { background: #fff; border-color: var(--brown); color: var(--brown); transform: translateY(-2px); }
-  .scroll-hint { margin-top: 26px; color: #a99c8b; font-size: 12px; letter-spacing: .2em; animation: breathe 2.4s ease-in-out infinite; }
-  .toc { position: sticky; top: 0; z-index: 10; display: flex; gap: 8px; overflow-x: auto; padding: 12px 18px; background: rgba(245,241,232,.9); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); scrollbar-width: none; }
-  .toc::-webkit-scrollbar { display: none; }
-  .toc a { flex: none; padding: 6px 14px; border-radius: 999px; background: #fffaf2; border: 1px solid var(--line); color: #6f6153; text-decoration: none; font-size: 13px; white-space: nowrap; transition: .2s; }
-  .toc a:hover { background: var(--brown); border-color: var(--brown); color: #fff; }
-  main { max-width: 980px; margin: 0 auto; padding: 38px 18px 70px; }
-  .section { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 26px clamp(18px, 4vw, 38px); margin: 0 0 22px; box-shadow: 0 12px 36px rgba(120, 95, 65, .06); }
-  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); }
-  .reveal.in { opacity: 1; transform: none; }
-  .sec-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
-  .sec-num { flex: none; width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: #f2e6d7; color: var(--brown); font-weight: 700; font-size: 14px; letter-spacing: .04em; }
-  .sec-head h2 { margin: 0; font-size: 21px; letter-spacing: -.01em; font-family: "Songti SC", "Noto Serif CJK SC", serif; }
-  .section p { margin: 0 0 12px; }
-  .section p:last-child { margin-bottom: 0; }
-  .steps { display: grid; gap: 14px; margin: 6px 0 4px; }
-  .step { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
-  .step-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #fff; border: 1px solid #dfcfba; color: var(--brown); font-size: 13px; font-weight: 700; }
-  .step b { display: block; margin-bottom: 2px; font-size: 15px; }
-  .step p { margin: 0; color: #6f675d; font-size: 14px; }
-  .tip { margin-top: 16px; padding: 12px 15px; background: #f7efe2; border-left: 3px solid #c1936c; border-radius: 0 10px 10px 0; color: #6f5a45; font-size: 14px; }
-  .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 6px; }
-  .role { padding: 16px; border-radius: 14px; background: #fff; border: 1px solid var(--line); transition: transform .2s, box-shadow .2s; }
-  .role:hover { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(120,95,65,.1); }
-  .role h3 { margin: 0 0 6px; font-size: 15px; color: var(--brown); }
-  .role p { margin: 0; font-size: 13px; color: #6f675d; }
-  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .tag { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #f2e6d7; color: #7d5a40; }
-  .faq-item { border-bottom: 1px dashed #e2d5c2; }
-  .faq-item:last-child { border-bottom: 0; }
-  .faq-q { width: 100%; display: flex; justify-content: space-between; gap: 14px; align-items: center; padding: 14px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-  .faq-q span { color: var(--brown); font-size: 18px; transition: transform .3s; }
-  .faq-a { max-height: 0; overflow: hidden; transition: max-height .38s ease, padding .38s ease; color: #6f675d; font-size: 14px; }
-  .faq-item.open .faq-a { max-height: 600px; padding-bottom: 12px; }
-  .faq-item.open .faq-q span { transform: rotate(45deg); }
-  footer { text-align: center; padding: 30px 18px 50px; color: #9a8f80; font-size: 12px; letter-spacing: .08em; }
-  footer a { color: var(--brown); text-decoration: none; }
-  @keyframes rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
-  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-  @keyframes drift { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(26px, 18px) scale(1.08); } }
-  @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-  @media (max-width: 700px) {
-    .roles { grid-template-columns: 1fr; }
-    .hero { min-height: 54vh; padding: 54px 18px 70px; }
-    .section { padding: 22px 18px; border-radius: 16px; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    *, *::before, *::after { animation: none !important; transition: none !important; }
-    .reveal { opacity: 1; transform: none; }
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --ink: #ece4d8; --muted: #a99c8b; --paper: #14100d; --card: #1d1712; --line: #33281f; }
-    .hero { background: radial-gradient(circle at 50% 20%, #241b14 0%, #191410 48%, #100d0a 100%); }
-    .orb-a { background: #5a3f2b; } .orb-b { background: #33402f; }
-    .toc { background: rgba(20,16,13,.9); }
-    .toc a { background: #1d1712; color: #c9b9a6; }
-    .toc a:hover { background: var(--brown); color: #fff; }
-    .role { background: #241c16; }
-    .sec-num, .tag { background: #33261c; color: #dcb894; }
-    .step-num { background: #241c16; border-color: #4a3829; }
-    .step p, .role p, .faq-a { color: #b8aa99; }
-    .tip { background: #2a2119; color: #d9c2a8; border-left-color: #a97a54; }
-    .faq-item { border-bottom-color: #3a2d22; }
-    .hero-back { color: #c9b9a6; border-color: #4a3829; }
-    .hero-back:hover { background: #241c16; color: #e0b993; border-color: var(--brown); }
+  body { margin:0; font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif; color:var(--ink); background:var(--paper); }
+  .hero { position:relative; min-height:58vh; display:grid; place-items:center; overflow:hidden; text-align:center; padding:64px 20px 80px; background:radial-gradient(circle at 50% 20%, #fffdf8 0%, #f7f1e6 48%, #efe6d7 100%); }
+  .orb { position:absolute; border-radius:50%; filter:blur(46px); opacity:.55; pointer-events:none; }
+  .orb-a { width:300px; height:300px; background:#e8c9a8; top:-60px; left:-50px; animation:drift 11s ease-in-out infinite; }
+  .orb-b { width:260px; height:260px; background:#d9e3d0; bottom:-70px; right:-40px; animation:drift 13s ease-in-out infinite reverse; }
+  .hero-inner { position:relative; z-index:1; animation:rise .9s cubic-bezier(.2,.7,.2,1) both; }
+  .seal { width:74px; height:74px; border-radius:50%; display:grid; place-items:center; margin:0 auto 24px; background:linear-gradient(145deg,#ad7a55,#8f5f3f); color:#fff; font-size:32px; font-weight:700; box-shadow:0 14px 34px rgba(156,107,74,.3); animation:float 4.5s ease-in-out infinite; }
+  .hero h1 { margin:0 0 10px; font-size:clamp(30px,6vw,50px); letter-spacing:-.02em; font-family:"Songti SC","Noto Serif CJK SC",serif; }
+  .hero-sub { margin:0 0 26px; color:var(--muted); letter-spacing:.12em; font-size:14px; }
+  .hero-back { display:inline-block; padding:10px 22px; border-radius:999px; border:1px solid #d8c9b5; color:#6f6153; text-decoration:none; font-size:14px; transition:.2s; }
+  .hero-back:hover { background:#fff; border-color:var(--brown); color:var(--brown); transform:translateY(-2px); }
+  .scroll-hint { margin-top:26px; color:#a99c8b; font-size:12px; letter-spacing:.2em; animation:breathe 2.4s ease-in-out infinite; }
+  .toc { position:sticky; top:0; z-index:10; display:flex; gap:8px; overflow-x:auto; padding:12px 18px; background:rgba(245,241,232,.9); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); scrollbar-width:none; }
+  .toc::-webkit-scrollbar { display:none; }
+  .toc a { flex:none; padding:6px 14px; border-radius:999px; background:#fffaf2; border:1px solid var(--line); color:#6f6153; text-decoration:none; font-size:13px; white-space:nowrap; transition:.2s; }
+  .toc a:hover { background:var(--brown); border-color:var(--brown); color:#fff; }
+  main { max-width:980px; margin:0 auto; padding:38px 18px 20px; }
+  .section { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:26px clamp(18px,4vw,38px); margin:0 0 22px; box-shadow:0 12px 36px rgba(120,95,65,.06); }
+  .reveal { opacity:0; transform:translateY(26px); transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity:1; transform:none; }
+  .sec-head { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .sec-num { flex:none; width:42px; height:42px; border-radius:14px; display:grid; place-items:center; background:#f2e6d7; color:var(--brown); font-weight:700; font-size:14px; letter-spacing:.04em; }
+  .sec-head h2 { margin:0; font-size:21px; letter-spacing:-.01em; font-family:"Songti SC","Noto Serif CJK SC",serif; }
+  .section p { margin:0 0 12px; }
+  .section p:last-child { margin-bottom:0; }
+  .steps { display:grid; gap:14px; margin:6px 0 4px; }
+  .step { display:grid; grid-template-columns:32px 1fr; gap:12px; align-items:start; }
+  .step-num { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:#fff; border:1px solid #dfcfba; color:var(--brown); font-size:13px; font-weight:700; }
+  .step b { display:block; margin-bottom:2px; font-size:15px; }
+  .step p { margin:0; color:#6f675d; font-size:14px; }
+  .tip { margin-top:16px; padding:12px 15px; background:#f7efe2; border-left:3px solid #c1936c; border-radius:0 10px 10px 0; color:#6f5a45; font-size:14px; }
+  .roles { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:6px; }
+  .role { padding:16px; border-radius:14px; background:#fff; border:1px solid var(--line); transition:transform .2s, box-shadow .2s; }
+  .role:hover { transform:translateY(-3px); box-shadow:0 12px 26px rgba(120,95,65,.1); }
+  .role h3 { margin:0 0 6px; font-size:15px; color:var(--brown); }
+  .role p { margin:0; font-size:13px; color:#6f675d; }
+  .tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .tag { font-size:12px; padding:3px 10px; border-radius:999px; background:#f2e6d7; color:#7d5a40; }
+  table { width:100%; border-collapse:collapse; margin:8px 0 4px; font-size:14px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px dashed #e2d5c2; vertical-align:top; }
+  th { color:var(--brown); font-weight:600; }
+  .faq-item { border-bottom:1px dashed #e2d5c2; }
+  .faq-item:last-child { border-bottom:0; }
+  .faq-q { width:100%; display:flex; justify-content:space-between; gap:14px; align-items:center; padding:14px 0; border:0; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+  .faq-q span { color:var(--brown); font-size:18px; transition:transform .3s; }
+  .faq-a { max-height:0; overflow:hidden; transition:max-height .38s ease, padding .38s ease; color:#6f675d; font-size:14px; }
+  .faq-item.open .faq-a { max-height:600px; padding-bottom:12px; }
+  .faq-item.open .faq-q span { transform:rotate(45deg); }
+  .site-footer { text-align:center; padding:10px 18px 48px; color:#9a8f80; font-size:12px; letter-spacing:.06em; }
+  .site-footer a { color:var(--brown); text-decoration:none; }
+  @keyframes rise { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
+  @keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
+  @keyframes drift { 0%,100% { transform:translate(0,0) scale(1); } 50% { transform:translate(26px,18px) scale(1.08); } }
+  @keyframes breathe { 0%,100% { opacity:.45; } 50% { opacity:1; } }
+  @media (max-width:700px) { .roles { grid-template-columns:1fr; } .hero { min-height:54vh; padding:54px 18px 70px; } .section { padding:22px 18px; border-radius:16px; } }
+  @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } *,*::before,*::after { animation:none !important; transition:none !important; } .reveal { opacity:1; transform:none; } }
+  @media (prefers-color-scheme:dark) {
+    :root { --ink:#ece4d8; --muted:#a99c8b; --paper:#14100d; --card:#1d1712; --line:#33281f; }
+    .hero { background:radial-gradient(circle at 50% 20%, #241b14 0%, #191410 48%, #100d0a 100%); }
+    .orb-a { background:#5a3f2b; } .orb-b { background:#33402f; }
+    .toc { background:rgba(20,16,13,.9); }
+    .toc a { background:#1d1712; color:#c9b9a6; }
+    .toc a:hover { background:var(--brown); color:#fff; }
+    .role { background:#241c16; }
+    .sec-num, .tag { background:#33261c; color:#dcb894; }
+    .step-num { background:#241c16; border-color:#4a3829; }
+    .step p, .role p, .faq-a, td { color:#b8aa99; }
+    .tip { background:#2a2119; color:#d9c2a8; border-left-color:#a97a54; }
+    .faq-item, th, td { border-bottom-color:#3a2d22; }
+    .hero-back { color:#c9b9a6; border-color:#4a3829; }
+    .hero-back:hover { background:#241c16; color:#e0b993; border-color:var(--brown); }
   }
 </style>
-<noscript><style>.reveal { opacity: 1; transform: none; } .faq-a { max-height: none; padding-bottom: 12px; }</style></noscript>
+<noscript><style>.reveal { opacity:1; transform:none; } .faq-a { max-height:none; padding-bottom:12px; }</style></noscript>
 </head>
 <body>
-<div style="background:#9c6b4a;color:#fff;text-align:center;padding:10px 16px;font-size:14px">
-  小程序客户端已下线，请使用 <a href="/huiyingzhai/" style="color:#fff;text-decoration:underline">网页版汇英斋</a>；以下为旧版操作说明。
-</div>
 <header class="hero">
   <div class="orb orb-a"></div>
   <div class="orb orb-b"></div>
   <div class="hero-inner">
     <div class="seal">斋</div>
     <h1>汇英斋 · 使用说明书</h1>
-    <p class="hero-sub">作业 · 活动 · 交流 · 班务，一册在手</p>
+    <p class="hero-sub">作业 · 活动 · 志愿 · 交流，一册在手</p>
     <a class="hero-back" href="/">← 返回主页</a>
     <div class="scroll-hint">向下滑动阅读 ↓</div>
   </div>
@@ -832,15 +720,15 @@ MANUAL_HTML = """<!doctype html>
 
 <nav class="toc" aria-label="目录">
   <a href="#start">快速开始</a>
-  <a href="#register">登记与身份</a>
-  <a href="#homework">作业簿</a>
-  <a href="#publish">发布作业</a>
+  <a href="#login">登录与身份</a>
+  <a href="#homework">作业</a>
   <a href="#activity">活动</a>
+  <a href="#volunteer">志愿活动</a>
   <a href="#forum">交流</a>
-  <a href="#subject">学科板块</a>
-  <a href="#notice">通知与提醒</a>
+  <a href="#notice">通知</a>
   <a href="#mine">我的</a>
-  <a href="#web">网页端</a>
+  <a href="#publish">发布内容</a>
+  <a href="#deploy">部署</a>
   <a href="#attach">附件规则</a>
   <a href="#faq">常见问题</a>
 </nav>
@@ -849,176 +737,162 @@ MANUAL_HTML = """<!doctype html>
   <section id="start" class="section reveal">
     <div class="sec-head"><span class="sec-num">01</span><h2>快速开始</h2></div>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>进入小程序</b><p>在微信中打开「汇英斋」小程序（老师或班委发的入口 / 二维码）。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>微信登录</b><p>首次进入会自动完成微信登录，无需注册账号密码。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>入斋登记</b><p>进入底部「我的」→「立即登记」，填写真实姓名和学号。班级会自动带出，职位按班级名单自动匹配。</p></div></div>
-      <div class="step"><span class="step-num">4</span><div><b>开始使用</b><p>登记完成后即可查看作业、活动、交流，并在「通知」里开启作业提醒。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>打开网页版</b><p>浏览器访问 <b>https://tutnt.com/huiyingzhai/</b>（或班级公布的域名）。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>姓名 + 学号登录</b><p>填写班级名单中的真实姓名和学号。名单内的学号首次登录会自动创建网页身份，无需单独注册。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><b>开始使用</b><p>顶部切换作业、活动、志愿活动、交流、通知和我的；手机和电脑浏览器都可以。</p></div></div>
     </div>
-    <div class="tip">学号与微信账号一一对应，请填写本人真实学号，不要冒用他人学籍。资料填错可随时在「我的」里修改。</div>
+    <div class="tip">学号必须与班级名单一致；姓名不匹配会被拒绝登录。不要使用他人学号。</div>
   </section>
 
-  <section id="register" class="section reveal">
-    <div class="sec-head"><span class="sec-num">02</span><h2>登记与身份</h2></div>
-    <p>登记只需要姓名和学号；班级由系统带出，职位由班级名单（roster）自动匹配。身份决定你能做什么：</p>
+  <section id="login" class="section reveal">
+    <div class="sec-head"><span class="sec-num">02</span><h2>登录与身份</h2></div>
+    <p>登录只需要姓名和学号；班级、职位和负责科目由班级名单自动带出。身份决定你能查看和发布什么：</p>
     <div class="roles">
-      <div class="role"><h3>普通同学</h3><p>查看作业与活动、参与交流、接收通知、登记/修改个人资料。</p></div>
-      <div class="role"><h3>班委 / 管理员</h3><p>发布和删除作业、活动；管理员还可以统一编辑各科目的课程设置。</p></div>
-      <div class="role"><h3>课代表</h3><p>由名单指定，可在对应学科板块发布任务通知、管理本科目任务与附件。</p></div>
+      <div class="role"><h3>普通同学</h3><p>查看作业、活动、志愿活动，参与交流，接收通知。</p></div>
+      <div class="role"><h3>班委</h3><p>发布活动、志愿活动；学习委员还可发布作业；可删除对应内容。</p></div>
+      <div class="role"><h3>课代表 / 管理员</h3><p>课代表发布本人负责科目的任务；管理员拥有全部权限和网页部署控制台。</p></div>
     </div>
-    <div class="tags"><span class="tag">姓名</span><span class="tag">学号</span><span class="tag">班级自动</span><span class="tag">职位自动</span></div>
+    <div class="tags"><span class="tag">姓名</span><span class="tag">学号</span><span class="tag">班级自动</span><span class="tag">职位自动</span><span class="tag">名单校验</span></div>
+    <div class="tip">登录状态保存在浏览器 Cookie 中，有效期约 30 天；退出在「我的」页面。</div>
   </section>
 
   <section id="homework" class="section reveal">
-    <div class="sec-head"><span class="sec-num">03</span><h2>作业簿</h2></div>
-    <p>底部「作业」页分为「学科板块」和「班级作业」两部分。学科板块按科目进入，班级作业汇总所有班级作业。</p>
+    <div class="sec-head"><span class="sec-num">03</span><h2>作业</h2></div>
+    <p>「作业」页分为学科板块和班级作业。学科板块按科目进入，班级作业汇总所有班级作业。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>看状态</b><p>「进行中」表示还没到截止时间；「已截止」表示已过期。卡片会显示布置人、截止时间和附件数量。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>看详情</b><p>点击作业进入详情，查看完整说明和附件。图片可预览，文档可查看/下载。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>收提醒</b><p>右上角铃铛进入「通知」，开启「作业提醒」后，新作业会通过微信订阅消息提醒你。</p></div></div>
-    </div>
-    <div class="tip">班委或管理员可以长按作业卡片删除作业；普通同学长按无效。</div>
-  </section>
-
-  <section id="publish" class="section reveal">
-    <div class="sec-head"><span class="sec-num">04</span><h2>发布作业</h2></div>
-    <p>只有班委或管理员能看到「＋ 发布作业」按钮。</p>
-    <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>填标题和说明</b><p>标题必填；说明选填，最多 500 字，建议写清提交方式和注意事项。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>选截止时间</b><p>选择日期和时间。截止后作业会显示「已截止」，但仍可查看详情和附件。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>加附件</b><p>最多 5 个，单个不超过 20MB。文档从微信聊天记录选择；图片可从相册或拍照添加。</p></div></div>
-      <div class="step"><span class="step-num">4</span><div><b>发布</b><p>发布后所有同学可见，并会生成站内通知；配置了订阅消息模板时还会推送微信提醒。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>看状态</b><p>「进行中」表示未到截止时间，「已截止」表示已过期；卡片显示布置人、截止时间和附件数量。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>看详情</b><p>点击作业查看完整说明和附件；图片可直接打开，文档可下载。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><b>删除</b><p>学习委员和管理员可在列表或详情看到「删除作业」按钮，删除会同时清理附件和通知。</p></div></div>
     </div>
   </section>
 
   <section id="activity" class="section reveal">
-    <div class="sec-head"><span class="sec-num">05</span><h2>活动</h2></div>
-    <p>底部「活动」汇总班级活动。卡片展示活动名称、时间、地点和发布人；未开始显示「待举办」，过期显示「已结束」。</p>
+    <div class="sec-head"><span class="sec-num">04</span><h2>活动</h2></div>
+    <p>「活动」汇总班级活动，卡片显示名称、时间、地点和发布人。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>查看活动</b><p>点击卡片查看完整活动说明、时间、地点和发布人。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>发布活动</b><p>班委或管理员点击「＋ 发布活动」，填写名称、时间、地点和说明后发布。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>管理活动</b><p>班委或管理员长按活动卡片，或在详情页点击「删除活动」即可删除。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>查看详情</b><p>点击卡片查看完整活动说明、时间、地点和发布人。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>发布与删除</b><p>班委或管理员在 <b>/upload/</b> 发布活动；可在列表或详情删除。</p></div></div>
+    </div>
+  </section>
+
+  <section id="volunteer" class="section reveal">
+    <div class="sec-head"><span class="sec-num">05</span><h2>志愿活动</h2></div>
+    <p>「志愿活动」用于发布志愿服务招募，显示时间、地点、组织单位、招募人数和联系方式。</p>
+    <div class="steps">
+      <div class="step"><span class="step-num">1</span><div><b>查看与报名</b><p>详情页可查看活动说明；有报名链接时点击「报名链接」直接打开。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>发布</b><p>班委或管理员在 <b>/upload/</b> 的「发布志愿活动」表单填写并发布，可附报名链接。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><b>删除</b><p>班委或管理员可在列表或详情删除，通知会同步清理。</p></div></div>
     </div>
   </section>
 
   <section id="forum" class="section reveal">
     <div class="sec-head"><span class="sec-num">06</span><h2>交流</h2></div>
-    <p>底部「交流」是班级自由讨论区，所有登记同学都可以发帖和回复。</p>
+    <p>所有登录同学都可以发帖、回复和上传附件（图片、文档等）。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>发帖</b><p>输入内容，最多 1000 字；可附文件或照片（最多 5 个、单个不超过 20MB）。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>回复</b><p>点进帖子，在底部输入回复；回复也可以带附件。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>删除</b><p>长按自己的帖子可删除；班委和管理员可以管理所有人的帖子。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>发帖</b><p>填写内容或选择附件后点击「发帖」；帖子按时间倒序显示。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>回复</b><p>点击帖子进入详情，在底部回复；附件会显示在正文下方。</p></div></div>
     </div>
-    <div class="tip">交流区适合讨论题目、分享资料、约活动；重要通知仍以「作业」和「通知」为准。</div>
-  </section>
-
-  <section id="subject" class="section reveal">
-    <div class="sec-head"><span class="sec-num">07</span><h2>学科板块</h2></div>
-    <p>在「作业」页点击任一学科卡片，进入该科目的专属板块。</p>
-    <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>课程设置</b><p>展示任课老师、学分和课程安排；管理员可以点「编辑课程设置」统一修改。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>任务通知</b><p>课代表可以发布本科目任务通知，支持截止时间和附件；内容可展开/收起。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>管理任务</b><p>任务发布者、本科目课代表或班委/管理员可以长按删除任务通知。</p></div></div>
-    </div>
-    <div class="tip">课代表由班级名单指定；如需调整，请联系管理员修改名单。</div>
+    <div class="tip">附件链接是公开静态地址，拿到链接即可访问；请勿上传身份证、密码等敏感材料。</div>
   </section>
 
   <section id="notice" class="section reveal">
-    <div class="sec-head"><span class="sec-num">08</span><h2>通知与提醒</h2></div>
-    <p>「作业」页右上角的铃铛是通知中心，红点/数字表示未读。</p>
+    <div class="sec-head"><span class="sec-num">07</span><h2>通知</h2></div>
+    <p>发布作业、活动、志愿活动或学科任务后，会在「通知」中生成站内通知。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>开启提醒</b><p>进入「通知」→ 打开「作业提醒」开关。微信会请求订阅授权，建议勾选「总是保持以上选择」。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>自动续订</b><p>提醒开启后会持续生效；额度不足时会自动续订，尽量做到全程无感。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>查看通知</b><p>点击通知条目直接跳到对应作业或学科任务；未读条目会高亮显示。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>看全文</b><p>通知直接显示完整正文和附件，不再只显示摘要。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>点链接</b><p>正文里的 http/https 网址会自动变成可点击链接；附件也可直接打开。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><b>进详情</b><p>点击通知进入对应的作业、活动、志愿活动或学科板块。</p></div></div>
     </div>
-    <div class="tip">如果收不到微信提醒，请检查是否授权了订阅消息；站内通知不受影响。</div>
+    <div class="tip">班级还配置了微信/QQ 机器人通知；具体是否收到取决于班级管理员是否启用。</div>
   </section>
 
   <section id="mine" class="section reveal">
-    <div class="sec-head"><span class="sec-num">09</span><h2>我的</h2></div>
-    <p>底部「我的」展示个人信息和身份：姓名、学号、班级、职位、身份和负责科目。</p>
+    <div class="sec-head"><span class="sec-num">08</span><h2>我的</h2></div>
+    <p>「我的」显示姓名、学号、班级、职位、身份和负责科目。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>修改资料</b><p>点击「登记 / 修改资料」可以更新姓名、学号；班级和职位会按名单重新匹配。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>查看身份</b><p>身份标签会显示「普通同学 / 班委 / 管理员」以及是否已登记。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>负责科目</b><p>如果被名单指定为课代表，「负责科目」会列出你负责的科目。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>上传入口</b><p>班委和课代表会看到「发布 / 上传」按钮，进入 <b>/upload/</b>。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>使用说明书</b><p>可随时返回本页面查看操作说明。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><b>退出</b><p>点击「退出」清除当前浏览器登录状态。</p></div></div>
     </div>
   </section>
 
-  <section id="web" class="section reveal">
-    <div class="sec-head"><span class="sec-num">10</span><h2>网页端</h2></div>
-    <p>除了小程序，班级还提供网页入口，用于查看项目介绍和使用说明书。</p>
-    <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>主页</b><p>打开班级域名，可看到「汇英斋项目介绍」「汇英斋使用说明书」「我的」以及部署入口。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>我的</b><p>使用班级账号登录后可以修改密码；项目介绍和使用说明书的编辑入口在对应页面，仅 tutnt / zhl 登录后可见。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>账号</b><p>网页账号由管理员分配；忘记密码可在登录后自行修改，或联系管理员重置。</p></div></div>
-    </div>
-    <div class="tip">网页统一使用班级名单中的姓名 + 学号登录；小程序客户端已下线。</div>
+  <section id="publish" class="section reveal">
+    <div class="sec-head"><span class="sec-num">09</span><h2>发布内容（班委 / 课代表）</h2></div>
+    <p>打开 <b>/upload/</b>，用姓名 + 学号登录后，按身份显示可发布的表单。</p>
+    <table>
+      <thead><tr><th>身份 / 职务</th><th>可发布</th></tr></thead>
+      <tbody>
+        <tr><td>管理员</td><td>作业、活动、志愿活动、全部学科任务；网页部署控制台</td></tr>
+        <tr><td>学习委员</td><td>作业、活动、志愿活动、本人负责科目的任务</td></tr>
+        <tr><td>其他班委</td><td>活动、志愿活动、本人负责科目的任务</td></tr>
+        <tr><td>课代表</td><td>本人负责科目的任务</td></tr>
+        <tr><td>普通同学</td><td>不可发布，只能浏览和交流</td></tr>
+      </tbody>
+    </table>
+    <div class="tip">发布后网页版立即显示，并按配置推送微信/QQ 机器人通知。</div>
+  </section>
+
+  <section id="deploy" class="section reveal">
+    <div class="sec-head"><span class="sec-num">10</span><h2>网页部署（管理员）</h2></div>
+    <p>管理员访问 <b>/deploy/</b>，用姓名 + 学号登录后可查看当前版本、部署日志并一键部署。</p>
+    <div class="tip">部署会从 GitHub 拉取最新代码并重启后端；失败自动回滚。非管理员会被拒绝。</div>
   </section>
 
   <section id="attach" class="section reveal">
     <div class="sec-head"><span class="sec-num">11</span><h2>附件规则</h2></div>
-    <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>数量与大小</b><p>作业、活动和交流附件最多 5 个，单个不超过 20MB。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>文件类型</b><p>文档支持 PDF / Word / Excel / PPT / TXT；图片支持相册选择或直接拍照。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>来源</b><p>文档从微信聊天记录选择，请先把文件发到任意聊天（如文件传输助手）再选择。</p></div></div>
-    </div>
-    <div class="tip">上传前注意网络环境；大文件建议先压缩，避免超限或等待过久。</div>
+    <p>作业、学科任务和论坛帖最多 <b>5 个附件</b>，单个不超过 <b>20MB</b>。支持常见文档和图片。</p>
+    <p>附件上传后保存在服务器 <b>/uploads/</b>，通知和详情中可直接打开或下载。</p>
   </section>
 
   <section id="faq" class="section reveal">
     <div class="sec-head"><span class="sec-num">12</span><h2>常见问题</h2></div>
     <div class="faq-item">
-      <button class="faq-q">登记后职位不对怎么办？<span>＋</span></button>
-      <div class="faq-a"><p>职位由班级名单按学号匹配。请确认学号填写正确；仍有问题请联系管理员更新名单。</p></div>
+      <button class="faq-q">登录提示“姓名与学号不匹配”？<span>＋</span></button>
+      <div class="faq-a"><p>姓名必须与班级名单完全一致；确认学号没有输错。名单外的学号不能登录。</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q">为什么看不到「发布作业」？<span>＋</span></button>
-      <div class="faq-a"><p>发布作业仅对班委和管理员开放。普通同学可以查看作业、下载附件和参与交流。</p></div>
+      <button class="faq-q">为什么看不到发布按钮？<span>＋</span></button>
+      <div class="faq-a"><p>发布只对班委、课代表和管理员开放；普通同学只能浏览、交流。</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q">收不到作业提醒？<span>＋</span></button>
-      <div class="faq-a"><p>在「通知」页确认「作业提醒」已开启，并允许微信订阅消息。站内通知始终可用。</p></div>
+      <button class="faq-q">通知里的链接打不开？<span>＋</span></button>
+      <div class="faq-a"><p>先确认链接以 http/https 开头；内网或失效链接无法打开。附件链接需要登录后才能稳定访问。</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q">附件打不开或下载失败？<span>＋</span></button>
-      <div class="faq-a"><p>确认文件没有超过 20MB，且网络正常。文档类附件会调用微信的文件查看/下载流程。</p></div>
+      <button class="faq-q">忘记登录状态 / 需要换账号？<span>＋</span></button>
+      <div class="faq-a"><p>到「我的」点「退出」，再用另一个姓名 + 学号登录。</p></div>
     </div>
     <div class="faq-item">
-      <button class="faq-q">网页登录忘记密码？<span>＋</span></button>
-      <div class="faq-a"><p>已登录可在「我的」里修改密码；忘记密码请联系管理员重置，管理员可单独重置账号密码。</p></div>
+      <button class="faq-q">网页打不开或样式错乱？<span>＋</span></button>
+      <div class="faq-a"><p>尝试刷新或换浏览器；仍有问题请联系管理员检查服务器和 Nginx 状态。</p></div>
     </div>
   </section>
 </main>
 
-<footer>汇英斋 · 使用说明书 · <a href="/">返回主页</a></footer>
+<footer class="site-footer">
+  汇英斋 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">浙ICP备2026103012号</a>
+</footer>
 
 <script>
 (() => {
-  const reveals = Array.from(document.querySelectorAll('.reveal'));
-  reveals.forEach((el, index) => {
-    el.style.transitionDelay = Math.min(index, 6) * 55 + 'ms';
-  });
+  const items = document.querySelectorAll('.reveal');
   if ('IntersectionObserver' in window) {
-    const observer = new IntersectionObserver((entries) => {
+    const io = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('in');
-          observer.unobserve(entry.target);
-        }
+        if (entry.isIntersecting) { entry.target.classList.add('in'); io.unobserve(entry.target); }
       });
     }, { threshold: 0.12 });
-    reveals.forEach((el) => observer.observe(el));
+    items.forEach((item) => io.observe(item));
   } else {
-    reveals.forEach((el) => el.classList.add('in'));
+    items.forEach((item) => item.classList.add('in'));
   }
-
   document.querySelectorAll('.faq-q').forEach((button) => {
     button.addEventListener('click', () => {
-      button.closest('.faq-item').classList.toggle('open');
+      button.parentElement.classList.toggle('open');
     });
   });
 })();
 </script>
-
 </body>
 </html>
 """
@@ -1468,27 +1342,6 @@ UPLOAD_HTML = """<!doctype html>
     }
   }
 
-  async function ticketLogin(ticket) {
-    try {
-      const resp = await fetch('/me/api/ticket-login', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticket: ticket })
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || !data.ok) {
-        showLogin(data.message || '登录已失效，请重新登录');
-        return;
-      }
-      applySession(data);
-      showDashboard();
-      renderIdentity('');
-    } catch (err) {
-      showLogin('网络错误，请重试');
-    }
-  }
-
   $('login-btn').addEventListener('click', login);
   $('studentId').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
   $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('studentId').focus(); });
@@ -1498,16 +1351,7 @@ UPLOAD_HTML = """<!doctype html>
   $('vol-submit').addEventListener('click', submitVolunteer);
   $('sub-submit').addEventListener('click', submitSubject);
 
-  let ticket = '';
-  try {
-    const hash = location.hash || '';
-    const match = hash.match(/(?:^#|&)ticket=([^&]+)/);
-    if (match) {
-      ticket = decodeURIComponent(match[1]);
-      history.replaceState(null, '', location.pathname + location.search);
-    }
-  } catch (err) { /* ignore */ }
-  if (ticket) ticketLogin(ticket); else checkSession();
+  checkSession();
 })();
 </script>
 <footer style="text-align:center;padding:20px 12px 32px;font-size:12px;color:inherit;opacity:.65">
@@ -1767,19 +1611,18 @@ class Handler(BaseHTTPRequestHandler):
             if not record:
                 self._send(401, json.dumps({"ok": False, "message": "未登录"}, ensure_ascii=False))
                 return
-            account = load_accounts().get(record["user"]) or {}
-            student_id = str(account.get("studentId") or "").strip()
+            identity = record.get("identity") or {}
+            student_id = str(identity.get("studentId") or "").strip()
             self._send(
                 200,
                 json.dumps(
                     {
                         "ok": True,
-                        "user": record["user"],
+                        "user": identity.get("name") or record["user"],
                         "csrf": record["csrf"],
-                        "perms": user_perms(record["user"]),
-                        "identity": record.get("identity"),
+                        "perms": ["upload", "download"],
+                        "identity": identity,
                         "studentId": student_id,
-                        "bound": bool(student_id),
                         "appReady": bool(APP_SECRET),
                     },
                     ensure_ascii=False,
@@ -1800,12 +1643,6 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/pages/download":
             self._handle_page_download()
             return
-        if path == "/api/app/committee":
-            self._handle_app_committee()
-            return
-        if path == "/api/app/deploy/status":
-            self._handle_app_deploy_status()
-            return
         self._send(404, json.dumps({"ok": False, "message": "接口不存在"}, ensure_ascii=False))
 
     def do_POST(self):
@@ -1815,17 +1652,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/login":
             self._handle_login()
             return
-        if path == "/api/ticket-login":
-            self._handle_ticket_login()
-            return
         if path == "/api/logout":
             self._handle_logout()
-            return
-        if path == "/api/account/password":
-            self._handle_password()
-            return
-        if path == "/api/account/bind":
-            self._handle_bind()
             return
         if path == "/api/app/upload":
             self._handle_app_upload()
@@ -1835,9 +1663,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/deploy":
             self._handle_web_deploy()
-            return
-        if path == "/api/app/deploy":
-            self._handle_app_deploy()
             return
         if path == "/api/pages":
             self._handle_page_upload()
@@ -1895,45 +1720,6 @@ class Handler(BaseHTTPRequestHandler):
             extra_headers=[self._session_cookie(token), self._legacy_expired_cookie()],
         )
 
-    def _handle_ticket_login(self):
-        data = self._read_json()
-        if data is None:
-            return
-        ticket = str(data.get("ticket") or "").strip()
-        if not ticket:
-            self._send(400, json.dumps({"ok": False, "message": "缺少小程序登录凭证"}, ensure_ascii=False))
-            return
-        status, app_data = app_json("/api/web/me", token=ticket, method="GET")
-        if status != 200 or not app_data.get("ok"):
-            self._send(
-                401,
-                json.dumps(
-                    {"ok": False, "message": app_data.get("msg") or "小程序登录已失效，请返回小程序重新进入"},
-                    ensure_ascii=False,
-                ),
-            )
-            return
-        identity = identity_from_app(app_data)
-        session_user = "mp:" + (identity.get("studentId") or "user")
-        token, csrf = create_session(session_user, ticket, identity)
-        self._send(
-            200,
-            json.dumps(
-                {
-                    "ok": True,
-                    "user": identity.get("name") or "小程序用户",
-                    "csrf": csrf,
-                    "identity": identity,
-                    "perms": ["upload", "download"],
-                    "bound": True,
-                    "appReady": bool(APP_SECRET),
-                    "ticket": True,
-                },
-                ensure_ascii=False,
-            ),
-            extra_headers=[self._session_cookie(token), self._legacy_expired_cookie()],
-        )
-
     def _handle_logout(self):
         token, record = self._require_session()
         if not record:
@@ -1947,130 +1733,11 @@ class Handler(BaseHTTPRequestHandler):
             extra_headers=[self._expired_cookie(), self._legacy_expired_cookie()],
         )
 
-    def _handle_password(self):
-        token, record = self._require_session()
-        if not record:
-            return
-        if not self._require_csrf(record):
-            return
-        data = self._read_json()
-        if data is None:
-            return
-        current = str(data.get("currentPassword") or "")
-        new_password = str(data.get("newPassword") or "")
-        if len(new_password) < MIN_PASSWORD_LEN or len(new_password) > MAX_PASSWORD_LEN:
-            self._send(
-                400,
-                json.dumps(
-                    {"ok": False, "message": "新密码长度需为 %d-%d 位" % (MIN_PASSWORD_LEN, MAX_PASSWORD_LEN)},
-                    ensure_ascii=False,
-                ),
-            )
-            return
-        with _accounts_lock:
-            users = load_accounts()
-            saved = users.get(record["user"])
-            if not saved or not verify_password(saved, current):
-                time.sleep(0.4)
-                self._send(400, json.dumps({"ok": False, "message": "当前密码不正确"}, ensure_ascii=False))
-                return
-            updated = make_record(new_password)
-            if "perms" in saved:
-                updated["perms"] = saved["perms"]
-            if "studentId" in saved:
-                updated["studentId"] = saved["studentId"]
-            users[record["user"]] = updated
-            try:
-                save_accounts(users)
-            except OSError as exc:
-                self._send(
-                    500,
-                    json.dumps({"ok": False, "message": "保存密码失败：%s" % exc}, ensure_ascii=False),
-                )
-                return
-        # 让该账号的其他登录会话失效，保留当前会话
-        drop_user_sessions(record["user"], keep=token)
-        self._send(200, json.dumps({"ok": True, "message": "密码已更新"}, ensure_ascii=False))
-
     def _app_token_for(self, record: dict) -> str:
         token = str(record.get("app_token") or "")
         if token:
             return token
         return refresh_app_token(record)
-
-    def _handle_bind(self):
-        _token, record = self._require_session()
-        if not record:
-            return
-        if not self._require_csrf(record):
-            return
-        data = self._read_json()
-        if data is None:
-            return
-        student_id = str(data.get("studentId") or "").strip()
-        if not student_id or len(student_id) > 30:
-            self._send(400, json.dumps({"ok": False, "message": "请填写学号"}, ensure_ascii=False))
-            return
-        if not APP_SECRET:
-            self._send(503, json.dumps({"ok": False, "message": "网页上传未启用（缺少共享密钥）"}, ensure_ascii=False))
-            return
-        app_data, error = fetch_app_identity(student_id)
-        if not app_data:
-            self._send(400, json.dumps({"ok": False, "message": error}, ensure_ascii=False))
-            return
-        with _accounts_lock:
-            users = load_accounts()
-            account = users.get(record["user"])
-            if not account:
-                self._send(400, json.dumps({"ok": False, "message": "账号不存在"}, ensure_ascii=False))
-                return
-            account["studentId"] = student_id
-            try:
-                save_accounts(users)
-            except OSError as exc:
-                self._send(500, json.dumps({"ok": False, "message": "保存绑定失败：%s" % exc}, ensure_ascii=False))
-                return
-        identity = identity_from_app(app_data)
-        record["app_token"] = str(app_data.get("token") or "")
-        record["identity"] = identity
-        self._send(
-            200,
-            json.dumps(
-                {"ok": True, "identity": identity, "studentId": student_id, "appReady": True},
-                ensure_ascii=False,
-            ),
-        )
-
-    def _handle_app_committee(self):
-        _token, record = self._require_session()
-        if not record:
-            return
-        rows, subjects, error = fetch_app_committee()
-        if error:
-            self._send(502, json.dumps({"ok": False, "message": error}, ensure_ascii=False))
-            return
-        bindings: dict[str, list[str]] = {}
-        for name, account in load_accounts().items():
-            student_id = str(account.get("studentId") or "").strip()
-            if student_id:
-                bindings.setdefault(student_id, []).append(name)
-        for row in rows:
-            student_id = str(row.get("studentId") or "")
-            row["webAccounts"] = sorted(bindings.get(student_id, []))
-        current = (record.get("identity") or {}).get("studentId") or ""
-        self._send(
-            200,
-            json.dumps(
-                {
-                    "ok": True,
-                    "list": rows,
-                    "subjects": subjects,
-                    "bindings": bindings,
-                    "currentStudentId": current,
-                },
-                ensure_ascii=False,
-            ),
-        )
 
     def _handle_app_upload(self):
         _token, record = self._require_session()
@@ -2277,19 +1944,6 @@ class Handler(BaseHTTPRequestHandler):
             json.dumps({"ok": True, "page": slug, "size": len(data)}, ensure_ascii=False),
         )
 
-    def _app_identity_from_header(self):
-        auth = str(self.headers.get("Authorization") or "")
-        token = auth[7:].strip() if auth.startswith("Bearer ") else ""
-        if not token:
-            return None, "缺少小程序登录凭证", 401
-        status, data = app_json("/api/web/me", token=token, method="GET")
-        if status != 200 or not data.get("ok"):
-            return None, data.get("msg") or "小程序身份校验失败", 401
-        identity = identity_from_app(data)
-        if identity.get("role") != "admin":
-            return None, "仅管理员可执行部署", 403
-        return identity, "", 200
-
     def _handle_web_deploy(self):
         """网页部署控制台：管理员会话 + CSRF 后写入部署请求。"""
         global _last_deploy_request_at
@@ -2353,80 +2007,7 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send(202, json.dumps({"ok": True, "message": "已提交部署请求"}, ensure_ascii=False))
 
-    def _handle_app_deploy(self):
-        global _last_deploy_request_at
-
-        identity, error, code = self._app_identity_from_header()
-        if error:
-            self._send(code, json.dumps({"ok": False, "message": error}, ensure_ascii=False))
-            return
-        with _deploy_lock:
-            now = time.time()
-            if now - _last_deploy_request_at < MIN_DEPLOY_INTERVAL_SECONDS:
-                self._send(429, json.dumps({"ok": False, "message": "操作过于频繁，请稍后再试"}, ensure_ascii=False))
-                return
-            last = _read_json(STATUS_FILE)
-            if last and last.get("state") == "running":
-                try:
-                    started = int(last.get("startedAt") or 0)
-                except (TypeError, ValueError):
-                    started = 0
-                if _now_ms() - started < RUNNING_STALE_MS:
-                    self._send(409, json.dumps({"ok": False, "message": "已有部署任务正在运行"}, ensure_ascii=False))
-                    return
-            tmp = None
-            try:
-                QUEUE_DIR.mkdir(parents=True, exist_ok=True)
-                REQUEST_FILE.unlink(missing_ok=True)
-                tmp = QUEUE_DIR / ("deploy-%d-%s.tmp" % (os.getpid(), secrets.token_hex(4)))
-                tmp.write_text(
-                    json.dumps(
-                        {
-                            "requestedAt": _now_ms(),
-                            "client": "miniprogram",
-                            "by": identity.get("name") or "admin",
-                        },
-                        ensure_ascii=False,
-                    ),
-                    encoding="utf-8",
-                )
-                os.replace(tmp, REQUEST_FILE)
-            except OSError as exc:
-                if tmp is not None:
-                    try:
-                        tmp.unlink(missing_ok=True)
-                    except OSError:
-                        pass
-                self._send(500, json.dumps({"ok": False, "message": "写入部署请求失败：%s" % exc}, ensure_ascii=False))
-                return
-            _last_deploy_request_at = now
-        self._send(202, json.dumps({"ok": True, "message": "已提交部署请求"}, ensure_ascii=False))
-
-    def _handle_app_deploy_status(self):
-        identity, error, code = self._app_identity_from_header()
-        if error:
-            self._send(code, json.dumps({"ok": False, "message": error}, ensure_ascii=False))
-            return
-        status = _read_json(STATUS_FILE)
-        current = _read_json(CURRENT_FILE)
-        lines = _tail_text(LOG_FILE).splitlines()[-LOG_LINES:]
-        self._send(
-            200,
-            json.dumps(
-                {
-                    "ok": True,
-                    "status": status,
-                    "current": current,
-                    "log": "\n".join(lines),
-                },
-                ensure_ascii=False,
-            ),
-        )
-
-
 def main():
-    if not ACCOUNTS_FILE.exists():
-        print("警告：账号文件不存在：%s" % ACCOUNTS_FILE, flush=True)
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     server.daemon_threads = True
     print("汇英斋部署面板已启动：http://127.0.0.1:%d" % PORT, flush=True)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""汇英斋小程序服务端数据库终端。
+"""汇英斋服务端数据库终端。
 
 直接读写 server/data/huiyingzhai.sqlite 中的 documents 表：
 每个文档是一条 JSON（_id / _openid / 毫秒时间戳），与 server/app/db.py 完全一致。
@@ -1124,7 +1124,7 @@ def cmd_insert(tokens: list[str]) -> None:
     inserted = store.insert(collection, payload)
     ok(f"已插入 {collection}/{inserted['_id']}")
     if "createTime" not in inserted:
-        info(dim("提示：该文档没有 createTime，小程序会按默认顺序展示。"))
+        info(dim("提示：该文档没有 createTime，网页会按默认顺序展示。"))
 
 
 def cmd_put(tokens: list[str]) -> None:
