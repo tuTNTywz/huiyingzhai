@@ -197,6 +197,29 @@ def load_page_bytes(slug: str) -> bytes:
         return builtin.encode("utf-8")
 
 
+ICP_NUMBER = "浙ICP备2026103012号"
+ICP_FOOTER = (
+    '<footer style="text-align:center;padding:24px 12px 36px;font-size:12px;'
+    'color:inherit;opacity:.65">'
+    '<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" '
+    'style="color:inherit;text-decoration:none">%s</a></footer>' % ICP_NUMBER
+)
+
+
+def inject_icp_footer(content: bytes) -> bytes:
+    """在页面 </body> 前补备案号；已有则不重复添加。"""
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content
+    if ICP_NUMBER in text:
+        return content
+    index = text.lower().rfind("</body>")
+    if index < 0:
+        return content
+    return (text[:index] + ICP_FOOTER + "\n" + text[index:]).encode("utf-8")
+
+
 def save_page_bytes(slug: str, data: bytes) -> None:
     PAGES_DIR.mkdir(parents=True, exist_ok=True)
     tmp = PAGES_DIR / (slug + ".html.tmp")
@@ -612,6 +635,9 @@ HOME_HTML = """<!doctype html>
     <a class="btn" href="/intro/">汇英斋项目介绍</a>
     <a class="btn" href="/manual/">汇英斋使用说明书</a>
   </div>
+  <footer style="text-align:center;margin-top:34px;font-size:12px;color:inherit;opacity:.6">
+    <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">浙ICP备2026103012号</a>
+  </footer>
 </main>
 </body>
 </html>
@@ -1431,6 +1457,9 @@ UPLOAD_HTML = """<!doctype html>
   if (ticket) ticketLogin(ticket); else checkSession();
 })();
 </script>
+<footer style="text-align:center;padding:20px 12px 32px;font-size:12px;color:inherit;opacity:.65">
+  <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">浙ICP备2026103012号</a>
+</footer>
 </body>
 </html>
 """
@@ -1467,6 +1496,9 @@ MY_HTML = """<!doctype html>
     <a href="/intro/">项目介绍</a>
     <a href="/manual/">使用说明书</a>
   </div>
+  <footer style="text-align:center;padding:20px 12px 8px;font-size:12px;color:inherit;opacity:.65">
+    <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">浙ICP备2026103012号</a>
+  </footer>
 </main>
 </body>
 </html>"""
@@ -1651,13 +1683,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, HOME_HTML, "text/html; charset=utf-8")
             return
         if area == "" and path in ("/intro", "/intro/", "/intro/index.html"):
-            content = load_page_bytes("intro")
+            content = inject_icp_footer(load_page_bytes("intro"))
             if self._page_editor():
                 content = inject_page_toolbar(content, "intro")
             self._send(200, content, "text/html; charset=utf-8")
             return
         if area == "" and path in ("/manual", "/manual/", "/manual/index.html"):
-            content = load_page_bytes("manual")
+            content = inject_icp_footer(load_page_bytes("manual"))
             if self._page_editor():
                 content = inject_page_toolbar(content, "manual")
             self._send(200, content, "text/html; charset=utf-8")
@@ -2038,6 +2070,7 @@ class Handler(BaseHTTPRequestHandler):
             "listSubjectTasks", "getSubjectSettings", "getSubjectRep",
             "createPost", "createReply",
             "publishHomework", "publishActivity", "publishSubjectTask",
+            "deleteHomework", "deleteActivity", "deleteSubjectTask",
         }
         if action not in allowed:
             self._send(400, json.dumps({"ok": False, "message": "不支持的操作"}, ensure_ascii=False))
@@ -2065,6 +2098,15 @@ class Handler(BaseHTTPRequestHandler):
             if role != "admin" and subject not in reps:
                 self._send(403, json.dumps({"ok": False, "message": "只能发布你负责的科目"}, ensure_ascii=False))
                 return
+        if action == "deleteHomework" and not (role == "admin" or position == "学习委员"):
+            self._send(403, json.dumps({"ok": False, "message": "仅学习委员或管理员可删除作业"}, ensure_ascii=False))
+            return
+        if action == "deleteActivity" and role not in ("committee", "admin"):
+            self._send(403, json.dumps({"ok": False, "message": "仅班委或管理员可删除活动"}, ensure_ascii=False))
+            return
+        if action == "deleteSubjectTask" and role != "admin" and not reps:
+            self._send(403, json.dumps({"ok": False, "message": "仅课代表或管理员可删除学科任务"}, ensure_ascii=False))
+            return
         status, result = app_json("/api/action", payload, token=app_token)
         if status == 401:
             new_token = refresh_app_token(record)
