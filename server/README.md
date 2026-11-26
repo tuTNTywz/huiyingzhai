@@ -151,13 +151,14 @@ sudo systemctl restart huiyingzhai
 
 ### 个人主页与网页操作
 
-浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），主页显示三个按钮：
+浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），主页显示四个按钮：
 
 - **进入汇英斋** → `/huiyingzhai/`（小程序内容的网页版，见下）
+- **Deploy** → `/deploy/`（网页部署控制台，仅管理员）
 - **汇英斋项目介绍** → `/intro/`
 - **汇英斋使用说明书** → `/manual/`
 
-**Deploy 和「我的」不在网页显示**；部署与账号控制统一在微信小程序「我的」页面。`/deploy/`、`/me/` 即使直接访问也只显示提示。
+`/deploy/` 已恢复为完整控制台：用管理员姓名 + 学号登录后可查看当前版本、部署日志并一键部署；非管理员登录会被拒绝。`/me/` 仍是提示页，登录入口在部署页本身。
 
 ### 小程序网页版 `/huiyingzhai/`
 
@@ -174,7 +175,7 @@ sudo systemctl restart huiyingzhai
 
 - 发布作业/活动/学科任务仍走 `/upload/`（按职务限制），网页版只提供浏览与交流发帖/回复；
 - 附件链接指向 `/uploads/...`，为公开静态文件，拿到链接即可访问，请勿上传隐私材料；
-- 部署控制台仍只在管理员的小程序「我的」中；
+- 部署控制台在网页 `/deploy/` 和管理员小程序「我的」中都可用；
 - 页面文件：`server/deploy/huiyingzhai_web.html`，由面板直接读取。修改后需重新 `install.sh`（或手动复制到 `/usr/local/lib/huiyingzhai/`），无需重启后端。
 
 **统一登录（姓名 + 学号）**
@@ -187,7 +188,7 @@ sudo systemctl restart huiyingzhai
 
 | 身份 / 职务 | 可发布 |
 | --- | --- |
-| 管理员 | 作业、活动、学科任务（全部科目）；小程序「部署控制台」 |
+| 管理员 | 作业、活动、学科任务（全部科目）；网页 `/deploy/` 与小程序「部署控制台」 |
 | 学习委员 | 作业、活动、本人负责科目的学科任务 |
 | 其他班委 | 活动、本人负责科目的学科任务（如名单里指定了科目） |
 | 课代表 | 本人负责科目的学科任务 |
@@ -203,7 +204,14 @@ sudo systemctl restart huiyingzhai
 - 管理员：额外显示「部署控制台」，可在小程序内直接部署最新代码并查看状态/日志；
 - 「我的」页同时保留账号资料、登记/修改资料。
 
-网页 `/deploy/` 和 `/me/` 只显示「已合并到小程序我的控制页面」提示；部署统一在管理员的小程序「部署控制台」完成。
+**网页部署控制台（`/deploy/`）**
+
+- 首页「Deploy」进入，或用管理员姓名 + 学号直接登录；
+- 页面调用 `/deploy/api/session|login|status|log|deploy`（面板内部路径为 `/api/...`）；
+- 所有接口都要求管理员角色；部署写操作还要求 CSRF Token，非管理员返回 403；
+- 部署仍由 root 的 `huiyingzhai-deploy.service` 执行，网页只负责写请求文件；
+- 页面文件：`server/deploy/deploy_page.html`，安装到 `/usr/local/lib/huiyingzhai/`；
+- `/me/` 仍只显示提示，不影响部署页登录。
 
 **页面编辑（管理员）**
 
@@ -258,30 +266,55 @@ sudo systemctl restart huiyingzhai
 - 未配置 `PUSHPLUS_TOKEN`/`PUSHPLUS_TOPIC` 时完全静默；
 - 代码位置：`server/app/robot.py`，发布逻辑在 `server/app/api.py`。
 
-#### QQ 群通知：PushPlus QQ 机器人（推荐，不需要 QQ 小号）
+#### QQ 官方机器人（QQ 开放平台，不经过第三方）
 
-PushPlus 已接入 QQ 官方机器人，绑定后可以把同一条通知发到 QQ 群，和微信群共用一套 token。
+后端已经接入 QQ 官方接口：Webhook 接收事件并自动记录群 `group_openid`，发布作业/活动/学科任务时调用官方群消息接口推送。需要你在 <https://q.qq.com/> 创建机器人（个人主体可创建，具体以平台要求为准）。
 
-1. 用 QQ 登录/扫码：PushPlus 个人中心 → **渠道配置 → QQ机器人**，扫码把 PushPlus 机器人加为好友并绑定；
-2. 把这个机器人**拉进班级 QQ 群**；群主在群机器人设置里允许「主动消息/主动推送」；
-3. 回到 PushPlus「渠道配置 → QQ机器人」→ **新增群配置**，选择该群，保存后得到一个**配置编码（option）**；
-4. 在服务器 `.env` 中填写并重启（`huiyingzhai-pushplus-setup` 也会提示输入）：
+1. 登录 QQ 开放平台，创建机器人，填写名称/头像/简介；
+2. 在「开发设置」记下 **AppID**、**AppSecret**、**Bot Secret**；
+3. 消息接收方式选 **Webhook**，回调地址填：
+
+   ```text
+   https://tutnt.com/api/qq/webhook
+   ```
+
+   订阅群聊相关事件（机器人入群、群 @ 消息等）；
+4. 在服务器 `.env` 填写并重启（先配置再保存回调地址，否则地址验证会失败）：
 
    ```bash
-   PUSHPLUS_QQ_OPTION=配置编码
+   QQ_APP_ID=你的AppID
+   QQ_APP_SECRET=你的AppSecret
+   QQ_BOT_SECRET=你的BotSecret
+   # 可选；不填时由入群/群消息事件自动记录
+   QQ_GROUP_OPENID=
    sudo systemctl restart huiyingzhai
    ```
 
-说明：
+5. 把机器人拉进 QQ 群；**群主**用新版手机 QQ 在群设置里开启机器人「主动消息」；
+6. 在群里 @ 机器人一次（或让它入群），后端会把 `group_openid` 记录到 `/opt/huiyingzhai/server/data/qq_group.json`，日志出现「QQ 群 openid 已记录」；
+7. 发布一条作业/活动测试；失败时看：
 
-- QQ 渠道与微信渠道可同时启用，发布一次两边都发；
-- 免费实名用户 QQ 渠道每天 **200 次**，消息**只展示标题摘要**，不显示正文；标题现在会写成「班级作业：高数第三章」这种格式，足够看出是什么事；
-- 群主必须允许机器人主动消息，否则发送会失败；
-- 不需要 QQ 小号，也不用在服务器挂 QQ 客户端。
+   ```bash
+   sudo journalctl -u huiyingzhai -n 50 --no-pager | grep "QQ 官方机器人"
+   ```
 
-#### 备选：QQ 小号 + NapCat/OneBot（不推荐）
+限制与注意事项：
 
-用自己的 QQ 小号登录 NapCat 等第三方客户端，通过 OneBot 协议直接向群发消息。优点是消息完整、完全可控；缺点是**违反 QQ 使用规范，随时可能封号**，且需要长期在服务器挂一个 QQ 客户端，维护成本高。班级通知优先用上面的 PushPlus QQ 渠道。
+- 官方机器人的主动推送**默认按群关闭**，必须群主手动开启；未开启返回 `40034105`；
+- 群聊能力/主动消息权限需要在开放平台申请或开通，未通过时只能被动回复（用户在群里 @ 后 60 分钟内回复）；
+- 频率：单群约 20 条/分钟、每天最多 1000 条；机器人维度认证后 60 条/分钟；
+- 官方群消息只发纯文本，**不能带 URL**；当前已去掉网页链接，只保留标题、截止时间、发布人；
+- Webhook 只支持 80/443/8080/8443 端口，本站走 443；回调验证和事件验签依赖 `QQ_BOT_SECRET`；
+- 沙箱群成员上限约 20 人，正式班群需要机器人发布上线后再添加；
+- 代码：`server/app/qqbot.py`（Webhook 验签、token、发送）、`server/app/main.py` 的 `/api/qq/webhook`。
+
+#### 第三方备选：PushPlus QQ 机器人
+
+如果暂时不想走开放平台审核，PushPlus 也能把消息转到 QQ 群（属于第三方中转）：绑定 PushPlus 的 QQ 机器人、拉进群并允许主动消息、新增群配置拿到 option，然后填写 `PUSHPLUS_QQ_OPTION`。限制是免费用户只显示标题、每天 200 次，且消息经过 PushPlus。当前未启用。
+
+#### 不推荐：QQ 小号 + NapCat/OneBot
+
+用 QQ 小号登录 NapCat 等第三方客户端，通过 OneBot 协议直接发群消息。优点是消息完整、完全可控；缺点是**违反 QQ 使用规范，随时可能封号**，且需要长期挂 QQ 客户端。既然要求官方，不建议走这条路。
 
 #### 方案 B：企业微信群机器人（需全员企业微信）
 
@@ -472,7 +505,8 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、小程序共享密钥�
 | 网页版登录后空白 | 先在 `/upload/` 验证同一姓名+学号；F12 看 `/me/api/session` 是否 401 |
 | 网页发帖/回复失败 | 需在小程序完成登记；附件单个 ≤20MB、最多 5 个 |
 | PushPlus 没收到消息 | 检查 `.env` 的 `PUSHPLUS_TOKEN`/`PUSHPLUS_TOPIC`、`systemctl restart huiyingzhai`；看 `journalctl -u huiyingzhai` 的「PushPlus 通知失败」；确认同学已加入群组 |
-| QQ 群没收到消息 | 检查 `PUSHPLUS_QQ_OPTION`；确认机器人已进群、群主已允许主动消息、option 是群配置编码而非 QQ 群号 |
+| QQ 群没收到官方机器人消息 | 看 `journalctl -u huiyingzhai` 的「QQ 官方机器人通知失败」；`40034105`=群主未开启主动消息，`40034101`=机器人不在群，`40034124`=鉴权/AppSecret 错误；确认 `QQ_GROUP_OPENID` 已记录 |
+| PushPlus QQ 群没收到消息 | 检查 `PUSHPLUS_QQ_OPTION`；确认机器人已进群、群主已允许主动消息、option 是群配置编码而非 QQ 群号 |
 | 企业微信没收到消息 | 检查 `WECHAT_ROBOT_WEBHOOK`；确认是**内部群**（外部群不支持机器人） |
 | 上传页登录失败 | 填写小程序登记的姓名 + 学号；未登记或姓名不匹配会拒绝 |
 | 小程序「部署控制台」打不开 | 仅管理员可见；确认小程序「服务器域名」包含 `https://tutnt.com` |
@@ -481,7 +515,9 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、小程序共享密钥�
 | 附件上传 413 / 超过 20MB | 单个附件上限 20MB；Nginx `client_max_body_size` 需 ≥ 25m |
 | `/deploy/` 404 | Nginx 未加 `/deploy/` 反代，或未 reload |
 | `/deploy/` 502 | `systemctl status huiyingzhai-panel`，看端口是否为 3999 |
-| 部署页提示「请先登录」 | 正常，先到 `/me/` 登录；登录后会回到部署页 |
+| `/deploy/` 显示文件缺失 | 重新执行 `install.sh`，或把 `server/deploy/deploy_page.html` 复制到 `/usr/local/lib/huiyingzhai/` |
+| `/deploy/` 登录后提示没有权限 | 该姓名+学号对应角色不是管理员；管理员/班长才可部署 |
+| 部署页提示「请先登录」 | 正常，在部署页用管理员姓名 + 学号登录即可 |
 | 提示姓名与学号不匹配 | 确认与小程序「我的」登记信息一致；只有已登记用户可登录 |
 | 登录提示尝试过于频繁 | 5 分钟内失败次数过多，等待几分钟再试 |
 | 页面提示 401 | 会话过期或面板重启，重新登录即可 |

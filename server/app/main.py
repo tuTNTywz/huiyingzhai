@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -9,7 +10,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import auth, db as store, files
+from . import auth, db as store, files, qqbot
 from .api import SUBJECT_KEYS, SUBJECT_NAMES, handle_action
 from .config import config
 
@@ -83,6 +84,40 @@ async def health():
         "devMode": config.dev_mode,
         "push": bool(config.homework_tmpl_id and config.appid and config.secret),
     }
+
+
+@app.post("/api/qq/webhook")
+async def qq_webhook(request: Request):
+    """QQ 官方机器人回调：op=13 地址验证，op=0 事件（Ed25519 验签）。"""
+    raw = await request.body()
+    try:
+        payload = json.loads(raw or b"{}")
+    except ValueError:
+        return JSONResponse({"ok": False, "msg": "invalid json"}, status_code=400)
+    if not isinstance(payload, dict):
+        return JSONResponse({"ok": False, "msg": "invalid payload"}, status_code=400)
+
+    if payload.get("op") == 13:
+        ua = str(request.headers.get("user-agent") or "")
+        appid = str(request.headers.get("x-bot-appid") or "")
+        if ua != "QQBot-Callback" or (config.qq_app_id and appid != config.qq_app_id):
+            return JSONResponse({"ok": False, "msg": "bad handshake"}, status_code=401)
+        data = payload.get("d") if isinstance(payload.get("d"), dict) else {}
+        try:
+            result = qqbot.validation_response(
+                str(data.get("plain_token") or ""), str(data.get("event_ts") or "")
+            )
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "msg": str(exc)}, status_code=503)
+        return JSONResponse(result)
+
+    timestamp = str(request.headers.get("x-signature-timestamp") or "")
+    signature = str(request.headers.get("x-signature-ed25519") or "")
+    if not qqbot.verify_signature(timestamp, raw, signature):
+        return JSONResponse({"ok": False, "msg": "bad signature"}, status_code=401)
+    if payload.get("op") == 0:
+        qqbot.handle_event(payload)
+    return JSONResponse({"op": 12})
 
 
 def _panel_secret_ok(request: Request) -> bool:

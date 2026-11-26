@@ -73,8 +73,14 @@ class Config:
         # 可选：PushPlus 群组推送（不装企业微信的方案）
         self.pushplus_token = _str("PUSHPLUS_TOKEN")
         self.pushplus_topic = _str("PUSHPLUS_TOPIC")
-        # 可选：PushPlus QQ 群配置编码（QQ 机器人渠道）
+        # 可选：PushPlus QQ 群配置编码（第三方，备用）
         self.pushplus_qq_option = _str("PUSHPLUS_QQ_OPTION")
+
+        # 可选：QQ 官方机器人（QQ 开放平台）
+        self.qq_app_id = _str("QQ_APP_ID")
+        self.qq_app_secret = _str("QQ_APP_SECRET")
+        self.qq_bot_secret = _str("QQ_BOT_SECRET")
+        self.qq_group_openid = _str("QQ_GROUP_OPENID")
 
 
 config = Config()

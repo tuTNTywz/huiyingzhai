@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>部署控制台 · 汇英斋</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light dark; --brown:#9c6b4a; --ink:#1f2937; --muted:#6b7280; --paper:#f5f1e8; --card:#fffaf2; --line:#e8ddcc; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif; background:var(--paper); color:var(--ink); }
+  main { max-width:880px; margin:0 auto; padding:28px 16px 64px; }
+  .top { display:flex; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  .top a { color:var(--muted); text-decoration:none; font-size:13px; }
+  .top a:hover { color:var(--brown); }
+  h1 { font-family:"Songti SC","Noto Serif CJK SC",serif; font-size:26px; margin:0 0 6px; }
+  h2 { font-size:17px; margin:0 0 10px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:16px; box-shadow:0 10px 28px rgba(120,95,65,.05); }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
+  input { font:inherit; width:100%; max-width:380px; border:1px solid #dfcfba; border-radius:9px; padding:9px 12px; background:#fffdf9; color:inherit; }
+  button { font:inherit; border:0; border-radius:9px; padding:9px 16px; cursor:pointer; }
+  button.primary { background:var(--brown); color:#fff; }
+  button.danger { background:#b4453a; color:#fff; }
+  button.secondary { background:#efe4d4; color:#5f4a37; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-link { display:inline-block; padding:9px 16px; border-radius:9px; background:var(--brown); color:#fff; text-decoration:none; font-size:14px; }
+  .badge { display:inline-block; font-size:12px; padding:2px 9px; border-radius:999px; background:#e5e7eb; color:#374151; }
+  .badge.running { background:#fef3c7; color:#92400e; }
+  .badge.success { background:#dcfce7; color:#166534; }
+  .badge.failed { background:#fee2e2; color:#991b1b; }
+  .kv { display:grid; grid-template-columns:96px 1fr; gap:6px 12px; font-size:13px; }
+  .kv div:nth-child(odd) { color:var(--muted); }
+  pre { background:#fbf6ee; border:1px solid var(--line); border-radius:9px; padding:12px; overflow:auto; max-height:360px; font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre-wrap; word-break:break-word; }
+  .msg { margin-top:10px; font-size:13px; color:var(--muted); min-height:1.4em; }
+  .who { font-size:12px; color:var(--muted); margin-left:8px; }
+  .hidden { display:none !important; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#ece4d8; --muted:#a99c8b; --paper:#14100d; --card:#1d1712; --line:#33281f; }
+    input, pre { background:#241c16; border-color:#3a2d22; }
+    button.secondary { background:#33261c; color:#d9c8b3; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <a href="/">← tuTNT's home</a>
+    <a href="/huiyingzhai/">汇英斋网页版</a>
+  </div>
+  <h1>部署控制台</h1>
+  <div class="sub">从 GitHub 拉取最新代码并重启服务。仅管理员可用，部署失败会自动回滚。</div>
+
+  <section id="login" class="card">
+    <h2>管理员登录</h2>
+    <p class="sub" style="margin-bottom:0">使用小程序「我的」里登记的姓名和学号。</p>
+    <label for="name">姓名</label>
+    <input id="name" autocomplete="name">
+    <label for="studentId">学号</label>
+    <input id="studentId" inputmode="numeric">
+    <div class="row" style="margin-top:14px">
+      <button id="login-btn" class="primary">登录</button>
+    </div>
+    <div id="login-msg" class="msg"></div>
+  </section>
+
+  <section id="denied" class="card hidden">
+    <h2>没有部署权限</h2>
+    <p class="sub" id="denied-text" style="margin-bottom:14px">当前账号不是管理员。</p>
+    <div class="row"><a class="btn-link" href="/">返回主页</a><button id="logout-denied" class="secondary">退出登录</button></div>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <span id="state-badge" class="badge">加载中</span>
+          <span class="who">已登录：<b id="who"></b></span>
+        </div>
+        <div class="row">
+          <button id="refresh" class="secondary">刷新</button>
+          <button id="logout" class="secondary">退出</button>
+        </div>
+      </div>
+      <div class="kv" style="margin-top:14px">
+        <div>当前版本</div><div id="current">—</div>
+        <div>上次部署</div><div id="last">—</div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button id="deploy" class="danger">部署最新代码</button>
+      </div>
+      <div id="msg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between; margin-bottom:10px">
+        <strong style="font-size:14px">部署日志</strong>
+        <button id="toggle-log" class="secondary">隐藏</button>
+      </div>
+      <pre id="log" class="hidden">—</pre>
+    </div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let csrf = '';
+  let currentUser = '';
+  let pollTimer = null;
+  let forcePollUntil = 0;
+  let busy = false;
+  let lastLog = '';
+
+  function api(path, options) {
+    options = options || {};
+    const headers = Object.assign({}, options.headers || {});
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    return fetch(path, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, options, { headers }));
+  }
+  function setMsg(id, text, error) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = error ? '#b4453a' : '';
+  }
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+  function showOnly(id) {
+    ['login', 'denied', 'app'].forEach((name) => $(name).classList.toggle('hidden', name !== id));
+  }
+  function showLogin(message) {
+    csrf = ''; currentUser = ''; stopPolling(); showOnly('login');
+    setMsg('login-msg', message || '');
+  }
+  function showDenied(identity) {
+    csrf = ''; currentUser = ''; stopPolling();
+    $('denied-text').textContent = (identity && identity.name ? identity.name + '（' + (identity.position || '非管理员') + '）' : '当前账号') + '不是管理员，不能使用部署控制台。';
+    showOnly('denied');
+  }
+  function routeSession(data) {
+    csrf = data.csrf || '';
+    const identity = data.identity || {};
+    if (identity.role !== 'admin') { showDenied(identity); return; }
+    currentUser = identity.name || data.user || '';
+    $('who').textContent = currentUser;
+    showOnly('app');
+    loadStatus();
+  }
+  async function checkSession() {
+    try {
+      const resp = await fetch('api/session', { credentials: 'same-origin', cache: 'no-store' });
+      if (resp.status === 401) { showLogin(''); return; }
+      if (!resp.ok) { showLogin('读取登录状态失败'); return; }
+      routeSession(await resp.json());
+    } catch (err) { showLogin('网络错误，请重试'); }
+  }
+  async function login() {
+    const name = $('name').value.trim();
+    const studentId = $('studentId').value.trim();
+    if (!name || !studentId) { setMsg('login-msg', '请输入姓名和学号', true); return; }
+    $('login-btn').disabled = true;
+    setMsg('login-msg', '登录中…');
+    try {
+      const resp = await fetch('api/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, studentId }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) { setMsg('login-msg', data.message || '登录失败', true); return; }
+      routeSession(data);
+    } catch (err) {
+      setMsg('login-msg', '网络错误，请重试', true);
+    } finally {
+      $('login-btn').disabled = false;
+    }
+  }
+  async function logout() {
+    try {
+      await api('api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    } catch (err) { /* ignore */ }
+    showLogin('');
+  }
+  function fmtTime(ms) {
+    if (!ms) return '—';
+    try { return new Date(ms).toLocaleString('zh-CN', { hour12: false }); }
+    catch (err) { return '—'; }
+  }
+  function commitText(obj) {
+    if (!obj) return '—';
+    const sha = obj.commit ? obj.commit.slice(0, 12) : '';
+    const msg = obj.commitMessage ? ' · ' + obj.commitMessage : '';
+    const when = obj.deployedAt || obj.finishedAt;
+    return (sha || '未知提交') + msg + (when ? '（' + fmtTime(when) + '）' : '');
+  }
+  function setBadge(state) {
+    const labels = { running: '部署中', success: '已完成', failed: '部署失败', idle: '空闲' };
+    const classes = { running: 'running', success: 'success', failed: 'failed' };
+    const el = $('state-badge');
+    el.className = 'badge' + (classes[state] ? ' ' + classes[state] : '');
+    el.textContent = labels[state] || '未知';
+  }
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(loadStatus, 2500);
+  }
+  async function loadStatus() {
+    if (!currentUser) return;
+    let resp;
+    try { resp = await api('api/status'); }
+    catch (err) { $('current').textContent = '无法连接部署面板'; return; }
+    if (resp.status === 401) { showLogin(''); return; }
+    if (resp.status === 403) { showDenied({ name: currentUser }); return; }
+    if (!resp.ok) { $('current').textContent = '读取状态失败（HTTP ' + resp.status + '）'; return; }
+    const data = await resp.json();
+    const last = data.last || null;
+    setBadge(last ? last.state : 'idle');
+    $('current').textContent = commitText(data.current);
+    $('last').textContent = last
+      ? (last.message || last.step || '—') + (last.finishedAt ? '（' + fmtTime(last.finishedAt) + '）' : '')
+      : '—';
+    $('deploy').disabled = !!data.running || busy;
+    await loadLog();
+    if (data.running) { forcePollUntil = Date.now() + 10000; startPolling(); }
+    else if (Date.now() < forcePollUntil) startPolling();
+    else stopPolling();
+  }
+  async function loadLog() {
+    try {
+      const resp = await api('api/log');
+      if (resp.status === 401) { showLogin(''); return; }
+      if (!resp.ok) return;
+      const text = await resp.text();
+      if (text !== lastLog) {
+        lastLog = text;
+        const el = $('log');
+        el.textContent = text || '（暂无日志）';
+        el.scrollTop = el.scrollHeight;
+      }
+    } catch (err) { /* ignore */ }
+  }
+  async function deploy() {
+    if (busy) return;
+    if (!confirm('确定从 GitHub 拉取最新代码并重启服务吗？\n\n部署期间服务会短暂中断；失败会自动回滚。')) return;
+    busy = true;
+    $('deploy').disabled = true;
+    setMsg('msg', '已提交部署请求，等待执行…');
+    forcePollUntil = Date.now() + 30000;
+    try {
+      const resp = await api('api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (resp.status === 401) { showLogin(''); return; }
+      if (resp.status === 403) { showDenied({ name: currentUser }); return; }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) setMsg('msg', data.message || ('请求失败（HTTP ' + resp.status + '）'), true);
+      else { setMsg('msg', '部署已开始，页面会自动刷新状态。'); startPolling(); }
+    } catch (err) {
+      setMsg('msg', '网络错误，请重试', true);
+    } finally {
+      busy = false;
+      loadStatus();
+    }
+  }
+
+  $('login-btn').addEventListener('click', login);
+  $('studentId').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+  $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('studentId').focus(); });
+  $('refresh').addEventListener('click', loadStatus);
+  $('deploy').addEventListener('click', deploy);
+  $('logout').addEventListener('click', logout);
+  $('logout-denied').addEventListener('click', logout);
+  $('toggle-log').addEventListener('click', () => {
+    const el = $('log');
+    el.classList.toggle('hidden');
+    $('toggle-log').textContent = el.classList.contains('hidden') ? '显示' : '隐藏';
+  });
+
+  checkSession();
+})();
+</script>
+</body>
+</html>

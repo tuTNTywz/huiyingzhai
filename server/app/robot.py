@@ -17,6 +17,7 @@ from typing import Any
 
 import httpx
 
+from . import qqbot
 from .config import config
 
 MAX_TEXT = 600
@@ -128,20 +129,46 @@ async def _send_pushplus_qq(title: str, lines: list[str]) -> None:
         print("QQ 机器人通知失败：", exc)
 
 
+def _qq_text(title: str, lines: list[str]) -> str:
+    """QQ 官方消息用纯文本：去掉 Markdown 标记和网页链接。"""
+    kept = []
+    for line in lines:
+        if not line or "http://" in line or "https://" in line:
+            continue
+        text = line.lstrip("> ").replace("**", "").strip()
+        if text:
+            kept.append(text)
+    return "【%s】\n%s" % (_clip(title, 80), "\n".join(kept))
+
+
+async def _send_qq_official(title: str, lines: list[str]) -> None:
+    if not qqbot.enabled():
+        return
+    ok, detail = await qqbot.send_group_text(_qq_text(title, lines))
+    if not ok:
+        print("QQ 官方机器人通知失败：", detail)
+
+
 async def send_all(title: str, lines: list[str]) -> None:
     """并发发送到已配置的渠道；单渠道失败不影响其他渠道。"""
     await asyncio.gather(
         _send_wecom(title, lines),
         _send_pushplus(title, lines),
         _send_pushplus_qq(title, lines),
+        _send_qq_official(title, lines),
         return_exceptions=True,
     )
 
 
 def _send_later(title: str, lines: list[str]) -> None:
     has_wechat = bool(config.pushplus_token and config.pushplus_topic)
-    has_qq = bool(config.pushplus_token and config.pushplus_qq_option)
-    if not config.wechat_robot_webhook and not has_wechat and not has_qq:
+    has_pushplus_qq = bool(config.pushplus_token and config.pushplus_qq_option)
+    if (
+        not config.wechat_robot_webhook
+        and not has_wechat
+        and not has_pushplus_qq
+        and not qqbot.enabled()
+    ):
         return
     try:
         task = asyncio.get_running_loop().create_task(send_all(title, lines))

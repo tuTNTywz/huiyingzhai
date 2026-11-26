@@ -122,6 +122,8 @@ install -m 755 "${REPO_ROOT}/server/deploy/deploy_panel.py" \
   /usr/local/lib/huiyingzhai/deploy_panel.py
 install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai_web.html" \
   /usr/local/lib/huiyingzhai/huiyingzhai_web.html
+install -m 644 "${REPO_ROOT}/server/deploy/deploy_page.html" \
+  /usr/local/lib/huiyingzhai/deploy_page.html
 
 install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.service" \
   /etc/systemd/system/huiyingzhai-deploy.service
@@ -186,5 +188,6 @@ cat <<EOF
   部署日志：/var/log/huiyingzhai-deploy.log
 
   网页登录身份来自小程序用户表，不再使用独立网页账号。
-  班级通知机器人（可选）：在 .env 填 PUSHPLUS_TOKEN + PUSHPLUS_TOPIC 后重启 huiyingzhai。
+  班级通知机器人（可选）：微信填 PUSHPLUS_TOKEN + PUSHPLUS_TOPIC；
+  QQ 官方机器人填 QQ_APP_ID + QQ_APP_SECRET + QQ_BOT_SECRET，重启 huiyingzhai。
 EOF

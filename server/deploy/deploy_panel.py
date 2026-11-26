@@ -223,6 +223,16 @@ def load_web_bytes() -> bytes:
         ).encode("utf-8")
 
 
+DEPLOY_PAGE_PATH = Path(__file__).resolve().with_name("deploy_page.html")
+
+
+def load_deploy_bytes() -> bytes:
+    try:
+        return DEPLOY_PAGE_PATH.read_bytes()
+    except OSError:
+        return DEPLOY_HTML.encode("utf-8")
+
+
 PAGE_TOOLBAR = """<div id="hyz-page-tool" class="hyz-page-tool">
   <div class="hyz-page-tool-title">页面编辑 · __LABEL__</div>
   <div class="hyz-page-tool-note">下载当前页面，在电脑上改好后上传，页面会立即更新。</div>
@@ -598,6 +608,7 @@ HOME_HTML = """<!doctype html>
   <h1>tuTNT's home</h1>
   <div class="actions">
     <a class="btn primary" href="/huiyingzhai/">进入汇英斋</a>
+    <a class="btn" href="/deploy/">Deploy</a>
     <a class="btn" href="/intro/">汇英斋项目介绍</a>
     <a class="btn" href="/manual/">汇英斋使用说明书</a>
   </div>
@@ -1548,6 +1559,19 @@ class Handler(BaseHTTPRequestHandler):
             return None, None
         return token, record
 
+    def _require_admin_session(self):
+        token, record = self._require_session()
+        if not record:
+            return None, None
+        identity = record.get("identity") or {}
+        if identity.get("role") != "admin":
+            self._send(
+                403,
+                json.dumps({"ok": False, "message": "仅管理员可访问部署控制台"}, ensure_ascii=False),
+            )
+            return None, None
+        return token, record
+
     def _require_csrf(self, record) -> bool:
         supplied = self.headers.get("X-CSRF-Token", "")
         try:
@@ -1639,7 +1663,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, content, "text/html; charset=utf-8")
             return
         if area == "/deploy" and path in ("/", "/index.html"):
-            self._send(200, DEPLOY_HTML, "text/html; charset=utf-8")
+            self._send(200, load_deploy_bytes(), "text/html; charset=utf-8")
             return
         if area == "/me" and path in ("/", "/index.html"):
             self._send(200, MY_HTML, "text/html; charset=utf-8")
@@ -1678,12 +1702,12 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         if path == "/api/status":
-            if not self._require_session()[1]:
+            if not self._require_admin_session()[1]:
                 return
             self._send(200, self._status_payload())
             return
         if path == "/api/log":
-            if not self._require_session()[1]:
+            if not self._require_admin_session()[1]:
                 return
             lines = _tail_text(LOG_FILE).splitlines()[-LOG_LINES:]
             self._send(200, "\n".join(lines), "text/plain; charset=utf-8")
@@ -1723,6 +1747,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/app/action":
             self._handle_app_action()
+            return
+        if path == "/api/deploy":
+            self._handle_web_deploy()
             return
         if path == "/api/app/deploy":
             self._handle_app_deploy()
@@ -2164,6 +2191,69 @@ class Handler(BaseHTTPRequestHandler):
         if identity.get("role") != "admin":
             return None, "仅管理员可执行部署", 403
         return identity, "", 200
+
+    def _handle_web_deploy(self):
+        """网页部署控制台：管理员会话 + CSRF 后写入部署请求。"""
+        global _last_deploy_request_at
+
+        _token, record = self._require_admin_session()
+        if not record:
+            return
+        if not self._require_csrf(record):
+            return
+        data = self._read_json()
+        if data is None:
+            return
+        if data:
+            self._send(400, json.dumps({"ok": False, "message": "不支持参数"}, ensure_ascii=False))
+            return
+
+        with _deploy_lock:
+            now = time.time()
+            if now - _last_deploy_request_at < MIN_DEPLOY_INTERVAL_SECONDS:
+                self._send(429, json.dumps({"ok": False, "message": "操作过于频繁，请稍后再试"}, ensure_ascii=False))
+                return
+            last = _read_json(STATUS_FILE)
+            if last and last.get("state") == "running":
+                try:
+                    started = int(last.get("startedAt") or 0)
+                except (TypeError, ValueError):
+                    started = 0
+                if _now_ms() - started < RUNNING_STALE_MS:
+                    self._send(409, json.dumps({"ok": False, "message": "已有部署任务正在运行"}, ensure_ascii=False))
+                    return
+            tmp = None
+            try:
+                QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+                REQUEST_FILE.unlink(missing_ok=True)
+                tmp = QUEUE_DIR / ("deploy-%d-%s.tmp" % (os.getpid(), secrets.token_hex(4)))
+                identity = record.get("identity") or {}
+                tmp.write_text(
+                    json.dumps(
+                        {
+                            "requestedAt": _now_ms(),
+                            "client": self._client_ip(),
+                            "by": identity.get("name") or record.get("user") or "admin",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+                os.replace(tmp, REQUEST_FILE)
+            except OSError as exc:
+                if tmp is not None:
+                    try:
+                        tmp.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                self._send(
+                    500,
+                    json.dumps({"ok": False, "message": "写入部署请求失败：%s" % exc}, ensure_ascii=False),
+                )
+                return
+            _last_deploy_request_at = now
+
+        self._send(202, json.dumps({"ok": True, "message": "已提交部署请求"}, ensure_ascii=False))
 
     def _handle_app_deploy(self):
         global _last_deploy_request_at
