@@ -25,7 +25,7 @@
   class="card notice-item {{item.unread ? 'unread' : ''}}"
   wx:for="{{list}}"
   wx:key="_id"
-  data-id="{{item.type === 'subject_task' ? item.subject : item.homeworkId}}"
+  data-id="{{item.type === 'subject_task' ? item.subject : item.type === 'activity' ? item.activityId : item.homeworkId}}"
   bindtap="openNotice"
 >
   <view class="notice-top">
@@ -35,9 +35,10 @@
   </view>
   <view class="notice-title">{{item.title}}</view>
   <view class="notice-desc">{{item.content}}</view>
+  <view class="notice-attach" wx:if="{{item.attachmentText}}">附件：{{item.attachmentText}}</view>
   <view class="notice-foot">
-    <text class="subtitle" wx:if="{{item.deadlineText}}">截止：{{item.deadlineText}}</text>
-    <text class="subtitle">布置人：{{item.creatorName}}</text>
+    <text class="subtitle" wx:if="{{item.deadlineText}}">{{item.timeLabel}}：{{item.deadlineText}}</text>
+    <text class="subtitle">发布人：{{item.creatorName}}</text>
   </view>
-  <view class="notice-arrow">查看作业 ›</view>
+  <view class="notice-arrow">{{item.arrowText}}</view>
 </view>

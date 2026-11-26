@@ -45,9 +45,13 @@ Page({
   openNotice(e) {
     const id = e.currentTarget.dataset.id;
     if (!id) return;
-    const notice = this.data.list.find((n) => n._id && (n.homeworkId === id || n.subject === id));
+    const notice = this.data.list.find(
+      (n) => n._id && (n.homeworkId === id || n.subject === id || n.activityId === id)
+    );
     if (notice && notice.type === "subject_task") {
       wx.navigateTo({ url: `/pages/subject/index?key=${id}` });
+    } else if (notice && notice.type === "activity") {
+      wx.navigateTo({ url: `/pages/activity/detail?id=${id}` });
     } else {
       wx.navigateTo({ url: `/pages/homework/detail?id=${id}` });
     }

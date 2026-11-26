@@ -104,7 +104,7 @@
     <div id="view"></div>
   </section>
 </main>
-<footer>汇英斋 · 网页版 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">浙ICP备2026103012号</a></footer>
+<footer>汇英斋 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">浙ICP备2026103012号</a></footer>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -125,6 +125,11 @@
     return String(value === undefined || value === null ? "" : value)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function linkify(value) {
+    return esc(value).replace(/(https?:\/\/[^\s<]+)/g, (url) =>
+      '<a href="' + url + '" target="_blank" rel="noopener">' + url + "</a>"
+    );
   }
   function fmt(ms) {
     if (!ms) return "";
@@ -330,7 +335,7 @@
       return '<article class="card"><div class="row" style="justify-content:space-between"><b>' + esc(task.title) + "</b>" +
         '<span class="tag ' + (deadline ? (expired ? "gray" : "green") : "gold") + '">' +
         (deadline ? (expired ? "已截止" : "进行中") : "通知") + "</span></div>" +
-        '<div class="desc">' + esc(task.content || "（无详细内容）") + "</div>" +
+        '<div class="desc">' + linkify(task.content || "（无详细内容）") + "</div>" +
         attachmentsHtml(task.attachments) +
         '<div class="meta"><span>发布：' + esc(task.creatorName || "") + " · " + esc(fmt(task.createTime)) + "</span>" +
         (deadline ? "<span>截止：" + esc(fmt(deadline)) + "</span>" : "") + "</div>" +
@@ -360,7 +365,7 @@
       '<article class="card"><div class="detail-title">' + esc(hw.title || "作业") + "</div>" +
       '<div class="meta"><span class="tag ' + (expired ? "gray" : "green") + '">' + (expired ? "已截止" : "进行中") + "</span>" +
       "<span>截止：" + esc(fmt(deadline)) + "</span><span>布置人：" + esc(hw.creatorName || "") + "</span></div>" +
-      '<div class="desc">' + esc(hw.desc || "（详见附件）") + "</div>" +
+      '<div class="desc">' + linkify(hw.desc || "（详见附件）") + "</div>" +
       (Array.isArray(hw.attachments) && hw.attachments.length
         ? '<div class="section-head" style="margin-top:18px">附件列表</div>' + attachmentsHtml(hw.attachments)
         : "") +
@@ -395,7 +400,7 @@
       '<div class="profile" style="margin-top:12px"><div>时间</div><div>' + esc(fmt(item.activityTime)) + "</div>" +
       "<div>地点</div><div>" + esc(item.place || "待定") + "</div>" +
       "<div>发布人</div><div>" + esc(item.creatorName || "") + "</div></div>" +
-      '<div class="desc">' + esc(item.content || "（暂无详细说明）") + "</div>" +
+      '<div class="desc">' + linkify(item.content || "（暂无详细说明）") + "</div>" +
       (isCommittee() ? '<div class="row" style="margin-top:18px"><button class="btn danger small" data-act="delete-activity" data-id="' + esc(item._id) + '">删除活动</button></div>' : "") +
       "</article>";
   }
@@ -452,19 +457,26 @@
     const list = Array.isArray(res.list) ? res.list : [];
     const items = list.map((n) => {
       const isTask = n.type === "subject_task";
-      const target = isTask ? n.subject : n.homeworkId;
+      const isActivity = n.type === "activity";
+      const tag = isTask ? subjectName(n.subject) : isActivity ? "班级活动" : "班级作业";
+      const target = isTask ? n.subject : isActivity ? n.activityId : n.homeworkId;
+      const content = n.fullContent || n.content || "";
+      const when = isActivity
+        ? (n.activityTime ? "<span>时间：" + esc(fmt(n.activityTime)) + "</span>" : "")
+        : (n.deadline ? "<span>截止：" + esc(fmt(n.deadline)) + "</span>" : "");
       return '<article class="card notice" data-act="notice-open" data-type="' + esc(n.type || "") + '" data-target="' + esc(target || "") + '">' +
-        '<div class="row" style="justify-content:space-between"><span class="tag gold">' + esc(isTask ? subjectName(n.subject) : "班级作业") + "</span>" +
+        '<div class="row" style="justify-content:space-between"><span class="tag ' + (isActivity ? "gold" : "") + '">' + esc(tag) + "</span>" +
         '<span class="muted">' + esc(fmt(n.createTime)) + "</span></div>" +
         '<div class="title" style="font-weight:700;margin-top:6px">' + esc(n.title || "") + "</div>" +
-        (n.content ? '<div class="muted">' + esc(n.content) + "</div>" : "") +
-        '<div class="meta"><span>发布：' + esc(n.creatorName || "") + "</span>" +
-        (n.deadline ? "<span>截止：" + esc(fmt(n.deadline)) + "</span>" : "") + "</div></article>";
+        (content ? '<div class="desc">' + linkify(content) + "</div>" : "") +
+        (isActivity && n.place ? '<div class="meta">地点：' + esc(n.place) + "</div>" : "") +
+        attachmentsHtml(n.attachments) +
+        '<div class="meta"><span>发布：' + esc(n.creatorName || "") + "</span>" + when + "</div></article>";
     }).join("");
     const badge = $("notice-count");
     if (list.length) { badge.textContent = String(list.length); badge.classList.remove("hidden"); }
     else badge.classList.add("hidden");
-    $("view").innerHTML = '<div class="section-head">通知</div><div class="card muted">微信订阅提醒请在小程序「通知」中开启；这里显示站内通知。</div>' +
+    $("view").innerHTML = '<div class="section-head">通知</div>' +
       (items || empty("暂无通知"));
   }
 
@@ -542,6 +554,8 @@
     if (button) setTab(button.dataset.tab);
   });
   document.getElementById("view").addEventListener("click", (event) => {
+    const anchor = event.target.closest("a");
+    if (anchor && !anchor.hasAttribute("data-act")) return;
     const el = event.target.closest("[data-act]");
     if (!el) return;
     const act = el.dataset.act;
@@ -556,6 +570,7 @@
     else if (act === "reply-submit") submitReply(el);
     else if (act === "notice-open") {
       if (el.dataset.type === "subject_task" && el.dataset.target) run(viewSubject(el.dataset.target));
+      else if (el.dataset.type === "activity" && el.dataset.target) run(viewActivityDetail(el.dataset.target));
       else if (el.dataset.target) run(viewHomeworkDetail(el.dataset.target));
     }
     else if (act === "tab-homework") setTab("homework");

@@ -66,6 +66,11 @@
   color: #6f6858;
   white-space: pre-wrap;
 }
+.notice-attach {
+  font-size: 24rpx;
+  color: #9c6b4a;
+  margin-top: 10rpx;
+}
 .notice-foot {
   display: flex;
   justify-content: space-between;

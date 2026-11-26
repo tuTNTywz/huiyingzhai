@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime
 from typing import Any
 
@@ -43,11 +44,36 @@ def _clip(value: Any, limit: int = MAX_TEXT) -> str:
     return text if len(text) <= limit else text[:limit] + "…"
 
 
+def _clip_block(value: Any, limit: int = 1200) -> str:
+    """保留换行的正文截断，用于作业/任务/活动说明。"""
+    text = str(value or "").strip()
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
 def _web_link() -> str:
     base = (config.base_url or "").rstrip("/")
     if not base:
         return ""
-    return "> 网页查看：[%s/huiyingzhai/](%s/huiyingzhai/)" % (base, base)
+    return "> 网页：[在汇英斋查看](%s/huiyingzhai/)" % base
+
+
+def _file_url(file_id: Any) -> str:
+    fid = str(file_id or "").strip()
+    if not fid.startswith("/uploads/"):
+        return ""
+    base = (config.base_url or "").rstrip("/")
+    return base + fid if base else ""
+
+
+def _attachment_lines(attachments: Any) -> list[str]:
+    lines = []
+    for item in attachments if isinstance(attachments, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = _clip(item.get("name") or "附件", 60)
+        url = _file_url(item.get("fileID"))
+        lines.append("> 附件：[%s](%s)" % (name, url) if url else "> 附件：%s" % name)
+    return lines
 
 
 def _content(title: str, lines: list[str]) -> str:
@@ -129,27 +155,30 @@ async def _send_pushplus_qq(title: str, lines: list[str]) -> None:
         print("QQ 机器人通知失败：", exc)
 
 
-def _qq_lines(lines: list[str]) -> list[str]:
-    kept = []
-    for line in lines:
-        if not line or "http://" in line or "https://" in line:
-            continue
-        text = line.lstrip("> ").replace("**", "").strip()
-        if text:
-            kept.append(text)
-    return kept
+def _qq_clean(line: str, keep_links: bool) -> str:
+    text = str(line or "").lstrip("> ").replace("**", "").strip()
+    if not text:
+        return ""
+    if keep_links:
+        # 已有 [文字](url) 的链接保留；其余裸网址包成 <url>，QQ 会渲染为可点击链接
+        return re.sub(r"(?<![\[(<])(https?://[^\s]+)", r"<\1>", text)
+    # 纯文本回退：去掉链接语法，只保留文字；去掉裸网址
+    text = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1", text)
+    return re.sub(r"https?://\S+", "", text).strip()
 
 
 def _qq_text(title: str, lines: list[str]) -> str:
     """QQ 官方纯文本消息：不带链接，作为 Markdown 失败时的回退。"""
-    return "【%s】\n%s" % (_clip(title, 80), "\n".join(_qq_lines(lines)))
+    kept = [t for t in (_qq_clean(line, False) for line in lines) if t and t != "网页查看："]
+    return "【%s】\n%s" % (_clip(title, 80), "\n".join(kept))
 
 
 def _qq_markdown(title: str, lines: list[str]) -> str:
     """QQ 官方 Markdown：支持可点击链接（2026/04 起群聊对所有机器人开放）。"""
-    parts = ["# " + _clip(title, 80)] + _qq_lines(lines)
+    kept = [t for t in (_qq_clean(line, True) for line in lines) if t]
+    parts = ["# " + _clip(title, 80)] + kept
     base = (config.base_url or "").rstrip("/")
-    if base:
+    if base and not any("/huiyingzhai/" in line for line in kept):
         parts += ["", "[在汇英斋查看](%s/huiyingzhai/)" % base]
     return "\n".join(parts)
 
@@ -204,13 +233,16 @@ def _send_later(title: str, lines: list[str]) -> None:
     task.add_done_callback(_tasks.discard)
 
 
-def notify_homework(*, title: Any, desc: Any, deadline: Any, creator_name: Any) -> None:
+def notify_homework(
+    *, title: Any, desc: Any, deadline: Any, creator_name: Any, attachments: Any = None
+) -> None:
     lines = [
         "> 截止：%s" % (_fmt_time(deadline) or "未设置"),
         "> 发布：%s" % _clip(creator_name, 40),
     ]
     if desc:
-        lines.append("> 说明：%s" % _clip(desc, 200))
+        lines.append("> 说明：%s" % _clip_block(desc, 1200))
+    lines.extend(_attachment_lines(attachments))
     link = _web_link()
     if link:
         lines.append(link)
@@ -226,7 +258,7 @@ def notify_activity(
         "> 发布：%s" % _clip(creator_name, 40),
     ]
     if content:
-        lines.append("> 说明：%s" % _clip(content, 200))
+        lines.append("> 说明：%s" % _clip_block(content, 1200))
     link = _web_link()
     if link:
         lines.append(link)
@@ -234,14 +266,21 @@ def notify_activity(
 
 
 def notify_subject_task(
-    *, subject_name: Any, title: Any, content: Any, deadline: Any, creator_name: Any
+    *,
+    subject_name: Any,
+    title: Any,
+    content: Any,
+    deadline: Any,
+    creator_name: Any,
+    attachments: Any = None,
 ) -> None:
     lines = [
         "> 发布：%s" % _clip(creator_name, 40),
         "> 截止：%s" % (_fmt_time(deadline) or "未设置"),
     ]
     if content:
-        lines.append("> 说明：%s" % _clip(content, 200))
+        lines.append("> 说明：%s" % _clip_block(content, 1200))
+    lines.extend(_attachment_lines(attachments))
     link = _web_link()
     if link:
         lines.append(link)

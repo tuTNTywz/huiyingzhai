@@ -242,7 +242,7 @@ def load_web_bytes() -> bytes:
             "<!doctype html><meta charset='utf-8'>"
             "<title>汇英斋</title>"
             "<p style='font:16px sans-serif;padding:24px'>"
-            "网页版文件缺失，请重新运行 server/deploy/install.sh。</p>"
+            "页面文件缺失，请重新运行 server/deploy/install.sh。</p>"
         ).encode("utf-8")
 
 

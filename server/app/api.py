@@ -328,6 +328,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             content=content,
             deadline=deadline,
             creator_name=user.get("nickname"),
+            attachments=task.get("attachments"),
         )
         return {"ok": True, "id": task["_id"]}
 
@@ -413,6 +414,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             desc=desc,
             deadline=deadline,
             creator_name=user.get("nickname"),
+            attachments=homework.get("attachments"),
         )
         return {"ok": True, "id": homework["_id"]}
 
@@ -479,14 +481,42 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
         rows = store.find(
             "notifications", sort_by="createTime", direction="desc", limit=50
         )
-        notices = [
-            {
+        notices = []
+        for n in rows:
+            item = {
                 **n,
                 "createMs": _to_ms(n.get("createTime")),
                 "deadlineMs": _to_ms(n.get("deadline")),
             }
-            for n in rows
-        ]
+            # 通知里只存了摘要；补上对应作业/任务/活动的完整正文和附件
+            if n.get("type") == "homework":
+                doc = store.find_one(
+                    "homeworks", lambda h: h.get("_id") == n.get("homeworkId")
+                )
+                if doc:
+                    item["fullContent"] = doc.get("desc") or ""
+                    item["attachments"] = doc.get("attachments") or []
+                    item["deadline"] = doc.get("deadline") or n.get("deadline")
+                    item["deadlineMs"] = _to_ms(item["deadline"])
+            elif n.get("type") == "subject_task":
+                doc = store.find_one(
+                    "subject_tasks", lambda t: t.get("_id") == n.get("taskId")
+                )
+                if doc:
+                    item["fullContent"] = doc.get("content") or ""
+                    item["attachments"] = doc.get("attachments") or []
+                    item["deadline"] = doc.get("deadline") or n.get("deadline")
+                    item["deadlineMs"] = _to_ms(item["deadline"])
+            elif n.get("type") == "activity":
+                doc = store.find_one(
+                    "activities", lambda a: a.get("_id") == n.get("activityId")
+                )
+                if doc:
+                    item["fullContent"] = doc.get("content") or ""
+                    item["activityTime"] = doc.get("activityTime")
+                    item["activityTimeMs"] = _to_ms(doc.get("activityTime"))
+                    item["place"] = doc.get("place")
+            notices.append(item)
         sub = store.find_one("subscriptions", lambda s: s.get("_openid") == openid)
         return {
             "ok": True,
@@ -513,6 +543,23 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                 "createTime": _now_ms(),
             },
         )
+        try:
+            store.insert(
+                "notifications",
+                {
+                    "type": "activity",
+                    "activityId": activity["_id"],
+                    "title": activity.get("title"),
+                    "content": _trim(activity.get("content"))[:100] or "新活动已发布，点击查看详情",
+                    "activityTime": activity.get("activityTime"),
+                    "place": activity.get("place"),
+                    "creatorName": activity.get("creatorName"),
+                    "publisherOpenid": openid,
+                    "createTime": _now_ms(),
+                },
+            )
+        except Exception as exc:
+            print("活动站内通知写入失败", exc)
         robot.notify_activity(
             title=activity.get("title"),
             place=activity.get("place"),
@@ -541,6 +588,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
         if not activity:
             return {"ok": False, "msg": "活动不存在或已被删除"}
         store.remove("activities", activity.get("_id"))
+        store.remove_where("notifications", lambda n: n.get("activityId") == activity.get("_id"))
         return {"ok": True}
 
     # ===== 交流栏目：所有人可自由发帖、回复（可带文件 / 照片） =====
