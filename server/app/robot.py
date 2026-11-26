@@ -14,6 +14,7 @@ import httpx
 from .config import config
 
 MAX_TEXT = 600
+_tasks: set[asyncio.Task] = set()
 
 
 def _fmt_time(ms: Any) -> str:
@@ -30,7 +31,7 @@ def _fmt_time(ms: Any) -> str:
 
 
 def _clip(value: Any, limit: int = MAX_TEXT) -> str:
-    text = str(value or "").strip()
+    text = " ".join(str(value or "").split())
     return text if len(text) <= limit else text[:limit] + "…"
 
 
@@ -65,9 +66,12 @@ def _send_later(title: str, lines: list[str]) -> None:
     if not config.wechat_robot_webhook:
         return
     try:
-        asyncio.get_running_loop().create_task(send_markdown(title, lines))
+        task = asyncio.get_running_loop().create_task(send_markdown(title, lines))
     except RuntimeError:
         print("微信群机器人通知跳过：没有运行中的事件循环")
+        return
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
 
 
 def notify_homework(*, title: Any, desc: Any, deadline: Any, creator_name: Any) -> None:
