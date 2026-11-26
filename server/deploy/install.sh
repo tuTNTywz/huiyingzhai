@@ -115,6 +115,8 @@ chmod 600 "${PANEL_CONF}"
 # root 拥有并执行部署脚本；面板脚本只需读权限
 install -m 755 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.sh" \
   /usr/local/sbin/huiyingzhai-deploy
+install -m 755 "${REPO_ROOT}/server/deploy/setup_pushplus.py" \
+  /usr/local/sbin/huiyingzhai-pushplus-setup
 install -d -m 755 /usr/local/lib/huiyingzhai
 install -m 755 "${REPO_ROOT}/server/deploy/deploy_panel.py" \
   /usr/local/lib/huiyingzhai/deploy_panel.py

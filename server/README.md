@@ -232,7 +232,13 @@ sudo systemctl restart huiyingzhai
 1. 管理员用微信登录 <https://www.pushplus.plus/>，按提示完成实名认证；
 2. 「发送消息 → 一对多消息 → 新建群组」，创建班级群组；
 3. 记下 **token**（个人中心/接口文档页）和 **群组编码（topic）**，把群组二维码发到班级群，同学扫码关注并加入；
-4. 在服务器 `.env` 中填写（权限 600，不要提交到仓库）：
+4. 在服务器上运行配置助手（自动写入 `.env`、发测试消息、重启服务）：
+
+   ```bash
+   sudo /usr/local/sbin/huiyingzhai-pushplus-setup
+   ```
+
+   按提示输入 Token 和群组编码即可，密钥不会回显。也可以手动编辑（权限 600，不要提交到仓库）：
 
    ```bash
    sudo nano /opt/huiyingzhai/server/.env
