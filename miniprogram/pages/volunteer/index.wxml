@@ -1,0 +1,25 @@
+<view class="page-header">
+  <view class="page-title">志愿活动</view>
+  <view class="page-sub">「 予人玫瑰，手有余香 」</view>
+</view>
+
+<view wx:if="{{!loading && list.length === 0}}" class="empty">暂无志愿活动，静候招募</view>
+
+<view
+  class="card act-item"
+  wx:for="{{list}}"
+  wx:key="_id"
+  data-id="{{item._id}}"
+  bindtap="goDetail"
+  bindlongpress="onDelete"
+>
+  <view class="act-top">
+    <view class="title">{{item.title}}</view>
+    <text class="tag {{item.ended ? 'tag-gray' : 'tag-green'}}">{{item.ended ? '已结束' : '招募中'}}</text>
+  </view>
+  <view class="act-line">🕒 {{item.timeText}}</view>
+  <view class="act-line">📍 {{item.place}}</view>
+  <view class="act-line" wx:if="{{item.quota}}">👥 名额：{{item.quota}}</view>
+  <view class="act-line" wx:if="{{item.organizer}}">🏛 {{item.organizer}}</view>
+  <view class="subtitle act-creator">发布人：{{item.creatorName}}</view>
+</view>

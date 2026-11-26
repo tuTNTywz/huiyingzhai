@@ -1137,6 +1137,28 @@ UPLOAD_HTML = """<!doctype html>
         <div id="act-msg" class="msg"></div>
       </div>
 
+      <div id="volunteer-card" class="card form-card hidden">
+        <h2>发布志愿活动</h2>
+        <label for="vol-title">活动名称</label>
+        <input id="vol-title" placeholder="如：图书馆整理志愿服务">
+        <label for="vol-time">活动时间</label>
+        <input id="vol-time" type="datetime-local">
+        <label for="vol-place">活动地点</label>
+        <input id="vol-place" placeholder="如：市图书馆">
+        <label for="vol-organizer">组织单位（选填）</label>
+        <input id="vol-organizer" placeholder="如：院青年志愿者协会">
+        <label for="vol-quota">招募人数（选填）</label>
+        <input id="vol-quota" placeholder="如：20 人">
+        <label for="vol-contact">联系方式（选填）</label>
+        <input id="vol-contact" placeholder="如：QQ 群 / 手机号">
+        <label for="vol-signup">报名链接（选填，http/https）</label>
+        <input id="vol-signup" placeholder="https://…">
+        <label for="vol-content">活动说明（选填）</label>
+        <textarea id="vol-content" placeholder="服务内容、集合方式、注意事项…"></textarea>
+        <div class="form-actions"><button id="vol-submit" class="primary">发布志愿活动</button></div>
+        <div id="vol-msg" class="msg"></div>
+      </div>
+
       <div id="subject-card" class="card form-card hidden">
         <h2>发布学科任务</h2>
         <label for="sub-subject">科目</label>
@@ -1235,6 +1257,7 @@ UPLOAD_HTML = """<!doctype html>
     const canSub = admin || reps.length > 0;
     $('homework-card').classList.toggle('hidden', !study);
     $('activity-card').classList.toggle('hidden', !committee);
+    $('volunteer-card').classList.toggle('hidden', !committee);
     $('subject-card').classList.toggle('hidden', !canSub);
     const select = $('sub-subject');
     select.textContent = '';
@@ -1387,6 +1410,33 @@ UPLOAD_HTML = """<!doctype html>
     }
   }
 
+  async function submitVolunteer() {
+    const title = $('vol-title').value.trim();
+    const activityTime = toMs($('vol-time').value);
+    if (!title || !activityTime) { setMsg('vol-msg', '请填写活动名称和时间', true); return; }
+    const button = $('vol-submit');
+    button.disabled = true;
+    try {
+      setMsg('vol-msg', '正在发布…');
+      await publishAction('publishVolunteer', {
+        title: title,
+        activityTime: activityTime,
+        place: $('vol-place').value.trim() || '待定',
+        organizer: $('vol-organizer').value.trim(),
+        quota: $('vol-quota').value.trim(),
+        contact: $('vol-contact').value.trim(),
+        signupUrl: $('vol-signup').value.trim(),
+        content: $('vol-content').value.trim()
+      }, 'vol-msg');
+      setMsg('vol-msg', '志愿活动已发布');
+      ['vol-title', 'vol-time', 'vol-place', 'vol-organizer', 'vol-quota', 'vol-contact', 'vol-signup', 'vol-content'].forEach((id) => { $(id).value = ''; });
+    } catch (err) {
+      setMsg('vol-msg', err.message || '发布失败', true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function submitSubject() {
     const subject = $('sub-subject').value;
     const title = $('sub-title').value.trim();
@@ -1443,6 +1493,7 @@ UPLOAD_HTML = """<!doctype html>
   $('logout').addEventListener('click', logout);
   $('hw-submit').addEventListener('click', submitHomework);
   $('act-submit').addEventListener('click', submitActivity);
+  $('vol-submit').addEventListener('click', submitVolunteer);
   $('sub-submit').addEventListener('click', submitSubject);
 
   let ticket = '';
@@ -2064,7 +2115,7 @@ class Handler(BaseHTTPRequestHandler):
         action = str(data.get("action") or "")
         allowed = {
             "listHomeworks", "getHomework",
-            "listActivities", "getActivity",
+            "listActivities", "getActivity", "listVolunteers", "publishVolunteer",
             "listPosts", "getPost", "listReplies",
             "fetchHomeworkNotices",
             "listSubjectTasks", "getSubjectSettings", "getSubjectRep",
@@ -2092,6 +2143,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if action == "publishActivity" and role not in ("committee", "admin"):
             self._send(403, json.dumps({"ok": False, "message": "仅班委或管理员可发布活动"}, ensure_ascii=False))
+            return
+        if action == "publishVolunteer" and role not in ("committee", "admin"):
+            self._send(403, json.dumps({"ok": False, "message": "仅班委或管理员可发布志愿活动"}, ensure_ascii=False))
             return
         if action == "publishSubjectTask":
             subject = str(payload["data"].get("subject") or "")

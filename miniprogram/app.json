@@ -2,10 +2,12 @@
   "pages": [
     "pages/homework/index",
     "pages/activity/index",
+    "pages/volunteer/index",
     "pages/forum/index",
     "pages/mine/index",
     "pages/homework/detail",
     "pages/activity/detail",
+    "pages/volunteer/detail",
     "pages/forum/detail",
     "pages/register/index",
     "pages/subject/index",
@@ -34,6 +36,12 @@
       {
         "pagePath": "pages/activity/index",
         "text": "活动",
+        "iconPath": "images/icons/goods.png",
+        "selectedIconPath": "images/icons/goods-active.png"
+      },
+      {
+        "pagePath": "pages/volunteer/index",
+        "text": "志愿活动",
         "iconPath": "images/icons/goods.png",
         "selectedIconPath": "images/icons/goods-active.png"
       },

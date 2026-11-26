@@ -151,6 +151,7 @@ WRITE_ACTIONS = {
     "subscribeHomework",
     "unsubscribeHomework",
     "publishActivity",
+    "publishVolunteer",
     "deleteActivity",
     "createPost",
     "createReply",
@@ -507,7 +508,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                     item["attachments"] = doc.get("attachments") or []
                     item["deadline"] = doc.get("deadline") or n.get("deadline")
                     item["deadlineMs"] = _to_ms(item["deadline"])
-            elif n.get("type") == "activity":
+            elif n.get("type") in ("activity", "volunteer"):
                 doc = store.find_one(
                     "activities", lambda a: a.get("_id") == n.get("activityId")
                 )
@@ -516,6 +517,10 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                     item["activityTime"] = doc.get("activityTime")
                     item["activityTimeMs"] = _to_ms(doc.get("activityTime"))
                     item["place"] = doc.get("place")
+                    item["quota"] = doc.get("quota")
+                    item["organizer"] = doc.get("organizer")
+                    item["contact"] = doc.get("contact")
+                    item["signupUrl"] = doc.get("signupUrl")
             notices.append(item)
         sub = store.find_one("subscriptions", lambda s: s.get("_openid") == openid)
         return {
@@ -534,6 +539,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
         activity = store.insert(
             "activities",
             {
+                "category": "activity",
                 "title": data.get("title"),
                 "place": data.get("place") or "待定",
                 "content": data.get("content") or "",
@@ -569,9 +575,79 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
         )
         return {"ok": True, "id": activity["_id"]}
 
+    if action == "publishVolunteer":
+        if not is_manager(user):
+            return {"ok": False, "msg": "仅班委或管理员可发布志愿活动"}
+        if not data.get("title") or not data.get("activityTime"):
+            return {"ok": False, "msg": "缺少志愿活动标题或时间"}
+        signup = _trim(data.get("signupUrl"))
+        if signup and not (signup.startswith("http://") or signup.startswith("https://")):
+            signup = ""
+
+        volunteer = store.insert(
+            "activities",
+            {
+                "category": "volunteer",
+                "title": _trim(data.get("title")),
+                "place": _trim(data.get("place")) or "待定",
+                "content": _trim(data.get("content")),
+                "activityTime": _int(data.get("activityTime")),
+                "quota": _trim(data.get("quota")),
+                "organizer": _trim(data.get("organizer")),
+                "contact": _trim(data.get("contact")),
+                "signupUrl": signup,
+                "creatorOpenid": openid,
+                "creatorName": user.get("nickname"),
+                "createTime": _now_ms(),
+            },
+        )
+        try:
+            store.insert(
+                "notifications",
+                {
+                    "type": "volunteer",
+                    "activityId": volunteer["_id"],
+                    "title": volunteer.get("title"),
+                    "content": _trim(volunteer.get("content"))[:100] or "新志愿活动已发布，点击查看详情",
+                    "activityTime": volunteer.get("activityTime"),
+                    "place": volunteer.get("place"),
+                    "creatorName": volunteer.get("creatorName"),
+                    "publisherOpenid": openid,
+                    "createTime": _now_ms(),
+                },
+            )
+        except Exception as exc:
+            print("志愿活动站内通知写入失败", exc)
+        robot.notify_volunteer(
+            title=volunteer.get("title"),
+            place=volunteer.get("place"),
+            activity_time=volunteer.get("activityTime"),
+            content=volunteer.get("content"),
+            creator_name=volunteer.get("creatorName"),
+            quota=volunteer.get("quota"),
+            organizer=volunteer.get("organizer"),
+            contact=volunteer.get("contact"),
+            signup_url=volunteer.get("signupUrl"),
+        )
+        return {"ok": True, "id": volunteer["_id"]}
+
+    if action == "listVolunteers":
+        rows = store.find(
+            "activities",
+            lambda a: a.get("category") == "volunteer",
+            sort_by="activityTime",
+            direction="desc",
+            limit=20,
+        )
+        return {"ok": True, "list": rows}
+
     if action == "listActivities":
         rows = store.find(
-            "activities", sort_by="activityTime", direction="desc", limit=20
+            "activities",
+            lambda a: a.get("category") != "volunteer",
+            sort_by="activityTime",
+            direction="desc",
+            limit=20,
         )
         return {"ok": True, "list": rows}
 

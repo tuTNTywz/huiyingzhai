@@ -265,6 +265,39 @@ def notify_activity(
     _send_later(_headline("班级活动", title), lines)
 
 
+def notify_volunteer(
+    *,
+    title: Any,
+    place: Any,
+    activity_time: Any,
+    content: Any,
+    creator_name: Any,
+    quota: Any = "",
+    organizer: Any = "",
+    contact: Any = "",
+    signup_url: Any = "",
+) -> None:
+    lines = [
+        "> 时间：%s" % (_fmt_time(activity_time) or "待定"),
+        "> 地点：%s" % _clip(place or "待定", 80),
+        "> 发布：%s" % _clip(creator_name, 40),
+    ]
+    if organizer:
+        lines.append("> 组织：%s" % _clip(organizer, 80))
+    if quota:
+        lines.append("> 名额：%s" % _clip(quota, 40))
+    if contact:
+        lines.append("> 联系：%s" % _clip(contact, 80))
+    if content:
+        lines.append("> 说明：%s" % _clip_block(content, 1200))
+    if signup_url:
+        lines.append("> 报名：[点击报名](%s)" % signup_url)
+    link = _web_link()
+    if link:
+        lines.append(link)
+    _send_later(_headline("志愿活动", title), lines)
+
+
 def notify_subject_task(
     *,
     subject_name: Any,

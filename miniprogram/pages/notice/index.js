@@ -50,6 +50,8 @@ Page({
     );
     if (notice && notice.type === "subject_task") {
       wx.navigateTo({ url: `/pages/subject/index?key=${id}` });
+    } else if (notice && notice.type === "volunteer") {
+      wx.navigateTo({ url: `/pages/volunteer/detail?id=${id}` });
     } else if (notice && notice.type === "activity") {
       wx.navigateTo({ url: `/pages/activity/detail?id=${id}` });
     } else {

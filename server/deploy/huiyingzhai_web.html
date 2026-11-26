@@ -82,6 +82,7 @@
     <nav class="tabs" id="tabs">
       <button data-tab="homework" class="active">作业</button>
       <button data-tab="activity">活动</button>
+      <button data-tab="volunteer">志愿活动</button>
       <button data-tab="forum">交流</button>
       <button data-tab="notice">通知 <span id="notice-count" class="tag hidden"></span></button>
       <button data-tab="mine">我的</button>
@@ -286,6 +287,7 @@
     try {
       if (state.tab === "homework") await viewHomework();
       else if (state.tab === "activity") await viewActivity();
+      else if (state.tab === "volunteer") await viewVolunteer();
       else if (state.tab === "forum") await viewForum();
       else if (state.tab === "notice") await viewNotice();
       else await viewMine();
@@ -405,6 +407,45 @@
       "</article>";
   }
 
+  async function viewVolunteer() {
+    const res = await action("listVolunteers");
+    const list = Array.isArray(res.list) ? res.list : [];
+    const items = list.map((item) => {
+      const time = Number(item.activityTime) || 0;
+      const ended = time && time < Date.now();
+      return '<article class="card hw" data-act="volunteer" data-id="' + esc(item._id) + '">' +
+        '<div class="row" style="justify-content:space-between"><b>' + esc(item.title) + "</b>" +
+        '<span class="tag ' + (ended ? "gray" : "green") + '">' + (ended ? "已结束" : "招募中") + "</span></div>" +
+        '<div class="meta"><span>🕒 ' + esc(fmt(time)) + "</span><span>📍 " + esc(item.place || "待定") + "</span>" +
+        (item.quota ? "<span>👥 名额：" + esc(item.quota) + "</span>" : "") + "</div>" +
+        (item.organizer ? '<div class="meta"><span>组织：' + esc(item.organizer) + "</span></div>" : "") +
+        (isCommittee() ? '<div class="row" style="margin-top:8px"><button class="btn danger small" data-act="delete-volunteer" data-id="' + esc(item._id) + '">删除志愿活动</button></div>' : "") +
+        "</article>";
+    }).join("");
+    $("view").innerHTML = '<div class="section-head">志愿活动 ' + (isCommittee() ? '<a class="btn small primary" href="/upload/">发布志愿活动</a>' : "") + "</div>" +
+      (items || empty("暂无志愿活动"));
+  }
+
+  async function viewVolunteerDetail(id) {
+    const res = await action("getActivity", { id });
+    const item = res.item || {};
+    const signup = /^https?:\/\//i.test(String(item.signupUrl || "")) ? item.signupUrl : "";
+    $("view").innerHTML =
+      backButton("返回志愿活动", "tab-volunteer") +
+      '<article class="card"><div class="detail-title">' + esc(item.title || "志愿活动") + "</div>" +
+      '<div class="profile" style="margin-top:12px"><div>时间</div><div>' + esc(fmt(item.activityTime)) + "</div>" +
+      "<div>地点</div><div>" + esc(item.place || "待定") + "</div>" +
+      (item.organizer ? "<div>组织</div><div>" + esc(item.organizer) + "</div>" : "") +
+      (item.quota ? "<div>名额</div><div>" + esc(item.quota) + "</div>" : "") +
+      (item.contact ? "<div>联系</div><div>" + esc(item.contact) + "</div>" : "") +
+      "<div>发布人</div><div>" + esc(item.creatorName || "") + "</div></div>" +
+      '<div class="desc">' + linkify(item.content || "（暂无详细说明）") + "</div>" +
+      '<div class="row" style="margin-top:16px">' +
+      (signup ? '<a class="btn primary small" href="' + esc(signup) + '" target="_blank" rel="noopener">报名链接</a>' : "") +
+      (isCommittee() ? '<button class="btn danger small" data-act="delete-volunteer" data-id="' + esc(item._id) + '">删除志愿活动</button>' : "") +
+      "</div></article>";
+  }
+
   async function viewForum() {
     const res = await action("listPosts");
     const list = Array.isArray(res.list) ? res.list : [];
@@ -457,19 +498,21 @@
     const list = Array.isArray(res.list) ? res.list : [];
     const items = list.map((n) => {
       const isTask = n.type === "subject_task";
+      const isVolunteer = n.type === "volunteer";
       const isActivity = n.type === "activity";
-      const tag = isTask ? subjectName(n.subject) : isActivity ? "班级活动" : "班级作业";
-      const target = isTask ? n.subject : isActivity ? n.activityId : n.homeworkId;
+      const activityLike = isActivity || isVolunteer;
+      const tag = isTask ? subjectName(n.subject) : isVolunteer ? "志愿活动" : isActivity ? "班级活动" : "班级作业";
+      const target = isTask ? n.subject : activityLike ? n.activityId : n.homeworkId;
       const content = n.fullContent || n.content || "";
-      const when = isActivity
+      const when = activityLike
         ? (n.activityTime ? "<span>时间：" + esc(fmt(n.activityTime)) + "</span>" : "")
         : (n.deadline ? "<span>截止：" + esc(fmt(n.deadline)) + "</span>" : "");
       return '<article class="card notice" data-act="notice-open" data-type="' + esc(n.type || "") + '" data-target="' + esc(target || "") + '">' +
-        '<div class="row" style="justify-content:space-between"><span class="tag ' + (isActivity ? "gold" : "") + '">' + esc(tag) + "</span>" +
+        '<div class="row" style="justify-content:space-between"><span class="tag ' + (activityLike ? "gold" : "") + '">' + esc(tag) + "</span>" +
         '<span class="muted">' + esc(fmt(n.createTime)) + "</span></div>" +
         '<div class="title" style="font-weight:700;margin-top:6px">' + esc(n.title || "") + "</div>" +
         (content ? '<div class="desc">' + linkify(content) + "</div>" : "") +
-        (isActivity && n.place ? '<div class="meta">地点：' + esc(n.place) + "</div>" : "") +
+        (activityLike && n.place ? '<div class="meta">地点：' + esc(n.place) + "</div>" : "") +
         attachmentsHtml(n.attachments) +
         '<div class="meta"><span>发布：' + esc(n.creatorName || "") + "</span>" + when + "</div></article>";
     }).join("");
@@ -528,11 +571,11 @@
       setTab("homework");
     } catch (e) { alert(e.message || "删除失败"); }
   }
-  async function deleteActivity(id) {
+  async function deleteActivity(id, backTab) {
     if (!confirm("确定删除该活动吗？删除后无法恢复。")) return;
     try {
       await action("deleteActivity", { id });
-      setTab("activity");
+      setTab(backTab || "activity");
     } catch (e) { alert(e.message || "删除失败"); }
   }
   async function deleteSubjectTask(id, key) {
@@ -562,19 +605,23 @@
     if (act === "subject") run(viewSubject(el.dataset.key));
     else if (act === "homework") run(viewHomeworkDetail(el.dataset.id));
     else if (act === "activity") run(viewActivityDetail(el.dataset.id));
+    else if (act === "volunteer") run(viewVolunteerDetail(el.dataset.id));
     else if (act === "post") run(viewPost(el.dataset.id));
     else if (act === "delete-homework") run(deleteHomework(el.dataset.id));
-    else if (act === "delete-activity") run(deleteActivity(el.dataset.id));
+    else if (act === "delete-activity") run(deleteActivity(el.dataset.id, "activity"));
+    else if (act === "delete-volunteer") run(deleteActivity(el.dataset.id, "volunteer"));
     else if (act === "delete-subject-task") run(deleteSubjectTask(el.dataset.id, el.dataset.key));
     else if (act === "post-submit") submitPost();
     else if (act === "reply-submit") submitReply(el);
     else if (act === "notice-open") {
       if (el.dataset.type === "subject_task" && el.dataset.target) run(viewSubject(el.dataset.target));
+      else if (el.dataset.type === "volunteer" && el.dataset.target) run(viewVolunteerDetail(el.dataset.target));
       else if (el.dataset.type === "activity" && el.dataset.target) run(viewActivityDetail(el.dataset.target));
       else if (el.dataset.target) run(viewHomeworkDetail(el.dataset.target));
     }
     else if (act === "tab-homework") setTab("homework");
     else if (act === "tab-activity") setTab("activity");
+    else if (act === "tab-volunteer") setTab("volunteer");
     else if (act === "tab-forum") setTab("forum");
     else if (act === "logout") logout();
   });

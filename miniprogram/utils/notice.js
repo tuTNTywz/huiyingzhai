@@ -32,7 +32,8 @@ function fetchNotices() {
       .filter((n) => !n.publisherOpenid || n.publisherOpenid !== myOpenid)
       .map((n) => {
         const ms = n.createMs || 0;
-        const isActivity = n.type === "activity";
+        const isVolunteer = n.type === "volunteer";
+        const isActivity = n.type === "activity" || isVolunteer;
         const deadlineMs = isActivity ? (n.activityTimeMs || 0) : (n.deadlineMs || 0);
         return {
           ...n,
@@ -40,12 +41,14 @@ function fetchNotices() {
           timeText: ms ? formatTime(ms) : "",
           deadlineText: deadlineMs ? formatTime(deadlineMs) : "",
           unread: ms > last,
-          // 学科任务显示科目名，活动/作业分别显示类型
+          // 学科任务显示科目名，活动/志愿活动/作业分别显示类型
           tagText: n.type === "subject_task"
             ? subjectName(n.subject) || "科目任务"
-            : isActivity ? "班级活动" : "新作业",
+            : isVolunteer ? "志愿活动" : n.type === "activity" ? "班级活动" : "新作业",
           timeLabel: isActivity ? "时间" : "截止",
-          arrowText: n.type === "subject_task" ? "查看科目 ›" : isActivity ? "查看活动 ›" : "查看作业 ›",
+          arrowText: n.type === "subject_task"
+            ? "查看科目 ›"
+            : isVolunteer ? "查看志愿活动 ›" : n.type === "activity" ? "查看活动 ›" : "查看作业 ›",
           attachmentText: (n.attachments || []).map((a) => a.name || "附件").join("、"),
         };
       });
