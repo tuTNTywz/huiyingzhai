@@ -1,13 +1,13 @@
 # 汇英斋自建后端（Ubuntu / Python）
 
-小程序原本使用微信云开发（云函数 + 云数据库 + 云存储）。本目录用 **Python 3 + FastAPI + SQLite** 实现了同等能力，可部署在任意 Ubuntu 云服务器上：
+本目录用 **Python 3 + FastAPI + SQLite** 实现班级后端，可部署在任意 Ubuntu 云服务器上：
 
-- `wx.login` code 换取 openid，自建 token 会话
+- 网页版用 **姓名 + 学号** 登录（`/huiyingzhai/`、`/upload/`、`/deploy/`）
 - 全部读写操作走 `/api/action`，服务端校验班委 / 管理员 / 课代表权限
 - 附件上传到服务器本地 `uploads/` 目录，由 Nginx 直接提供
-- 站内通知 + 微信订阅消息推送（服务端获取 access_token）
+- 站内通知 + 微信/QQ 机器人推送
 
-> 小程序端仍是 JavaScript（微信小程序只能使用 JS），`server/` 内已无任何 Node 代码。
+> 微信小程序客户端已从仓库删除；后端仍保留原 `wx.login`、订阅消息等接口以兼容旧数据和历史调用，网页版不依赖微信客户端。
 > 数据库结构与原 Node 版完全一致，旧 `data/huiyingzhai.sqlite` 可直接沿用。
 
 ## 目录结构
@@ -179,16 +179,15 @@ sudo systemctl restart huiyingzhai
 - 发布作业/活动/学科任务仍走 `/upload/`（按职务限制），网页版只提供浏览与交流发帖/回复；
 - 通知栏包含作业、活动和学科任务，显示完整正文与附件；正文里的 `http(s)://` 网址会自动变成可点击链接；
 - 附件链接指向 `/uploads/...`，为公开静态文件，拿到链接即可访问，请勿上传隐私材料；
-- 部署控制台在网页 `/deploy/` 和管理员小程序「我的」中都可用；
+- 部署控制台在网页 `/deploy/`（仅管理员）；
 - 删除权限与发布权限对应：**作业**仅管理员/学习委员，**活动**仅班委/管理员，**学科任务**仅管理员/该科课代表；按钮只在有权限时显示，服务端仍会再次校验；
 - 页面文件：`server/deploy/huiyingzhai_web.html`，由面板直接读取。修改后需重新 `install.sh`（或手动复制到 `/usr/local/lib/huiyingzhai/`），无需重启后端。
 
 **统一登录（姓名 + 学号）**
 
-已删除 `tutnt`、`zhl` 两个网页账号，不再有独立网页密码。网页上传使用小程序用户表里的 **姓名 + 学号** 匹配身份；发布权限仍以小程序用户角色和名单为准。
+已删除 `tutnt`、`zhl` 两个网页账号，不再有独立网页密码。网页使用班级名单中的 **姓名 + 学号** 登录；名单内的学号首次登录会自动创建网页身份，发布权限按名单职务确定。
 
-- 小程序「我的」页面顶部点「汇英斋数据上传」，会**复制上传链接**；
-- 在浏览器打开该链接（`/upload/`），填写小程序登记的姓名 + 学号；
+- 直接打开 `/upload/`，填写班级名单中的姓名 + 学号；
 - 按职务显示可发布内容：
 
 | 身份 / 职务 | 可发布 |
@@ -354,7 +353,7 @@ WECHAT_ROBOT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...
 | PushPlus 群组 | 扫码加入一次 | 群组成员 | 推荐新增 |
 | 企业微信群机器人 | 进内部群 | 企业微信成员 | 备选 |
 
-在**小程序「我的」→ 部署控制台**点击部署后：
+在**网页 `/deploy/`** 点击部署后：
 
 1. 从 GitHub 下载当前分支的源码压缩包（默认 `tuTNTywz/huiyingzhai` 的 `main`）；
 2. 校验代码包结构，备份当前版本（保留最近 5 份）；
@@ -493,7 +492,7 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、小程序共享密钥�
 - 私有仓库：在 `deploy.conf` 中设置 `GITHUB_TOKEN`（`Contents` 只读即可）。
 - 服务器直连 GitHub 慢：设置 `DEPLOY_ARCHIVE_URL_TEMPLATE`，例如
   `https://ghproxy.example.com/https://github.com/%REPO%/archive/refs/heads/%BRANCH%.tar.gz`。
-- 网页上传用小程序用户表里的姓名 + 学号匹配，不再有独立网页账号/密码。
+- 网页用班级名单中的姓名 + 学号匹配，不再有独立网页账号/密码。
 - 部署控制仅限小程序用户角色为管理员（管理员/班长）的账号。
 - 请使用 HTTPS，并尽量再加 Nginx IP 白名单。
 
@@ -508,14 +507,14 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、小程序共享密钥�
 | `/huiyingzhai/` 404 | Nginx 未加 `/huiyingzhai/` location，或未 reload |
 | `/huiyingzhai/` 显示文件缺失 | 重新执行 `install.sh`，或把 `server/deploy/huiyingzhai_web.html` 复制到 `/usr/local/lib/huiyingzhai/` |
 | 网页版登录后空白 | 先在 `/upload/` 验证同一姓名+学号；F12 看 `/me/api/session` 是否 401 |
-| 网页发帖/回复失败 | 需在小程序完成登记；附件单个 ≤20MB、最多 5 个 |
+| 网页发帖/回复失败 | 学号需在班级名单内；附件单个 ≤20MB、最多 5 个 |
 | PushPlus 没收到消息 | 检查 `.env` 的 `PUSHPLUS_TOKEN`/`PUSHPLUS_TOPIC`、`systemctl restart huiyingzhai`；看 `journalctl -u huiyingzhai` 的「PushPlus 通知失败」；确认同学已加入群组 |
 | QQ 群没收到官方机器人消息 | 看 `journalctl -u huiyingzhai` 的「QQ 官方机器人通知失败」；`40034105`=群主未开启主动消息，`40034101`=机器人不在群，`40034124`=鉴权/AppSecret 错误；确认 `QQ_GROUP_OPENID` 已记录 |
 | PushPlus QQ 群没收到消息 | 检查 `PUSHPLUS_QQ_OPTION`；确认机器人已进群、群主已允许主动消息、option 是群配置编码而非 QQ 群号 |
 | 企业微信没收到消息 | 检查 `WECHAT_ROBOT_WEBHOOK`；确认是**内部群**（外部群不支持机器人） |
 | 上传页登录失败 | 填写小程序登记的姓名 + 学号；未登记或姓名不匹配会拒绝 |
 | 小程序「部署控制台」打不开 | 仅管理员可见；确认小程序「服务器域名」包含 `https://tutnt.com` |
-| 上传页没有发布表单 | 绑定学号不是班委/课代表，或未在小程序完成登记 |
+| 上传页没有发布表单 | 登录学号不是班委/课代表，或不在班级名单内 |
 | 共享密钥不匹配 | `WEB_PANEL_SECRET` 与 `PANEL_APP_SECRET` 必须一致，修改后重启两个服务 |
 | 附件上传 413 / 超过 20MB | 单个附件上限 20MB；Nginx `client_max_body_size` 需 ≥ 25m |
 | `/deploy/` 404 | Nginx 未加 `/deploy/` 反代，或未 reload |
@@ -523,7 +522,7 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、小程序共享密钥�
 | `/deploy/` 显示文件缺失 | 重新执行 `install.sh`，或把 `server/deploy/deploy_page.html` 复制到 `/usr/local/lib/huiyingzhai/` |
 | `/deploy/` 登录后提示没有权限 | 该姓名+学号对应角色不是管理员；管理员/班长才可部署 |
 | 部署页提示「请先登录」 | 正常，在部署页用管理员姓名 + 学号登录即可 |
-| 提示姓名与学号不匹配 | 确认与小程序「我的」登记信息一致；只有已登记用户可登录 |
+| 提示姓名与学号不匹配 | 确认姓名与班级名单（roster）一致 |
 | 登录提示尝试过于频繁 | 5 分钟内失败次数过多，等待几分钟再试 |
 | 页面提示 401 | 会话过期或面板重启，重新登录即可 |
 | 上传提示 413 / 超过 2MB | 页面 HTML 单文件上限 2MB；Nginx `client_max_body_size` 需 ≥ 25m |

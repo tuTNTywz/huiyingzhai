@@ -666,8 +666,7 @@ DEPLOY_HTML = """<!doctype html>
   <a class="home" href="/">← 汇英斋</a>
   <h1>Deploy</h1>
   <div class="card">
-    <p>部署控制已合并到 <b>微信小程序「我的」→ 部署控制台</b>。</p>
-    <p>网页端不再单独提供部署入口。</p>
+    <p>部署控制台页面文件缺失，请重新运行 <b>server/deploy/install.sh</b>。</p>
   </div>
 </main>
 </body>
@@ -816,6 +815,9 @@ MANUAL_HTML = """<!doctype html>
 <noscript><style>.reveal { opacity: 1; transform: none; } .faq-a { max-height: none; padding-bottom: 12px; }</style></noscript>
 </head>
 <body>
+<div style="background:#9c6b4a;color:#fff;text-align:center;padding:10px 16px;font-size:14px">
+  小程序客户端已下线，请使用 <a href="/huiyingzhai/" style="color:#fff;text-decoration:underline">网页版汇英斋</a>；以下为旧版操作说明。
+</div>
 <header class="hero">
   <div class="orb orb-a"></div>
   <div class="orb orb-b"></div>
@@ -949,7 +951,7 @@ MANUAL_HTML = """<!doctype html>
       <div class="step"><span class="step-num">2</span><div><b>我的</b><p>使用班级账号登录后可以修改密码；项目介绍和使用说明书的编辑入口在对应页面，仅 tutnt / zhl 登录后可见。</p></div></div>
       <div class="step"><span class="step-num">3</span><div><b>账号</b><p>网页账号由管理员分配；忘记密码可在登录后自行修改，或联系管理员重置。</p></div></div>
     </div>
-    <div class="tip">网页「我的」与小程序「我的」不是同一个登录体系：小程序用微信登录，网页用班级账号。</div>
+    <div class="tip">网页统一使用班级名单中的姓名 + 学号登录；小程序客户端已下线。</div>
   </section>
 
   <section id="attach" class="section reveal">
@@ -1078,15 +1080,15 @@ UPLOAD_HTML = """<!doctype html>
 <body>
 <main>
   <h1>汇英斋数据上传</h1>
-  <div class="sub">在这里发布作业、活动和学科任务；身份、权限与小程序完全同步。</div>
+  <div class="sub">在这里发布作业、活动、志愿活动和学科任务；身份与权限按班级名单确定。</div>
 
   <section id="login" class="card hidden">
-    <h2>用小程序身份登录</h2>
-    <div class="sub" style="margin-bottom: 10px">填写小程序「我的」里登记的姓名和学号。</div>
+    <h2>用班级身份登录</h2>
+    <div class="sub" style="margin-bottom: 10px">填写班级名单中的姓名和学号。</div>
     <label for="name">姓名</label>
     <input id="name" autocomplete="name">
     <label for="studentId">学号</label>
-    <input id="studentId" inputmode="numeric" placeholder="小程序登记的学号">
+    <input id="studentId" inputmode="numeric" placeholder="班级名单中的学号">
     <div class="row" style="margin-top: 14px"><button id="login-btn" class="primary">进入</button></div>
     <div id="login-msg" class="msg"></div>
   </section>
@@ -1476,7 +1478,7 @@ UPLOAD_HTML = """<!doctype html>
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data.ok) {
-        showLogin(data.message || '小程序登录已失效，请返回小程序重新进入');
+        showLogin(data.message || '登录已失效，请重新登录');
         return;
       }
       applySession(data);
@@ -1540,8 +1542,8 @@ MY_HTML = """<!doctype html>
   <a class="home" href="/">← 汇英斋</a>
   <h1>我的</h1>
   <div class="card">
-    <p>账号资料、数据上传和部署控制统一在 <b>微信小程序「我的」</b>。</p>
-    <p>网页数据上传：在小程序「我的」复制上传链接，在浏览器打开后用 <b>姓名 + 学号</b> 登录。</p>
+    <p>网页数据上传：打开 <b>/upload/</b>，用班级名单中的 <b>姓名 + 学号</b> 登录后发布。</p>
+    <p>部署控制：管理员打开 <b>/deploy/</b>，用姓名 + 学号登录后操作。</p>
   </div>
   <div class="links">
     <a href="/intro/">项目介绍</a>
@@ -1863,7 +1865,7 @@ class Handler(BaseHTTPRequestHandler):
         if not app_data:
             _login_failed(ip)
             time.sleep(0.4)
-            self._send(401, json.dumps({"ok": False, "message": error or "学号尚未在小程序登记"}, ensure_ascii=False))
+            self._send(401, json.dumps({"ok": False, "message": error or "学号不在班级名单"}, ensure_ascii=False))
             return
         identity = identity_from_app(app_data)
         if (identity.get("name") or "").strip() != name:
@@ -2078,7 +2080,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         app_token = self._app_token_for(record)
         if not app_token:
-            self._send(400, json.dumps({"ok": False, "message": "请先绑定学号并同步小程序身份"}, ensure_ascii=False))
+            self._send(400, json.dumps({"ok": False, "message": "请先登录"}, ensure_ascii=False))
             return
         content_type = self.headers.get("Content-Type") or ""
         if not content_type.lower().startswith("multipart/form-data"):
@@ -2128,7 +2130,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         app_token = self._app_token_for(record)
         if not app_token:
-            self._send(400, json.dumps({"ok": False, "message": "请先绑定学号并同步小程序身份"}, ensure_ascii=False))
+            self._send(400, json.dumps({"ok": False, "message": "请先登录"}, ensure_ascii=False))
             return
         payload = {
             "action": action,

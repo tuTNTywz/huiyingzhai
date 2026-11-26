@@ -138,7 +138,8 @@ def _subject_list() -> list[dict]:
     ]
 
 
-# 网页数据上传页专用：用共享密钥换取某个学号对应的小程序会话
+# 网页数据上传页专用：用共享密钥换取某个学号的会话
+# 小程序客户端已移除：名单内的学号首次登录时自动派生网页身份，无需微信 openid
 @app.post("/api/web/token")
 async def web_token(request: Request):
     if not _panel_secret_ok(request):
@@ -147,13 +148,41 @@ async def web_token(request: Request):
     student_id = str(body.get("studentId") or "").strip()
     if not student_id:
         return {"ok": False, "msg": "缺少学号"}
+    roster = store.find_one("roster", lambda r: r.get("studentId") == student_id)
     user = store.find_one("users", lambda u: u.get("studentId") == student_id)
-    if not user or not user.get("registered"):
-        return {"ok": False, "msg": "该学号尚未在小程序完成登记"}
+
+    if not user or not user.get("registered") or not user.get("_openid"):
+        if not roster:
+            return {"ok": False, "msg": "该学号不在班级名单"}
+        position = (roster or {}).get("position") or "普通同学"
+        if position in ("管理员", "班长"):
+            role = "admin"
+        elif position == "普通同学":
+            role = "student"
+        else:
+            role = "committee"
+        payload = {
+            "name": roster.get("name") or "",
+            "studentId": student_id,
+            "className": roster.get("className") or "",
+            "position": position,
+            "role": role,
+            "nickname": roster.get("name") or "",
+            "registered": True,
+            "webOnly": True,
+            "updateTime": store.now_ms(),
+        }
+        if user:
+            payload["_openid"] = user.get("_openid") or ("web:" + student_id)
+            user = store.update("users", user.get("_id"), payload)
+        else:
+            payload["_openid"] = "web:" + student_id
+            payload["createTime"] = store.now_ms()
+            user = store.insert("users", payload)
+
     openid = user.get("_openid")
     if not openid:
-        return {"ok": False, "msg": "该账号缺少微信身份"}
-    roster = store.find_one("roster", lambda r: r.get("studentId") == student_id)
+        return {"ok": False, "msg": "该账号缺少网页身份"}
     token = store.create_session(openid)
     return {
         "ok": True,

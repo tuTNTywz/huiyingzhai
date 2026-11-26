@@ -6,15 +6,15 @@
 
 ```
 .
-├── miniprogram/        # 微信小程序前端
-│   ├── config.js       # 后端地址、订阅消息模板 ID（部署前必改）
-│   └── utils/api.js    # 自建后端调用封装（登录、action、附件）
 ├── server/             # Ubuntu 自建后端（Python + FastAPI + SQLite）
 │   ├── app/            # 服务端代码
 │   ├── deploy/         # systemd / Nginx / 安装脚本 / 网页一键部署面板
 │   └── README.md       # 部署与运维文档
 └── roster_import.json  # 学号名单（JSON Lines）
 ```
+
+> 微信小程序客户端已移除；班级功能统一使用网站：
+> `https://<域名>/huiyingzhai/`（作业、活动、志愿活动、交流、通知、我的）。
 
 ## 快速开始
 
@@ -32,11 +32,13 @@ python -m app
 
 详细的生产部署步骤（Nginx、HTTPS、微信服务器域名、订阅消息）见 [server/README.md](server/README.md)。
 
-### 小程序
+### 网页
 
-1. 编辑 `miniprogram/config.js`，把 `BASE_URL` 改为后端 HTTPS 域名。
-2. 用微信开发者工具导入本目录，编译运行。
-3. 开发阶段可在「详情 → 本地设置」勾选「不校验合法域名」；正式发布前必须在公众平台配置 request / uploadFile / downloadFile 合法域名。
+- `https://<域名>/huiyingzhai/`：班级内容网页版，使用姓名 + 学号登录；
+- `https://<域名>/upload/`：班委/课代表发布作业、活动、志愿活动、学科任务；
+- `https://<域名>/deploy/`：管理员网页部署控制台。
+
+小程序前端代码已从仓库删除；后端仍保留原有登录/动作/订阅接口，网站不依赖微信客户端。
 
 ## 从云开发迁移
 
