@@ -53,6 +53,12 @@ def _content(title: str, lines: list[str]) -> str:
     return "## " + _clip(title, 80) + "\n" + "\n".join(line for line in lines if line)
 
 
+def _headline(kind: str, title: Any) -> str:
+    """通知栏标题：带上具体作业/活动名称，而不是只写「新作业提醒」。"""
+    name = _clip(title, 40)
+    return "%s：%s" % (kind, name) if name else kind + "提醒"
+
+
 async def _send_wecom(title: str, lines: list[str]) -> None:
     webhook = config.wechat_robot_webhook
     if not webhook:
@@ -119,25 +125,21 @@ def _send_later(title: str, lines: list[str]) -> None:
 
 def notify_homework(*, title: Any, desc: Any, deadline: Any, creator_name: Any) -> None:
     lines = [
-        "> 类型：**班级作业**",
-        "> 标题：**%s**" % _clip(title, 100),
-        "> 发布：%s" % _clip(creator_name, 40),
         "> 截止：%s" % (_fmt_time(deadline) or "未设置"),
+        "> 发布：%s" % _clip(creator_name, 40),
     ]
     if desc:
         lines.append("> 说明：%s" % _clip(desc, 200))
     link = _web_link()
     if link:
         lines.append(link)
-    _send_later("新作业提醒", lines)
+    _send_later(_headline("班级作业", title), lines)
 
 
 def notify_activity(
     *, title: Any, place: Any, activity_time: Any, content: Any, creator_name: Any
 ) -> None:
     lines = [
-        "> 类型：**班级活动**",
-        "> 标题：**%s**" % _clip(title, 100),
         "> 时间：%s" % (_fmt_time(activity_time) or "待定"),
         "> 地点：%s" % _clip(place or "待定", 80),
         "> 发布：%s" % _clip(creator_name, 40),
@@ -147,15 +149,13 @@ def notify_activity(
     link = _web_link()
     if link:
         lines.append(link)
-    _send_later("新活动提醒", lines)
+    _send_later(_headline("班级活动", title), lines)
 
 
 def notify_subject_task(
     *, subject_name: Any, title: Any, content: Any, deadline: Any, creator_name: Any
 ) -> None:
     lines = [
-        "> 类型：**学科任务 · %s**" % _clip(subject_name, 40),
-        "> 标题：**%s**" % _clip(title, 100),
         "> 发布：%s" % _clip(creator_name, 40),
         "> 截止：%s" % (_fmt_time(deadline) or "未设置"),
     ]
@@ -164,4 +164,4 @@ def notify_subject_task(
     link = _web_link()
     if link:
         lines.append(link)
-    _send_later("新任务通知", lines)
+    _send_later(_headline("学科任务 · %s" % _clip(subject_name, 20), title), lines)
