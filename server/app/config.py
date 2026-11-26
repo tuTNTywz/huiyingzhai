@@ -68,5 +68,8 @@ class Config:
         # 网页数据上传页与小程序之间的内部共享密钥（install.sh 生成）
         self.web_panel_secret = _str("WEB_PANEL_SECRET")
 
+        # 可选：企业微信群机器人 Webhook。留空则不发机器人通知
+        self.wechat_robot_webhook = _str("WECHAT_ROBOT_WEBHOOK")
+
 
 config = Config()

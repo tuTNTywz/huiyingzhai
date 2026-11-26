@@ -118,6 +118,8 @@ install -m 755 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.sh" \
 install -d -m 755 /usr/local/lib/huiyingzhai
 install -m 755 "${REPO_ROOT}/server/deploy/deploy_panel.py" \
   /usr/local/lib/huiyingzhai/deploy_panel.py
+install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai_web.html" \
+  /usr/local/lib/huiyingzhai/huiyingzhai_web.html
 
 install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.service" \
   /etc/systemd/system/huiyingzhai-deploy.service
@@ -173,6 +175,7 @@ cat <<EOF
 
 ==> 个人主页与部署面板已安装
   个人主页：https://<你的域名>/（Nginx 需包含 location = / 反代）
+  小程序网页版：https://<你的域名>/huiyingzhai/（姓名 + 学号登录）
   部署页：  https://<你的域名>/deploy/
   网页数据上传：小程序「我的」复制上传链接，浏览器用姓名 + 学号登录
   部署控制台：小程序「我的」→ 部署控制台（仅管理员）
@@ -181,4 +184,5 @@ cat <<EOF
   部署日志：/var/log/huiyingzhai-deploy.log
 
   网页登录身份来自小程序用户表，不再使用独立网页账号。
+  微信群机器人（可选）：在 .env 填 WECHAT_ROBOT_WEBHOOK 后重启 huiyingzhai。
 EOF

@@ -206,6 +206,23 @@ def save_page_bytes(slug: str, data: bytes) -> None:
     os.replace(tmp, page_path(slug))
 
 
+# ---------- 小程序网页版 ----------
+
+WEB_HTML_PATH = Path(__file__).resolve().with_name("huiyingzhai_web.html")
+
+
+def load_web_bytes() -> bytes:
+    try:
+        return WEB_HTML_PATH.read_bytes()
+    except OSError:
+        return (
+            "<!doctype html><meta charset='utf-8'>"
+            "<title>汇英斋</title>"
+            "<p style='font:16px sans-serif;padding:24px'>"
+            "网页版文件缺失，请重新运行 server/deploy/install.sh。</p>"
+        ).encode("utf-8")
+
+
 PAGE_TOOLBAR = """<div id="hyz-page-tool" class="hyz-page-tool">
   <div class="hyz-page-tool-title">页面编辑 · __LABEL__</div>
   <div class="hyz-page-tool-note">下载当前页面，在电脑上改好后上传，页面会立即更新。</div>
@@ -580,7 +597,8 @@ HOME_HTML = """<!doctype html>
 <main>
   <h1>tuTNT's home</h1>
   <div class="actions">
-    <a class="btn primary" href="/intro/">汇英斋项目介绍</a>
+    <a class="btn primary" href="/huiyingzhai/">进入汇英斋</a>
+    <a class="btn" href="/intro/">汇英斋项目介绍</a>
     <a class="btn" href="/manual/">汇英斋使用说明书</a>
   </div>
 </main>
@@ -1599,7 +1617,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         raw_path = urlparse(self.path).path
-        for prefix in ("/deploy", "/me", "/intro", "/manual", "/upload"):
+        for prefix in ("/deploy", "/me", "/intro", "/manual", "/upload", "/huiyingzhai"):
             if raw_path == prefix:
                 self._send(301, "", extra_headers=[("Location", prefix + "/")])
                 return
@@ -1628,6 +1646,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if area == "" and path in ("/upload", "/upload/", "/upload/index.html"):
             self._send(200, UPLOAD_HTML, "text/html; charset=utf-8")
+            return
+        if area == "" and path in ("/huiyingzhai", "/huiyingzhai/", "/huiyingzhai/index.html"):
+            self._send(200, load_web_bytes(), "text/html; charset=utf-8")
             return
         if path == "/healthz":
             self._send(200, json.dumps({"ok": True}))
@@ -1945,11 +1966,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._require_csrf(record):
             return
-        identity = record.get("identity") or {}
-        reps = identity.get("repSubjects") if isinstance(identity.get("repSubjects"), list) else []
-        if identity.get("role") not in ("committee", "admin") and not reps:
-            self._send(403, json.dumps({"ok": False, "message": "仅班委/课代表可上传"}, ensure_ascii=False))
-            return
         app_token = self._app_token_for(record)
         if not app_token:
             self._send(400, json.dumps({"ok": False, "message": "请先绑定学号并同步小程序身份"}, ensure_ascii=False))
@@ -1987,7 +2003,15 @@ class Handler(BaseHTTPRequestHandler):
         if data is None:
             return
         action = str(data.get("action") or "")
-        allowed = {"publishHomework", "publishActivity", "publishSubjectTask"}
+        allowed = {
+            "listHomeworks", "getHomework",
+            "listActivities", "getActivity",
+            "listPosts", "getPost", "listReplies",
+            "fetchHomeworkNotices",
+            "listSubjectTasks", "getSubjectSettings", "getSubjectRep",
+            "createPost", "createReply",
+            "publishHomework", "publishActivity", "publishSubjectTask",
+        }
         if action not in allowed:
             self._send(400, json.dumps({"ok": False, "message": "不支持的操作"}, ensure_ascii=False))
             return

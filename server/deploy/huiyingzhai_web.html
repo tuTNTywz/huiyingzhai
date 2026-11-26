@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>汇英斋</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light dark; --brown:#9c6b4a; --ink:#2f2a24; --muted:#8a7a68; --paper:#f5f1e8; --card:#fffaf2; --line:#e8ddcc; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif; background:var(--paper); color:var(--ink); }
+  .top { position:sticky; top:0; z-index:20; background:rgba(245,241,232,.94); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+  .top-inner { max-width:980px; margin:0 auto; padding:12px 16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; }
+  .brand { display:flex; align-items:center; gap:10px; font-family:"Songti SC","Noto Serif CJK SC",serif; font-size:21px; font-weight:700; }
+  .seal { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:linear-gradient(145deg,#ad7a55,#8f5f3f); color:#fff; font-size:16px; }
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; }
+  .tabs button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--muted); border-radius:999px; padding:6px 14px; cursor:pointer; }
+  .tabs button.active { background:var(--brown); border-color:var(--brown); color:#fff; }
+  .user { font-size:13px; color:var(--muted); }
+  main { max-width:980px; margin:0 auto; padding:22px 16px 64px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; margin-bottom:14px; box-shadow:0 10px 28px rgba(120,95,65,.05); }
+  .login { max-width:460px; margin:40px auto; }
+  .login h2 { margin:0 0 4px; font-family:"Songti SC","Noto Serif CJK SC",serif; }
+  .muted { color:var(--muted); font-size:13px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 5px; }
+  input, textarea { font:inherit; width:100%; border:1px solid #dfcfba; border-radius:10px; padding:9px 12px; background:#fffdf9; color:inherit; }
+  textarea { min-height:92px; resize:vertical; }
+  .btn { display:inline-block; border:0; border-radius:10px; padding:9px 16px; font:inherit; cursor:pointer; text-decoration:none; }
+  .btn.primary { background:var(--brown); color:#fff; }
+  .btn.secondary { background:#efe4d4; color:#5f4a37; }
+  .btn.small { padding:5px 12px; border-radius:999px; font-size:12px; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .section-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:22px 0 10px; font-weight:700; font-family:"Songti SC","Noto Serif CJK SC",serif; font-size:17px; }
+  .subjects { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .subject { text-align:left; border:1px solid var(--line); background:var(--card); border-radius:14px; padding:12px; cursor:pointer; font:inherit; color:inherit; }
+  .subject span { display:block; color:var(--brown); font-size:12px; letter-spacing:.15em; }
+  .subject b { display:block; margin-top:4px; font-size:14px; }
+  .hw { cursor:pointer; }
+  .hw .title { font-weight:700; }
+  .meta { color:var(--muted); font-size:12px; margin-top:6px; display:flex; flex-wrap:wrap; gap:10px; }
+  .tag { display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px; background:#f2e6d7; color:#7d5a40; }
+  .tag.green { background:#dcfce7; color:#166534; }
+  .tag.gray { background:#e5e7eb; color:#6b7280; }
+  .tag.gold { background:#fef3c7; color:#92400e; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .msg { margin-top:8px; font-size:13px; color:var(--muted); min-height:1.3em; }
+  .hidden { display:none !important; }
+  .back { background:none; border:0; color:var(--brown); font:inherit; cursor:pointer; padding:0; margin-bottom:10px; }
+  .detail-title { font-family:"Songti SC","Noto Serif CJK SC",serif; font-size:21px; font-weight:700; }
+  .desc { white-space:pre-wrap; margin-top:12px; }
+  .attach { display:block; padding:8px 10px; border:1px solid var(--line); border-radius:9px; margin-top:6px; color:var(--brown); text-decoration:none; font-size:13px; }
+  .attach small { color:var(--muted); margin-left:6px; }
+  .post { cursor:pointer; }
+  .post-head { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:13px; }
+  .post-author { font-weight:700; }
+  .post-content { margin-top:8px; white-space:pre-wrap; }
+  .replies { margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); }
+  .reply { margin-top:8px; }
+  .reply-author { font-size:12px; color:var(--muted); }
+  .profile { display:grid; grid-template-columns:110px 1fr; gap:6px 12px; font-size:14px; }
+  .profile div:nth-child(odd) { color:var(--muted); }
+  .notice { cursor:pointer; }
+  .unread { border-left:3px solid var(--brown); }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:20px 0 40px; }
+  @media (max-width:640px) { .subjects { grid-template-columns:repeat(2,1fr); } }
+  @media (prefers-color-scheme:dark) {
+    :root { --ink:#ece4d8; --muted:#a99c8b; --paper:#14100d; --card:#1d1712; --line:#33281f; }
+    .top { background:rgba(20,16,13,.94); }
+    input, textarea { background:#241c16; border-color:#3a2d22; }
+    .btn.secondary { background:#33261c; color:#d9c8b3; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand"><span class="seal">斋</span> 汇英斋</div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="homework" class="active">作业</button>
+      <button data-tab="activity">活动</button>
+      <button data-tab="forum">交流</button>
+      <button data-tab="notice">通知 <span id="notice-count" class="tag hidden"></span></button>
+      <button data-tab="mine">我的</button>
+    </nav>
+    <div class="user" id="user"></div>
+  </div>
+</header>
+<main>
+  <section id="login" class="card login hidden">
+    <h2>进入汇英斋</h2>
+    <p class="muted">使用小程序「我的」里登记的姓名和学号。</p>
+    <label for="name">姓名</label>
+    <input id="name" autocomplete="name">
+    <label for="studentId">学号</label>
+    <input id="studentId" inputmode="numeric">
+    <div class="row" style="margin-top:14px"><button id="login-btn" class="btn primary">进入</button></div>
+    <div id="login-msg" class="msg"></div>
+  </section>
+  <section id="app" class="hidden">
+    <div id="view"></div>
+  </section>
+</main>
+<footer>汇英斋 · 网页版</footer>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const SUBJECTS = [
+    { key: "english", name: "大学英语", ordinal: "壹" },
+    { key: "math", name: "高等数学", ordinal: "贰" },
+    { key: "psychology", name: "大学生心理健康教育", ordinal: "叁" },
+    { key: "ai", name: "人工智能基础及应用", ordinal: "肆" },
+    { key: "physics", name: "大学物理", ordinal: "伍" },
+    { key: "defense", name: "国防教育", ordinal: "陆" },
+    { key: "ideology", name: "思想道德与法治", ordinal: "柒" },
+    { key: "pe", name: "体育", ordinal: "捌" },
+    { key: "career", name: "大学生职业生涯发展与规划", ordinal: "玖" },
+  ];
+  const state = { csrf: "", user: "", identity: null, tab: "homework" };
+
+  function esc(value) {
+    return String(value === undefined || value === null ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function fmt(ms) {
+    if (!ms) return "";
+    try { return new Date(Number(ms)).toLocaleString("zh-CN", { hour12: false }); }
+    catch (e) { return ""; }
+  }
+  function sizeText(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1024 / 1024).toFixed(1) + " MB";
+  }
+  function subjectName(key) {
+    const s = SUBJECTS.find((x) => x.key === key);
+    return s ? s.name : key;
+  }
+  function safeFile(value) {
+    const v = String(value || "");
+    return v.startsWith("/uploads/") || /^https?:\/\//i.test(v) ? v : "";
+  }
+  function attachmentsHtml(list) {
+    const items = Array.isArray(list) ? list : [];
+    if (!items.length) return "";
+    return items.map((a) => {
+      const url = safeFile(a.fileID);
+      if (!url) return "";
+      return '<a class="attach" href="' + esc(url) + '" target="_blank" rel="noopener">📎 ' +
+        esc(a.name || "附件") + "<small>" + esc(sizeText(a.size)) + "</small></a>";
+    }).join("");
+  }
+  function isCommittee() {
+    const r = state.identity && state.identity.role;
+    return r === "committee" || r === "admin";
+  }
+  function isAdmin() { return !!state.identity && state.identity.role === "admin"; }
+  function isStudy() { return isAdmin() || (!!state.identity && state.identity.position === "学习委员"); }
+  function reps() { return state.identity && Array.isArray(state.identity.repSubjects) ? state.identity.repSubjects : []; }
+  function canUpload() { return isCommittee() || reps().length > 0; }
+  function roleText() {
+    const r = state.identity && state.identity.role;
+    return r === "admin" ? "管理员" : r === "committee" ? "班委" : r === "student" ? "普通同学" : "";
+  }
+  function setMsg(id, text, error) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text || "";
+    el.style.color = error ? "#b4453a" : "";
+  }
+  function loginLink() {
+    return canUpload() ? '<a class="btn small primary" href="/upload/">发布 / 上传</a>' : "";
+  }
+  async function api(path, options) {
+    options = options || {};
+    const headers = Object.assign({}, options.headers || {});
+    if (state.csrf) headers["X-CSRF-Token"] = state.csrf;
+    return fetch(path, Object.assign({ credentials: "same-origin", cache: "no-store" }, options, { headers }));
+  }
+  async function action(name, data) {
+    const resp = await api("/me/api/app/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: name, data: data || {} }),
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok || !body.ok) throw new Error(body.msg || body.message || "操作失败");
+    return body;
+  }
+  async function uploadFiles(input, dir) {
+    const files = Array.from((input && input.files) || []);
+    if (files.length > 5) throw new Error("最多 5 个附件");
+    const out = [];
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) throw new Error("单个附件不能超过 20MB");
+      const form = new FormData();
+      form.append("file", file);
+      form.append("dir", dir || "forum");
+      const resp = await api("/me/api/app/upload", { method: "POST", body: form });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok || !body.ok) throw new Error(body.msg || body.message || "附件上传失败");
+      out.push({ fileID: body.fileID, name: body.name, size: body.size, type: body.type });
+    }
+    return out;
+  }
+  function applySession(data) {
+    state.csrf = data.csrf || "";
+    state.user = data.user || "";
+    state.identity = data.identity || null;
+    if (state.identity && state.identity.name) state.user = state.identity.name;
+    $("user").textContent = state.user ? state.user + (roleText() ? " · " + roleText() : "") : "";
+  }
+  function showLogin(message) {
+    state.csrf = ""; state.user = ""; state.identity = null;
+    $("app").classList.add("hidden");
+    $("login").classList.remove("hidden");
+    $("login-msg").textContent = message || "";
+    setTimeout(() => $("name").focus(), 30);
+  }
+  function showApp() {
+    $("login").classList.add("hidden");
+    $("app").classList.remove("hidden");
+  }
+  async function checkSession() {
+    try {
+      const resp = await fetch("/me/api/session", { credentials: "same-origin", cache: "no-store" });
+      if (!resp.ok) { showLogin(""); return; }
+      const data = await resp.json();
+      applySession(data);
+      showApp();
+      await render();
+    } catch (e) { showLogin("网络错误，请重试"); }
+  }
+  async function login() {
+    const name = $("name").value.trim();
+    const studentId = $("studentId").value.trim();
+    if (!name || !studentId) { $("login-msg").textContent = "请输入姓名和学号"; return; }
+    $("login-btn").disabled = true;
+    $("login-msg").textContent = "登录中…";
+    try {
+      const resp = await fetch("/me/api/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, studentId }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) { $("login-msg").textContent = data.message || "登录失败"; return; }
+      applySession(data);
+      showApp();
+      await render();
+    } catch (e) {
+      $("login-msg").textContent = "网络错误，请重试";
+    } finally { $("login-btn").disabled = false; }
+  }
+  function setTab(tab) {
+    state.tab = tab;
+    document.querySelectorAll("#tabs button").forEach((b) => {
+      b.classList.toggle("active", b.dataset.tab === tab);
+    });
+    render();
+  }
+  function backButton(label, act) {
+    return '<button class="back" data-act="' + act + '">← ' + esc(label) + "</button>";
+  }
+  function empty(text) { return '<div class="card muted">' + esc(text) + "</div>"; }
+  function run(task) {
+    Promise.resolve(task).catch((e) => {
+      $("view").innerHTML = '<div class="card">' + esc((e && e.message) || "加载失败") + "</div>";
+    });
+  }
+
+  async function render() {
+    const view = $("view");
+    view.innerHTML = '<div class="card muted">载入中…</div>';
+    try {
+      if (state.tab === "homework") await viewHomework();
+      else if (state.tab === "activity") await viewActivity();
+      else if (state.tab === "forum") await viewForum();
+      else if (state.tab === "notice") await viewNotice();
+      else await viewMine();
+    } catch (e) {
+      view.innerHTML = '<div class="card">' + esc(e.message || "加载失败") + "</div>";
+    }
+  }
+
+  async function viewHomework() {
+    const res = await action("listHomeworks");
+    const list = Array.isArray(res.list) ? res.list : [];
+    const subjects = SUBJECTS.map((s) =>
+      '<button class="subject" data-act="subject" data-key="' + s.key + '"><span>' + s.ordinal + "</span><b>" + esc(s.name) + "</b></button>"
+    ).join("");
+    const hw = list.map((item) => {
+      const deadline = Number(item.deadline) || 0;
+      const expired = deadline && deadline < Date.now();
+      return '<article class="card hw" data-act="homework" data-id="' + esc(item._id) + '">' +
+        '<div class="row" style="justify-content:space-between"><span class="title">' + esc(item.title) + "</span>" +
+        '<span class="tag ' + (expired ? "gray" : "green") + '">' + (expired ? "已截止" : "进行中") + "</span></div>" +
+        (item.desc ? '<div class="muted">' + esc(item.desc) + "</div>" : "") +
+        '<div class="meta"><span>截止：' + esc(fmt(deadline)) + "</span>" +
+        (Array.isArray(item.attachments) && item.attachments.length ? "<span>📎 " + item.attachments.length + " 个附件</span>" : "") +
+        "<span>布置人：" + esc(item.creatorName || "") + "</span></div></article>";
+    }).join("");
+    $("view").innerHTML =
+      '<div class="section-head">学科板块</div><div class="subjects">' + subjects + "</div>" +
+      '<div class="section-head">班级作业 ' + (isStudy() ? loginLink() : "") + "</div>" +
+      (hw || empty("暂无班级作业"));
+  }
+
+  async function viewSubject(key) {
+    const subject = SUBJECTS.find((s) => s.key === key);
+    const [settings, rep, tasks] = await Promise.all([
+      action("getSubjectSettings", { subject: key }).catch(() => ({ item: null })),
+      action("getSubjectRep", { subject: key }).catch(() => ({ item: null })),
+      action("listSubjectTasks", { subject: key }).catch(() => ({ list: [] })),
+    ]);
+    const st = settings.item || {};
+    const rp = rep.item || {};
+    const list = Array.isArray(tasks.list) ? tasks.list : [];
+    const taskHtml = list.map((task) => {
+      const deadline = Number(task.deadline) || 0;
+      const expired = deadline && deadline < Date.now();
+      return '<article class="card"><div class="row" style="justify-content:space-between"><b>' + esc(task.title) + "</b>" +
+        '<span class="tag ' + (deadline ? (expired ? "gray" : "green") : "gold") + '">' +
+        (deadline ? (expired ? "已截止" : "进行中") : "通知") + "</span></div>" +
+        '<div class="desc">' + esc(task.content || "（无详细内容）") + "</div>" +
+        attachmentsHtml(task.attachments) +
+        '<div class="meta"><span>发布：' + esc(task.creatorName || "") + " · " + esc(fmt(task.createTime)) + "</span>" +
+        (deadline ? "<span>截止：" + esc(fmt(deadline)) + "</span>" : "") + "</div></article>";
+    }).join("");
+    $("view").innerHTML =
+      backButton("返回作业", "tab-homework") +
+      '<div class="card"><div class="detail-title">' + esc(subject ? subject.name : key) + "</div>" +
+      '<div class="profile" style="margin-top:12px"><div>任课老师</div><div>' + esc(st.teacher || "待设置") + "</div>" +
+      "<div>学分</div><div>" + esc(st.credit || "待设置") + "</div>" +
+      "<div>课程安排</div><div>" + esc(st.schedule || "待设置") + "</div>" +
+      "<div>课代表</div><div>" + esc(rp.name ? rp.name + "（" + (rp.studentId || "") + "）" : "暂未设置") + "</div></div></div>" +
+      '<div class="section-head">任务通知 ' + (isAdmin() || reps().indexOf(key) >= 0 ? loginLink() : "") + "</div>" +
+      (taskHtml || empty("本科目暂无任务通知"));
+  }
+
+  async function viewHomeworkDetail(id) {
+    const res = await action("getHomework", { id });
+    const hw = res.item || {};
+    const deadline = Number(hw.deadline) || 0;
+    const expired = deadline && deadline < Date.now();
+    $("view").innerHTML =
+      backButton("返回作业", "tab-homework") +
+      '<article class="card"><div class="detail-title">' + esc(hw.title || "作业") + "</div>" +
+      '<div class="meta"><span class="tag ' + (expired ? "gray" : "green") + '">' + (expired ? "已截止" : "进行中") + "</span>" +
+      "<span>截止：" + esc(fmt(deadline)) + "</span><span>布置人：" + esc(hw.creatorName || "") + "</span></div>" +
+      '<div class="desc">' + esc(hw.desc || "（详见附件）") + "</div>" +
+      (Array.isArray(hw.attachments) && hw.attachments.length
+        ? '<div class="section-head" style="margin-top:18px">附件列表</div>' + attachmentsHtml(hw.attachments)
+        : "") + "</article>";
+  }
+
+  async function viewActivity() {
+    const res = await action("listActivities");
+    const list = Array.isArray(res.list) ? res.list : [];
+    const items = list.map((item) => {
+      const time = Number(item.activityTime) || 0;
+      const ended = time && time < Date.now();
+      return '<article class="card hw" data-act="activity" data-id="' + esc(item._id) + '">' +
+        '<div class="row" style="justify-content:space-between"><b>' + esc(item.title) + "</b>" +
+        '<span class="tag ' + (ended ? "gray" : "gold") + '">' + (ended ? "已结束" : "待举办") + "</span></div>" +
+        '<div class="meta"><span>🕒 ' + esc(fmt(time)) + "</span><span>📍 " + esc(item.place || "待定") + "</span></div>" +
+        '<div class="meta"><span>发布人：' + esc(item.creatorName || "") + "</span></div></article>";
+    }).join("");
+    $("view").innerHTML = '<div class="section-head">活动 ' + (isCommittee() ? loginLink() : "") + "</div>" +
+      (items || empty("暂无活动"));
+  }
+
+  async function viewActivityDetail(id) {
+    const res = await action("getActivity", { id });
+    const item = res.item || {};
+    $("view").innerHTML =
+      backButton("返回活动", "tab-activity") +
+      '<article class="card"><div class="detail-title">' + esc(item.title || "活动") + "</div>" +
+      '<div class="profile" style="margin-top:12px"><div>时间</div><div>' + esc(fmt(item.activityTime)) + "</div>" +
+      "<div>地点</div><div>" + esc(item.place || "待定") + "</div>" +
+      "<div>发布人</div><div>" + esc(item.creatorName || "") + "</div></div>" +
+      '<div class="desc">' + esc(item.content || "（暂无详细说明）") + "</div></article>";
+  }
+
+  async function viewForum() {
+    const res = await action("listPosts");
+    const list = Array.isArray(res.list) ? res.list : [];
+    const posts = list.map((item) => {
+      const isManager = item.role === "committee" || item.role === "admin";
+      return '<article class="card post" data-act="post" data-id="' + esc(item._id) + '">' +
+        '<div class="post-head"><span class="post-author">' + esc(item.nickname || "同窗") +
+        ' <span class="tag ' + (isManager ? "gold" : "green") + '">' + (isManager ? "班委" : "同学") + "</span></span>" +
+        '<span class="muted">' + esc(fmt(item.createTime)) + "</span></div>" +
+        (item.content ? '<div class="post-content">' + esc(item.content) + "</div>" : "") +
+        attachmentsHtml(item.attachments) +
+        '<div class="meta">💬 ' + esc(item.replyCount || 0) + " 条回复</div></article>";
+    }).join("");
+    $("view").innerHTML =
+      '<div class="section-head">说点什么</div><div class="card">' +
+      '<textarea id="post-content" placeholder="畅所欲言，与同窗交流…" maxlength="1000"></textarea>' +
+      '<div class="row" style="margin-top:10px"><input id="post-files" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,image/*">' +
+      '<button class="btn primary" data-act="post-submit">发帖</button>' +
+      '<span id="post-msg" class="msg"></span></div></div>' +
+      '<div class="section-head">大家的帖子</div>' + (posts || empty("还没有帖子，来开个话题吧"));
+  }
+
+  async function viewPost(id) {
+    const [postRes, replyRes] = await Promise.all([
+      action("getPost", { id }),
+      action("listReplies", { postId: id }),
+    ]);
+    const post = postRes.item || {};
+    const replies = Array.isArray(replyRes.list) ? replyRes.list : [];
+    const replyHtml = replies.map((reply) =>
+      '<div class="reply"><div class="reply-author">' + esc(reply.nickname || "同窗") + " · " + esc(fmt(reply.createTime)) + "</div>" +
+      (reply.content ? '<div class="post-content">' + esc(reply.content) + "</div>" : "") +
+      attachmentsHtml(reply.attachments) + "</div>"
+    ).join("");
+    $("view").innerHTML =
+      backButton("返回交流", "tab-forum") +
+      '<article class="card"><div class="post-head"><span class="post-author">' + esc(post.nickname || "同窗") + "</span>" +
+      '<span class="muted">' + esc(fmt(post.createTime)) + "</span></div>" +
+      (post.content ? '<div class="post-content">' + esc(post.content) + "</div>" : "") +
+      attachmentsHtml(post.attachments) + '<div class="replies">' + (replyHtml || '<div class="muted">还没有回复</div>') + "</div></article>" +
+      '<div class="card"><div class="section-head" style="margin-top:0">回复</div>' +
+      '<textarea id="reply-content" placeholder="回复…" maxlength="500"></textarea>' +
+      '<div class="row" style="margin-top:10px"><input id="reply-files" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,image/*">' +
+      '<button class="btn primary" data-act="reply-submit" data-post="' + esc(id) + '">发送</button>' +
+      '<span id="reply-msg" class="msg"></span></div></div>';
+  }
+
+  async function viewNotice() {
+    const res = await action("fetchHomeworkNotices");
+    const list = Array.isArray(res.list) ? res.list : [];
+    const items = list.map((n) => {
+      const isTask = n.type === "subject_task";
+      const target = isTask ? n.subject : n.homeworkId;
+      return '<article class="card notice" data-act="notice-open" data-type="' + esc(n.type || "") + '" data-target="' + esc(target || "") + '">' +
+        '<div class="row" style="justify-content:space-between"><span class="tag gold">' + esc(isTask ? subjectName(n.subject) : "班级作业") + "</span>" +
+        '<span class="muted">' + esc(fmt(n.createTime)) + "</span></div>" +
+        '<div class="title" style="font-weight:700;margin-top:6px">' + esc(n.title || "") + "</div>" +
+        (n.content ? '<div class="muted">' + esc(n.content) + "</div>" : "") +
+        '<div class="meta"><span>发布：' + esc(n.creatorName || "") + "</span>" +
+        (n.deadline ? "<span>截止：" + esc(fmt(n.deadline)) + "</span>" : "") + "</div></article>";
+    }).join("");
+    const badge = $("notice-count");
+    if (list.length) { badge.textContent = String(list.length); badge.classList.remove("hidden"); }
+    else badge.classList.add("hidden");
+    $("view").innerHTML = '<div class="section-head">通知</div><div class="card muted">微信订阅提醒请在小程序「通知」中开启；这里显示站内通知。</div>' +
+      (items || empty("暂无通知"));
+  }
+
+  async function viewMine() {
+    const id = state.identity || {};
+    const rp = reps().map(subjectName).join("、") || "—";
+    $("view").innerHTML =
+      '<div class="section-head">我的</div>' +
+      '<div class="card"><div class="detail-title">' + esc(id.name || state.user || "") + "</div>" +
+      '<div class="profile" style="margin-top:12px"><div>姓名</div><div>' + esc(id.name || "—") + "</div>" +
+      "<div>学号</div><div>" + esc(id.studentId || "—") + "</div>" +
+      "<div>班级</div><div>" + esc(id.className || "—") + "</div>" +
+      "<div>职位</div><div>" + esc(id.position || "—") + "</div>" +
+      "<div>身份</div><div>" + esc(roleText() || "—") + "</div>" +
+      "<div>负责科目</div><div>" + esc(rp) + "</div></div>" +
+      '<div class="row" style="margin-top:16px">' + loginLink() +
+      '<a class="btn secondary small" href="/intro/">项目介绍</a>' +
+      '<a class="btn secondary small" href="/manual/">使用说明书</a>' +
+      '<button class="btn secondary small" data-act="logout">退出</button></div>' +
+      (isAdmin() ? '<div class="muted" style="margin-top:12px">部署控制台请在微信小程序「我的」中使用。</div>' : "") +
+      "</div>";
+  }
+
+  async function submitPost() {
+    const content = $("post-content").value.trim();
+    const files = $("post-files").files;
+    if (!content && (!files || !files.length)) { setMsg("post-msg", "请填写内容或添加附件", true); return; }
+    setMsg("post-msg", "正在上传/发布…");
+    try {
+      const attachments = await uploadFiles($("post-files"), "forum");
+      await action("createPost", { content, attachments });
+      await viewForum();
+    } catch (e) { setMsg("post-msg", e.message || "发布失败", true); }
+  }
+  async function submitReply(button) {
+    const postId = button.dataset.post;
+    const content = $("reply-content").value.trim();
+    const files = $("reply-files").files;
+    if (!content && (!files || !files.length)) { setMsg("reply-msg", "请填写回复或添加附件", true); return; }
+    setMsg("reply-msg", "正在上传/回复…");
+    try {
+      const attachments = await uploadFiles($("reply-files"), "forum");
+      await action("createReply", { postId, content, attachments });
+      await viewPost(postId);
+    } catch (e) { setMsg("reply-msg", e.message || "回复失败", true); }
+  }
+  async function logout() {
+    try {
+      await api("/me/api/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    } catch (e) { /* ignore */ }
+    showLogin("");
+  }
+
+  document.getElementById("tabs").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-tab]");
+    if (button) setTab(button.dataset.tab);
+  });
+  document.getElementById("view").addEventListener("click", (event) => {
+    const el = event.target.closest("[data-act]");
+    if (!el) return;
+    const act = el.dataset.act;
+    if (act === "subject") run(viewSubject(el.dataset.key));
+    else if (act === "homework") run(viewHomeworkDetail(el.dataset.id));
+    else if (act === "activity") run(viewActivityDetail(el.dataset.id));
+    else if (act === "post") run(viewPost(el.dataset.id));
+    else if (act === "post-submit") submitPost();
+    else if (act === "reply-submit") submitReply(el);
+    else if (act === "notice-open") {
+      if (el.dataset.type === "subject_task" && el.dataset.target) run(viewSubject(el.dataset.target));
+      else if (el.dataset.target) run(viewHomeworkDetail(el.dataset.target));
+    }
+    else if (act === "tab-homework") setTab("homework");
+    else if (act === "tab-activity") setTab("activity");
+    else if (act === "tab-forum") setTab("forum");
+    else if (act === "logout") logout();
+  });
+  $("login-btn").addEventListener("click", login);
+  $("studentId").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
+  $("name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("studentId").focus(); });
+  checkSession();
+})();
+</script>
+</body>
+</html>

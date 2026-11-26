@@ -151,12 +151,31 @@ sudo systemctl restart huiyingzhai
 
 ### 个人主页与网页操作
 
-浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），主页只显示两个按钮：
+浏览器打开 `https://<后端域名>/` 是个人主页（标题 `tuTNT's home`），主页显示三个按钮：
 
+- **进入汇英斋** → `/huiyingzhai/`（小程序内容的网页版，见下）
 - **汇英斋项目介绍** → `/intro/`
 - **汇英斋使用说明书** → `/manual/`
 
 **Deploy 和「我的」不在网页显示**；部署与账号控制统一在微信小程序「我的」页面。`/deploy/`、`/me/` 即使直接访问也只显示提示。
+
+### 小程序网页版 `/huiyingzhai/`
+
+网页版复刻了小程序的主要浏览功能，使用同一套 **姓名 + 学号** 登录：
+
+| 栏目 | 网页功能 |
+| --- | --- |
+| 作业 | 班级作业列表/详情/附件；9 个学科板块 |
+| 学科 | 课程设置、课代表、任务通知、附件 |
+| 活动 | 活动列表/详情 |
+| 交流 | 帖子列表/详情、发帖、回复、附件（所有已登记同学可用） |
+| 通知 | 站内通知列表，点击跳到对应作业/学科 |
+| 我的 | 身份资料、上传入口、项目介绍/说明书、退出 |
+
+- 发布作业/活动/学科任务仍走 `/upload/`（按职务限制），网页版只提供浏览与交流发帖/回复；
+- 附件链接指向 `/uploads/...`，为公开静态文件，拿到链接即可访问，请勿上传隐私材料；
+- 部署控制台仍只在管理员的小程序「我的」中；
+- 页面文件：`server/deploy/huiyingzhai_web.html`，由面板直接读取。修改后需重新 `install.sh`（或手动复制到 `/usr/local/lib/huiyingzhai/`），无需重启后端。
 
 **统一登录（姓名 + 学号）**
 
@@ -201,6 +220,62 @@ sudo systemctl restart huiyingzhai
 - 面板 `/etc/huiyingzhai/panel.env` 的 `PANEL_APP_SECRET`。
 
 两端必须一致；修改后重启 `huiyingzhai` 与 `huiyingzhai-panel`。
+
+### 微信机器人通知方案
+
+小程序内已有「订阅消息」，但需要每位同学逐次授权，且只能在微信里收到。若希望**发布作业/活动/学科任务后全班自动收到一条微信消息**，推荐以下两种方案，二选一或同时使用。
+
+#### 方案 A（推荐）：企业微信群机器人
+
+原理：班级建一个企业微信群，添加「群机器人」拿到 Webhook；后端发布成功后向 Webhook POST 一条 Markdown 消息，群内所有成员的微信/企业微信都会收到提醒。
+
+1. 班级成员加入同一个企业微信群（个人微信可加入企业微信外部群；群机器人需在**企业内部群**中创建，可由班主任/管理员建一个内部群，或让同学安装企业微信加入）；
+2. 企业微信群右上角「…」→ **群机器人** → 添加机器人 → 复制 Webhook 地址；
+3. 在服务器 `.env` 中填写（权限 600，不要提交到仓库）：
+
+   ```bash
+   sudo nano /opt/huiyingzhai/server/.env
+   # 追加：
+   WECHAT_ROBOT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...
+   sudo systemctl restart huiyingzhai
+   ```
+
+4. 之后在小程序或 `/upload/` 发布作业、活动、学科任务，群里会自动出现通知（含标题、发布人、截止时间、网页链接）。
+
+说明：
+
+- Webhook 等同于「向该群发消息」的权限，泄露后任何人都能发广告；只放服务器 `.env`，怀疑泄露就在群机器人设置里重置；
+- 企业微信机器人限频约 **20 条/分钟**，作业/活动发布频率远低于此；
+- 机器人只能发到这一个群；如需按科目分群，可为每个群配置一个 Webhook（当前代码只支持一个）；
+- 未配置 `WECHAT_ROBOT_WEBHOOK` 时完全静默，不影响现有订阅消息和站内通知；
+- 代码位置：`server/app/robot.py`，发布逻辑在 `server/app/api.py`。
+
+#### 方案 B：PushPlus / WxPusher / Server酱（个人微信推送）
+
+适合「班级没有企业微信群」的情况：同学扫码关注一个公众号/服务号并绑定，后端按用户 token 推送。
+
+| 服务 | 特点 | 注意 |
+| --- | --- | --- |
+| PushPlus | 免费额度够班级用，支持一对多群组 | 需要每人绑定 token；有广告/限流 |
+| WxPusher | 免费，支持主题订阅、一对多 | 需要创建应用、用户扫码关注 |
+| Server酱 | 接入最简单 | 免费额度少，Turbo 版收费 |
+
+这类服务都需要**额外维护一份「学号 → push token」的绑定表**，并在 `robot.py` 里增加一个 sender。当前版本未内置，避免引入第三方账号体系；如需要可以按同样思路扩展。
+
+#### 不推荐：个人微信机器人（itchat / Wechaty 挂个人号）
+
+- 违反微信个人号使用规范，随时可能被封号，且封号会影响本人正常微信；
+- 网页版微信协议早已关闭，itchat 基本不可用；Wechaty 需要付费 puppet；
+- 只适合本地实验，**不要用在班级生产环境**。
+
+#### 与现有推送的关系
+
+| 渠道 | 是否需授权 | 覆盖范围 | 建议 |
+| --- | --- | --- | --- |
+| 小程序订阅消息 | 每人每次授权 | 已授权的小程序用户 | 保留 |
+| 站内通知（小程序/网页） | 否 | 所有登录用户 | 保留 |
+| 企业微信群机器人 | 否（进群即可） | 群成员 | 推荐新增 |
+| PushPlus 等 | 每人绑定 | 绑定用户 | 备选 |
 
 在**小程序「我的」→ 部署控制台**点击部署后：
 
@@ -311,6 +386,19 @@ location /upload/ {
     proxy_read_timeout 30s;
 }
 
+location = /huiyingzhai { return 301 /huiyingzhai/; }
+location /huiyingzhai/ {
+    limit_req zone=huiyingzhai_deploy burst=40 nodelay;
+    proxy_pass http://127.0.0.1:3999;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 60s;
+    client_max_body_size 25m;
+}
+
 # 3) 在 HTTPS server { } 内加一行
 include /etc/nginx/snippets/huiyingzhai-panel.conf;
 ```
@@ -340,6 +428,11 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、小程序共享密钥�
 | `/intro/` 或 `/manual/` 404 | Nginx 未加对应 location，或未 reload |
 | `/me/` 404 | Nginx 未加 `/me/` location，或未 reload |
 | `/upload/` 404 | Nginx 未加 `/upload/` location，或未 reload |
+| `/huiyingzhai/` 404 | Nginx 未加 `/huiyingzhai/` location，或未 reload |
+| `/huiyingzhai/` 显示文件缺失 | 重新执行 `install.sh`，或把 `server/deploy/huiyingzhai_web.html` 复制到 `/usr/local/lib/huiyingzhai/` |
+| 网页版登录后空白 | 先在 `/upload/` 验证同一姓名+学号；F12 看 `/me/api/session` 是否 401 |
+| 网页发帖/回复失败 | 需在小程序完成登记；附件单个 ≤20MB、最多 5 个 |
+| 群里没收到机器人消息 | 检查 `.env` 的 `WECHAT_ROBOT_WEBHOOK`、`systemctl restart huiyingzhai`，并看 `journalctl -u huiyingzhai` 的「微信群机器人通知失败」 |
 | 上传页登录失败 | 填写小程序登记的姓名 + 学号；未登记或姓名不匹配会拒绝 |
 | 小程序「部署控制台」打不开 | 仅管理员可见；确认小程序「服务器域名」包含 `https://tutnt.com` |
 | 上传页没有发布表单 | 绑定学号不是班委/课代表，或未在小程序完成登记 |

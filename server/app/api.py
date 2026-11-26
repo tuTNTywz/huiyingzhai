@@ -5,6 +5,7 @@ import time
 from typing import Any, Optional
 
 from . import db as store
+from . import robot
 from .config import config
 from .files import delete_uploads
 from .push import push_subscribe_message
@@ -321,6 +322,13 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             content=content,
             publisher_openid=openid,
         )
+        robot.notify_subject_task(
+            subject_name=SUBJECT_NAMES.get(subject, subject),
+            title=title,
+            content=content,
+            deadline=deadline,
+            creator_name=user.get("nickname"),
+        )
         return {"ok": True, "id": task["_id"]}
 
     if action == "listSubjectTasks":
@@ -400,6 +408,12 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             )
         except Exception as exc:
             print("作业通知失败", exc)
+        robot.notify_homework(
+            title=title,
+            desc=desc,
+            deadline=deadline,
+            creator_name=user.get("nickname"),
+        )
         return {"ok": True, "id": homework["_id"]}
 
     if action == "listHomeworks":
@@ -498,6 +512,13 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                 "creatorName": user.get("nickname"),
                 "createTime": _now_ms(),
             },
+        )
+        robot.notify_activity(
+            title=activity.get("title"),
+            place=activity.get("place"),
+            activity_time=activity.get("activityTime"),
+            content=activity.get("content"),
+            creator_name=activity.get("creatorName"),
         )
         return {"ok": True, "id": activity["_id"]}
 
