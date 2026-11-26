@@ -4,8 +4,8 @@
 用法：
     sudo /usr/local/sbin/huiyingzhai-pushplus-setup
 
-只向 /opt/huiyingzhai/server/.env 写入 PUSHPLUS_TOKEN / PUSHPLUS_TOPIC，
-不会把密钥打印到屏幕或日志。写入前自动备份 .env。
+只向 /opt/huiyingzhai/server/.env 写入 PUSHPLUS_TOKEN / PUSHPLUS_TOPIC /
+PUSHPLUS_QQ_OPTION，不会把密钥打印到屏幕或日志。写入前自动备份 .env。
 """
 from __future__ import annotations
 
@@ -50,18 +50,7 @@ def upsert(text: str, key: str, value: str) -> str:
     return text + line + "\n"
 
 
-def send_test(token: str, topic: str) -> tuple[bool, str]:
-    payload = {
-        "token": token,
-        "topic": topic,
-        "title": "汇英斋通知测试",
-        "content": (
-            "## 配置成功\n"
-            "> 这是一条测试消息。\n"
-            "> 以后发布作业、活动、学科任务时，群组成员会收到通知。"
-        ),
-        "template": "markdown",
-    }
+def post(payload: dict) -> tuple[bool, str]:
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         API, data=data, method="POST", headers={"Content-Type": "application/json"}
@@ -78,6 +67,35 @@ def send_test(token: str, topic: str) -> tuple[bool, str]:
     return False, "code=%s msg=%s" % (body.get("code"), body.get("msg"))
 
 
+def send_test(token: str, topic: str) -> tuple[bool, str]:
+    return post(
+        {
+            "token": token,
+            "topic": topic,
+            "title": "汇英斋通知测试",
+            "content": (
+                "## 配置成功\n"
+                "> 这是一条测试消息。\n"
+                "> 以后发布作业、活动、学科任务时，群组成员会收到通知。"
+            ),
+            "template": "markdown",
+        }
+    )
+
+
+def send_test_qq(token: str, option: str) -> tuple[bool, str]:
+    return post(
+        {
+            "token": token,
+            "channel": "qq",
+            "option": option,
+            "title": "汇英斋 QQ 通知测试",
+            "content": "## 配置成功\n> 以后发布作业、活动、学科任务时，QQ 群会收到通知。",
+            "template": "markdown",
+        }
+    )
+
+
 def main() -> None:
     if os.geteuid() != 0:
         fail("请使用 sudo 运行")
@@ -90,14 +108,17 @@ def main() -> None:
     print("Token 和群组编码只保存在服务器 .env，不会显示或上传。\n")
 
     token = ask("PushPlus Token（输入时不显示）: ", secret=True)
-    topic = ask("群组编码 Topic: ")
+    topic = ask("微信群组编码 Topic: ")
+    qq_option = ask("QQ 群配置编码 option（可选，直接回车跳过）: ")
     if not token or not topic:
-        fail("Token 和群组编码都不能为空")
-    if any(ch.isspace() for ch in token + topic):
-        fail("Token / 群组编码中不能有空格或换行")
+        fail("Token 和微信群组编码都不能为空")
+    if any(ch.isspace() for ch in token + topic + qq_option):
+        fail("Token / 编码中不能有空格或换行")
 
     original = ENV_PATH.read_text(encoding="utf-8")
     updated = upsert(upsert(original, "PUSHPLUS_TOKEN", token), "PUSHPLUS_TOPIC", topic)
+    if qq_option:
+        updated = upsert(updated, "PUSHPLUS_QQ_OPTION", qq_option)
 
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     backup = BACKUP_DIR / ("env-before-pushplus-%s" % time.strftime("%Y%m%d-%H%M%S"))
@@ -125,8 +146,17 @@ def main() -> None:
         print("PushPlus 已接受测试消息（%s）。" % detail)
         print("如果群组还没有成员，先分享群组二维码给同学扫码加入。")
     else:
-        print("测试消息发送失败：%s" % detail)
+        print("微信测试消息发送失败：%s" % detail)
         print("请检查 Token、群组编码是否正确；配置已保存，可修正后重跑本脚本。")
+
+    if qq_option:
+        print("正在发送 QQ 群测试消息…")
+        ok_qq, detail_qq = send_test_qq(token, qq_option)
+        if ok_qq:
+            print("QQ 群已接受测试消息（%s）。" % detail_qq)
+        else:
+            print("QQ 群测试消息发送失败：%s" % detail_qq)
+            print("确认机器人已进群、群主已允许主动消息、option 编码正确。")
 
     print("正在重启 %s…" % SERVICE)
     result = subprocess.run(["systemctl", "restart", SERVICE])

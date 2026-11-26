@@ -221,7 +221,7 @@ sudo systemctl restart huiyingzhai
 
 两端必须一致；修改后重启 `huiyingzhai` 与 `huiyingzhai-panel`。
 
-### 微信机器人通知方案
+### 班级通知机器人方案（微信 / QQ）
 
 小程序内已有「订阅消息」，但需要每位同学逐次授权。若希望**发布作业/活动/学科任务后全班自动收到一条微信消息**，推荐 **PushPlus 群组**：同学只需扫一次二维码关注公众号并加入群组，**不用安装企业微信，也不用每人绑定 token**。
 
@@ -257,6 +257,31 @@ sudo systemctl restart huiyingzhai
 - token 与群组编码只放服务器 `.env`，泄露后可在 PushPlus 后台重置；
 - 未配置 `PUSHPLUS_TOKEN`/`PUSHPLUS_TOPIC` 时完全静默；
 - 代码位置：`server/app/robot.py`，发布逻辑在 `server/app/api.py`。
+
+#### QQ 群通知：PushPlus QQ 机器人（推荐，不需要 QQ 小号）
+
+PushPlus 已接入 QQ 官方机器人，绑定后可以把同一条通知发到 QQ 群，和微信群共用一套 token。
+
+1. 用 QQ 登录/扫码：PushPlus 个人中心 → **渠道配置 → QQ机器人**，扫码把 PushPlus 机器人加为好友并绑定；
+2. 把这个机器人**拉进班级 QQ 群**；群主在群机器人设置里允许「主动消息/主动推送」；
+3. 回到 PushPlus「渠道配置 → QQ机器人」→ **新增群配置**，选择该群，保存后得到一个**配置编码（option）**；
+4. 在服务器 `.env` 中填写并重启（`huiyingzhai-pushplus-setup` 也会提示输入）：
+
+   ```bash
+   PUSHPLUS_QQ_OPTION=配置编码
+   sudo systemctl restart huiyingzhai
+   ```
+
+说明：
+
+- QQ 渠道与微信渠道可同时启用，发布一次两边都发；
+- 免费实名用户 QQ 渠道每天 **200 次**，消息**只展示标题摘要**，不显示正文；标题现在会写成「班级作业：高数第三章」这种格式，足够看出是什么事；
+- 群主必须允许机器人主动消息，否则发送会失败；
+- 不需要 QQ 小号，也不用在服务器挂 QQ 客户端。
+
+#### 备选：QQ 小号 + NapCat/OneBot（不推荐）
+
+用自己的 QQ 小号登录 NapCat 等第三方客户端，通过 OneBot 协议直接向群发消息。优点是消息完整、完全可控；缺点是**违反 QQ 使用规范，随时可能封号**，且需要长期在服务器挂一个 QQ 客户端，维护成本高。班级通知优先用上面的 PushPlus QQ 渠道。
 
 #### 方案 B：企业微信群机器人（需全员企业微信）
 
@@ -447,6 +472,7 @@ sudo nano /etc/huiyingzhai/panel.env     # 面板端口、小程序共享密钥�
 | 网页版登录后空白 | 先在 `/upload/` 验证同一姓名+学号；F12 看 `/me/api/session` 是否 401 |
 | 网页发帖/回复失败 | 需在小程序完成登记；附件单个 ≤20MB、最多 5 个 |
 | PushPlus 没收到消息 | 检查 `.env` 的 `PUSHPLUS_TOKEN`/`PUSHPLUS_TOPIC`、`systemctl restart huiyingzhai`；看 `journalctl -u huiyingzhai` 的「PushPlus 通知失败」；确认同学已加入群组 |
+| QQ 群没收到消息 | 检查 `PUSHPLUS_QQ_OPTION`；确认机器人已进群、群主已允许主动消息、option 是群配置编码而非 QQ 群号 |
 | 企业微信没收到消息 | 检查 `WECHAT_ROBOT_WEBHOOK`；确认是**内部群**（外部群不支持机器人） |
 | 上传页登录失败 | 填写小程序登记的姓名 + 学号；未登记或姓名不匹配会拒绝 |
 | 小程序「部署控制台」打不开 | 仅管理员可见；确认小程序「服务器域名」包含 `https://tutnt.com` |

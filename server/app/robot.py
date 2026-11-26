@@ -102,17 +102,46 @@ async def _send_pushplus(title: str, lines: list[str]) -> None:
         print("PushPlus 通知失败：", exc)
 
 
+async def _send_pushplus_qq(title: str, lines: list[str]) -> None:
+    token = config.pushplus_token
+    option = config.pushplus_qq_option
+    if not token or not option:
+        return
+    payload = {
+        "token": token,
+        "title": _clip(title, 80),
+        "content": _content(title, lines),
+        "channel": "qq",
+        "option": option,
+        "template": "markdown",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.post(PUSHPLUS_API, json=payload)
+            if resp.status_code >= 300:
+                print("QQ 机器人通知失败：HTTP %s %s" % (resp.status_code, resp.text[:200]))
+                return
+            data = resp.json()
+            if data.get("code") != 200:
+                print("QQ 机器人通知失败：%s" % data)
+    except Exception as exc:
+        print("QQ 机器人通知失败：", exc)
+
+
 async def send_all(title: str, lines: list[str]) -> None:
-    """并发发送到已配置的渠道；单渠道失败不影响另一渠道。"""
+    """并发发送到已配置的渠道；单渠道失败不影响其他渠道。"""
     await asyncio.gather(
         _send_wecom(title, lines),
         _send_pushplus(title, lines),
+        _send_pushplus_qq(title, lines),
         return_exceptions=True,
     )
 
 
 def _send_later(title: str, lines: list[str]) -> None:
-    if not config.wechat_robot_webhook and not (config.pushplus_token and config.pushplus_topic):
+    has_wechat = bool(config.pushplus_token and config.pushplus_topic)
+    has_qq = bool(config.pushplus_token and config.pushplus_qq_option)
+    if not config.wechat_robot_webhook and not has_wechat and not has_qq:
         return
     try:
         task = asyncio.get_running_loop().create_task(send_all(title, lines))
