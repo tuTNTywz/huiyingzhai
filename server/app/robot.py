@@ -1,8 +1,14 @@
-# 企业微信群机器人通知（可选）
-# 在 .env 中填写 WECHAT_ROBOT_WEBHOOK 后生效；留空时所有函数直接返回，不影响业务。
+# 班级通知机器人（可选，两种渠道任选或同时启用）
 #
-# 获取方式：企业微信群 → 右上角「…」→ 群机器人 → 添加机器人 → 复制 Webhook 地址。
-# 注意：Webhook 等同于群内发消息权限，只能写在服务器 .env（600），不要提交到仓库。
+# 1) PushPlus 群组（推荐，不需要安装企业微信）
+#    .env: PUSHPLUS_TOKEN=...  PUSHPLUS_TOPIC=...
+#    同学扫码关注 PushPlus 公众号并加入群组即可收到微信消息。
+#
+# 2) 企业微信群机器人（需要群成员都在企业微信）
+#    .env: WECHAT_ROBOT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...
+#
+# 未配置任何渠道时所有函数直接返回，不影响业务。Token/Webhook 只能写在服务器
+# .env（600），不要提交到仓库。
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +20,7 @@ import httpx
 from .config import config
 
 MAX_TEXT = 600
+PUSHPLUS_API = "https://www.pushplus.plus/send"
 _tasks: set[asyncio.Task] = set()
 
 
@@ -42,33 +49,69 @@ def _web_link() -> str:
     return "> 网页查看：[%s/huiyingzhai/](%s/huiyingzhai/)" % (base, base)
 
 
-async def send_markdown(title: str, lines: list[str]) -> None:
-    """向企业微信群机器人发送 Markdown 消息；未配置或失败只打日志。"""
+def _content(title: str, lines: list[str]) -> str:
+    return "## " + _clip(title, 80) + "\n" + "\n".join(line for line in lines if line)
+
+
+async def _send_wecom(title: str, lines: list[str]) -> None:
     webhook = config.wechat_robot_webhook
     if not webhook:
         return
-    content = "## " + _clip(title, 80) + "\n" + "\n".join(line for line in lines if line)
-    payload = {"msgtype": "markdown", "markdown": {"content": content}}
+    payload = {"msgtype": "markdown", "markdown": {"content": _content(title, lines)}}
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.post(webhook, json=payload)
             if resp.status_code >= 300:
-                print("微信群机器人通知失败：HTTP %s %s" % (resp.status_code, resp.text[:200]))
+                print("企业微信群机器人通知失败：HTTP %s %s" % (resp.status_code, resp.text[:200]))
                 return
             data = resp.json()
             if data.get("errcode") not in (None, 0):
-                print("微信群机器人通知失败：%s" % data)
+                print("企业微信群机器人通知失败：%s" % data)
     except Exception as exc:  # 通知失败绝不能影响发布
-        print("微信群机器人通知失败：", exc)
+        print("企业微信群机器人通知失败：", exc)
+
+
+async def _send_pushplus(title: str, lines: list[str]) -> None:
+    token = config.pushplus_token
+    topic = config.pushplus_topic
+    if not token or not topic:
+        return
+    payload = {
+        "token": token,
+        "topic": topic,
+        "title": _clip(title, 80),
+        "content": _content(title, lines),
+        "template": "markdown",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.post(PUSHPLUS_API, json=payload)
+            if resp.status_code >= 300:
+                print("PushPlus 通知失败：HTTP %s %s" % (resp.status_code, resp.text[:200]))
+                return
+            data = resp.json()
+            if data.get("code") != 200:
+                print("PushPlus 通知失败：%s" % data)
+    except Exception as exc:
+        print("PushPlus 通知失败：", exc)
+
+
+async def send_all(title: str, lines: list[str]) -> None:
+    """并发发送到已配置的渠道；单渠道失败不影响另一渠道。"""
+    await asyncio.gather(
+        _send_wecom(title, lines),
+        _send_pushplus(title, lines),
+        return_exceptions=True,
+    )
 
 
 def _send_later(title: str, lines: list[str]) -> None:
-    if not config.wechat_robot_webhook:
+    if not config.wechat_robot_webhook and not (config.pushplus_token and config.pushplus_topic):
         return
     try:
-        task = asyncio.get_running_loop().create_task(send_markdown(title, lines))
+        task = asyncio.get_running_loop().create_task(send_all(title, lines))
     except RuntimeError:
-        print("微信群机器人通知跳过：没有运行中的事件循环")
+        print("班级通知跳过：没有运行中的事件循环")
         return
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)

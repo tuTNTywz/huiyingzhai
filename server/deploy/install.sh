@@ -184,5 +184,5 @@ cat <<EOF
   部署日志：/var/log/huiyingzhai-deploy.log
 
   网页登录身份来自小程序用户表，不再使用独立网页账号。
-  微信群机器人（可选）：在 .env 填 WECHAT_ROBOT_WEBHOOK 后重启 huiyingzhai。
+  班级通知机器人（可选）：在 .env 填 PUSHPLUS_TOKEN + PUSHPLUS_TOPIC 后重启 huiyingzhai。
 EOF

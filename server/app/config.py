@@ -68,8 +68,11 @@ class Config:
         # 网页数据上传页与小程序之间的内部共享密钥（install.sh 生成）
         self.web_panel_secret = _str("WEB_PANEL_SECRET")
 
-        # 可选：企业微信群机器人 Webhook。留空则不发机器人通知
+        # 可选：企业微信群机器人 Webhook。留空则不发企业微信通知
         self.wechat_robot_webhook = _str("WECHAT_ROBOT_WEBHOOK")
+        # 可选：PushPlus 群组推送（不装企业微信的方案）
+        self.pushplus_token = _str("PUSHPLUS_TOKEN")
+        self.pushplus_topic = _str("PUSHPLUS_TOPIC")
 
 
 config = Config()
