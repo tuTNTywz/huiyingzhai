@@ -179,8 +179,8 @@
     el.textContent = text || "";
     el.style.color = error ? "#b4453a" : "";
   }
-  function loginLink() {
-    return canUpload() ? '<a class="btn small primary" href="/upload/">发布 / 上传</a>' : "";
+  function publishLink(label, target) {
+    return canUpload() ? '<a class="btn small primary" href="/upload/#' + target + '">' + label + "</a>" : "";
   }
   async function api(path, options) {
     options = options || {};
@@ -317,7 +317,7 @@
     }).join("");
     $("view").innerHTML =
       '<div class="section-head">学科板块</div><div class="subjects">' + subjects + "</div>" +
-      '<div class="section-head">班级作业 ' + (isStudy() ? loginLink() : "") + "</div>" +
+      '<div class="section-head">班级作业 ' + (isStudy() ? publishLink("发布作业", "homework-card") : "") + "</div>" +
       (hw || empty("暂无班级作业"));
   }
 
@@ -353,7 +353,7 @@
       "<div>学分</div><div>" + esc(st.credit || "待设置") + "</div>" +
       "<div>课程安排</div><div>" + esc(st.schedule || "待设置") + "</div>" +
       "<div>课代表</div><div>" + esc(rp.name ? rp.name + "（" + (rp.studentId || "") + "）" : "暂未设置") + "</div></div></div>" +
-      '<div class="section-head">任务通知 ' + (isAdmin() || reps().indexOf(key) >= 0 ? loginLink() : "") + "</div>" +
+      '<div class="section-head">任务通知 ' + (isAdmin() || reps().indexOf(key) >= 0 ? publishLink("发布学科任务", "subject-card") : "") + "</div>" +
       (taskHtml || empty("本科目暂无任务通知"));
   }
 
@@ -389,7 +389,7 @@
         (isCommittee() ? '<div class="row" style="margin-top:8px"><button class="btn danger small" data-act="delete-activity" data-id="' + esc(item._id) + '">删除活动</button></div>' : "") +
         "</article>";
     }).join("");
-    $("view").innerHTML = '<div class="section-head">活动 ' + (isCommittee() ? loginLink() : "") + "</div>" +
+    $("view").innerHTML = '<div class="section-head">活动 ' + (isCommittee() ? publishLink("发布活动", "activity-card") : "") + "</div>" +
       (items || empty("暂无活动"));
   }
 
@@ -422,7 +422,7 @@
         (isCommittee() ? '<div class="row" style="margin-top:8px"><button class="btn danger small" data-act="delete-volunteer" data-id="' + esc(item._id) + '">删除志愿活动</button></div>' : "") +
         "</article>";
     }).join("");
-    $("view").innerHTML = '<div class="section-head">志愿活动 ' + (isCommittee() ? '<a class="btn small primary" href="/upload/">发布志愿活动</a>' : "") + "</div>" +
+    $("view").innerHTML = '<div class="section-head">志愿活动 ' + (isCommittee() ? publishLink("发布志愿活动", "volunteer-card") : "") + "</div>" +
       (items || empty("暂无志愿活动"));
   }
 
@@ -535,7 +535,7 @@
       "<div>职位</div><div>" + esc(id.position || "—") + "</div>" +
       "<div>身份</div><div>" + esc(roleText() || "—") + "</div>" +
       "<div>负责科目</div><div>" + esc(rp) + "</div></div>" +
-      '<div class="row" style="margin-top:16px">' + loginLink() +
+      '<div class="row" style="margin-top:16px">' + (canUpload() ? '<a class="btn small primary" href="/upload/">发布内容</a>' : "") +
       '<a class="btn secondary small" href="/manual/">使用说明书</a>' +
       '<button class="btn secondary small" data-act="logout">退出</button></div>' +
       "</div>";

@@ -933,7 +933,7 @@ UPLOAD_HTML = """<!doctype html>
   .person-meta { font-size: 12px; color: #8a7a68; }
   .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f2e6d7; color: #7d5a40; margin-left: 5px; }
   .tag.current { background: #9c6b4a; color: #fff; }
-  .form-card { display: grid; gap: 0; }
+  .form-card { display: grid; gap: 0; scroll-margin-top: 18px; }
   .form-actions { margin-top: 14px; }
   .role-note { margin-top: 8px; font-size: 12px; color: #8a7a68; }
   @media (max-width: 640px) {
@@ -1110,6 +1110,17 @@ UPLOAD_HTML = """<!doctype html>
     return identity && Array.isArray(identity.repSubjects) ? identity.repSubjects : [];
   }
 
+  function scrollToTarget() {
+    const target = (location.hash || '').replace('#', '');
+    if (!target) return;
+    const el = document.getElementById(target);
+    if (!el || el.classList.contains('hidden')) {
+      if (target.endsWith('-card')) setMsg('app-msg', '当前身份没有该发布权限', true);
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   function renderIdentity(appError) {
     if (!identity) { showLogin('请用姓名和学号登录'); return; }
     $('identity').classList.remove('hidden');
@@ -1147,6 +1158,8 @@ UPLOAD_HTML = """<!doctype html>
     if (!study && !committee && !canSub) {
       setMsg('app-msg', '当前身份没有上传权限；仅班委/课代表可上传', true);
     }
+    // 从作业/活动/志愿活动/学科页面跳转过来时，滚动到对应表单
+    setTimeout(scrollToTarget, 80);
   }
 
   async function checkSession() {
