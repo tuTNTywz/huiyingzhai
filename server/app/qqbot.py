@@ -164,11 +164,10 @@ def _error_hint(code: Any) -> str:
     }.get(code, "")
 
 
-async def send_group_text(text: str) -> tuple[bool, str]:
+async def _send_group_payload(payload: dict) -> tuple[bool, str]:
     if not enabled():
         return False, "QQ 官方机器人未配置（缺少 AppID/AppSecret/群 openid）"
     gid = group_openid()
-    payload = {"content": str(text or "")[:1800], "msg_type": 0}
     for attempt in (0, 1):
         try:
             token = await _access_token(force=attempt == 1)
@@ -200,3 +199,15 @@ async def send_group_text(text: str) -> tuple[bool, str]:
             detail += "（%s）" % hint
         return False, detail
     return False, "QQ API 鉴权失败"
+
+
+async def send_group_text(text: str) -> tuple[bool, str]:
+    return await _send_group_payload(
+        {"content": str(text or "")[:1800], "msg_type": 0}
+    )
+
+
+async def send_group_markdown(text: str) -> tuple[bool, str]:
+    return await _send_group_payload(
+        {"msg_type": 2, "markdown": {"content": str(text or "")[:1800]}}
+    )

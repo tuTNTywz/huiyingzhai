@@ -129,8 +129,7 @@ async def _send_pushplus_qq(title: str, lines: list[str]) -> None:
         print("QQ 机器人通知失败：", exc)
 
 
-def _qq_text(title: str, lines: list[str]) -> str:
-    """QQ 官方消息用纯文本：去掉 Markdown 标记和网页链接。"""
+def _qq_lines(lines: list[str]) -> list[str]:
     kept = []
     for line in lines:
         if not line or "http://" in line or "https://" in line:
@@ -138,15 +137,41 @@ def _qq_text(title: str, lines: list[str]) -> str:
         text = line.lstrip("> ").replace("**", "").strip()
         if text:
             kept.append(text)
-    return "【%s】\n%s" % (_clip(title, 80), "\n".join(kept))
+    return kept
+
+
+def _qq_text(title: str, lines: list[str]) -> str:
+    """QQ 官方纯文本消息：不带链接，作为 Markdown 失败时的回退。"""
+    return "【%s】\n%s" % (_clip(title, 80), "\n".join(_qq_lines(lines)))
+
+
+def _qq_markdown(title: str, lines: list[str]) -> str:
+    """QQ 官方 Markdown：支持可点击链接（2026/04 起群聊对所有机器人开放）。"""
+    parts = ["# " + _clip(title, 80)] + _qq_lines(lines)
+    base = (config.base_url or "").rstrip("/")
+    if base:
+        parts += ["", "[在汇英斋查看](%s/huiyingzhai/)" % base]
+    return "\n".join(parts)
+
+
+# Markdown 权限/格式类错误：回退纯文本；主动消息无权限等错误则直接记录
+_QQ_MARKDOWN_FALLBACK = ("304036", "40034008", "40034009", "40034011", "40034124", "40034127", "40054010")
 
 
 async def _send_qq_official(title: str, lines: list[str]) -> None:
     if not qqbot.enabled():
         return
-    ok, detail = await qqbot.send_group_text(_qq_text(title, lines))
-    if not ok:
-        print("QQ 官方机器人通知失败：", detail)
+    ok, detail = await qqbot.send_group_markdown(_qq_markdown(title, lines))
+    if ok:
+        return
+    if any(code in detail for code in _QQ_MARKDOWN_FALLBACK):
+        ok_text, text_detail = await qqbot.send_group_text(_qq_text(title, lines))
+        if ok_text:
+            print("QQ Markdown 发送失败，已回退纯文本：", detail)
+            return
+        print("QQ 官方机器人通知失败（Markdown 与纯文本均失败）：", text_detail)
+        return
+    print("QQ 官方机器人通知失败：", detail)
 
 
 async def send_all(title: str, lines: list[str]) -> None:

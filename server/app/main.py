@@ -100,7 +100,7 @@ async def qq_webhook(request: Request):
     if payload.get("op") == 13:
         ua = str(request.headers.get("user-agent") or "")
         appid = str(request.headers.get("x-bot-appid") or "")
-        if ua != "QQBot-Callback" or (config.qq_app_id and appid != config.qq_app_id):
+        if not ua.startswith("QQBot-Callback") or (config.qq_app_id and appid != config.qq_app_id):
             return JSONResponse({"ok": False, "msg": "bad handshake"}, status_code=401)
         data = payload.get("d") if isinstance(payload.get("d"), dict) else {}
         try:
