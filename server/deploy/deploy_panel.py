@@ -894,6 +894,7 @@ MANUAL_HTML = """<!doctype html>
       </tbody>
     </table>
     <div class="tip">发布后网页版立即显示，并按配置推送微信/QQ 机器人通知。</div>
+    <div class="tip">发布页右上角有「📋 智能填充」悬浮球：把通知/作业等文字粘贴进去，点「填充」会自动识别类型并填到对应表单。</div>
   </section>
 
   <section id="attach" class="section reveal">
@@ -1057,9 +1058,22 @@ UPLOAD_HTML = """<!doctype html>
   .form-card { display: grid; gap: 0; scroll-margin-top: 18px; }
   .form-actions { margin-top: 14px; }
   .role-note { margin-top: 8px; font-size: 12px; color: #8a7a68; }
+  .paste-fab { position: fixed; top: 18px; right: 18px; z-index: 70; padding: 10px 15px; border-radius: 999px; background: #9c6b4a; color: #fff; font-size: 13px; box-shadow: 0 10px 26px rgba(120,95,65,.28); }
+  .paste-fab:hover { background: #875b3d; transform: translateY(-1px); }
+  .paste-panel { position: fixed; top: 70px; right: 18px; z-index: 69; width: min(380px, calc(100vw - 24px)); max-height: calc(100vh - 90px); overflow: auto; background: #fffaf2; border: 1px solid #e8ddcc; border-radius: 16px; padding: 14px; box-shadow: 0 18px 48px rgba(60,45,30,.22); }
+  .paste-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; }
+  .paste-head button { background: transparent; color: #8a7a68; padding: 0 4px; font-size: 20px; line-height: 1; }
+  .paste-hint { margin: 4px 0 8px; color: #8a7a68; font-size: 12px; line-height: 1.5; }
+  .paste-panel textarea { max-width: 100%; min-height: 150px; font-size: 13px; line-height: 1.55; }
+  .paste-detect { margin: 8px 0; min-height: 1.2em; color: #9c6b4a; font-size: 12px; }
+  .paste-actions { display: flex; gap: 8px; }
+  .paste-flash { animation: pasteFlash 1.6s ease; }
+  @keyframes pasteFlash { 0%,100% { box-shadow: 0 10px 30px rgba(120,95,65,.05); } 30% { box-shadow: 0 0 0 4px rgba(156,107,74,.35), 0 10px 30px rgba(120,95,65,.12); } }
   @media (max-width: 640px) {
     .person { align-items: flex-start; }
     input { max-width: 100%; }
+    .paste-fab { top: 12px; right: 12px; padding: 9px 13px; }
+    .paste-panel { top: 62px; right: 12px; width: calc(100vw - 24px); }
   }
   @media (prefers-color-scheme: dark) {
     body { background: #14100d; color: #ece4d8; }
@@ -1069,10 +1083,21 @@ UPLOAD_HTML = """<!doctype html>
     .sub, label, .msg, .kv div:nth-child(odd), .person-meta, .role-note { color: #a99c8b; }
     .tag { background: #33261c; color: #dcb894; }
     .tag.current { background: #9c6b4a; color: #fff; }
+    .paste-panel { background: #1d1712; border-color: #33281f; }
+    .paste-head button, .paste-hint, .paste-detect { color: #a99c8b; }
   }
 </style>
 </head>
 <body>
+<button id="paste-fab" class="paste-fab hidden" type="button">📋 智能填充</button>
+<aside id="paste-panel" class="paste-panel hidden" aria-label="粘贴内容自动填充">
+  <div class="paste-head"><b>粘贴内容自动填充</b><button id="paste-close" type="button" aria-label="关闭">×</button></div>
+  <div class="paste-hint">把作业 / 活动 / 志愿活动 / 通知 / 学科任务的文字粘贴进来，自动识别并填到对应发布窗口。</div>
+  <textarea id="paste-input" placeholder="类型：作业&#10;标题：高数第三章习题&#10;截止：2026-12-01 20:00&#10;内容：完成第 1-10 题，拍照上传。"></textarea>
+  <div id="paste-detect" class="paste-detect">等待粘贴…</div>
+  <div class="paste-actions"><button id="paste-fill" class="primary" type="button">填充</button><button id="paste-clear" class="secondary" type="button">清空</button></div>
+  <div id="paste-msg" class="msg"></div>
+</aside>
 <main>
   <h1>汇英斋数据上传</h1>
   <div class="sub">在这里发布作业、活动、志愿活动和学科任务；身份与权限按班级名单确定。</div>
@@ -1211,6 +1236,8 @@ UPLOAD_HTML = """<!doctype html>
     $('login').classList.remove('hidden');
     $('login-msg').textContent = message || '';
     $('studentId').value = '';
+    $('paste-fab').classList.add('hidden');
+    $('paste-panel').classList.add('hidden');
     setTimeout(() => $('name').focus(), 30);
   }
 
@@ -1252,6 +1279,232 @@ UPLOAD_HTML = """<!doctype html>
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  const PASTE_TYPE_NAMES = { homework: "作业", activity: "活动", volunteer: "志愿活动", notice: "通知", subject: "学科任务" };
+  const PASTE_MSG_IDS = { homework: "hw-msg", activity: "act-msg", volunteer: "vol-msg", notice: "notice-msg", subject: "sub-msg" };
+
+  function normalizePasteKey(raw) {
+    const key = String(raw || "").replace(/\s+/g, "").replace(/[（(].*?[)）]/g, "");
+    const map = {
+      "类型": "type", "类别": "type", "发布类型": "type",
+      "标题": "title", "名称": "title", "作业名称": "title", "活动名称": "title",
+      "通知标题": "title", "任务标题": "title", "志愿活动名称": "title",
+      "科目": "subject", "学科": "subject",
+      "截止": "deadline", "截止时间": "deadline", "deadline": "deadline",
+      "时间": "time", "开始时间": "time", "活动时间": "time", "开始": "time",
+      "结束时间": "end", "结束": "end",
+      "地点": "place", "地址": "place", "活动地点": "place",
+      "内容": "content", "说明": "content", "正文": "content",
+      "详情": "content", "要求": "content", "任务内容": "content",
+    };
+    return map[key] || "";
+  }
+
+  function parsePaste(text) {
+    const fields = { raw: [] };
+    let current = "";
+    String(text || "").split(/\r?\n/).forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (current) fields[current] += "\n";
+        return;
+      }
+      const match = trimmed.match(/^([^:：]{1,12})\s*[:：]\s*(.*)$/);
+      const key = match ? normalizePasteKey(match[1]) : "";
+      if (key) {
+        current = key;
+        fields[key] = (fields[key] ? fields[key] + "\n" : "") + (match[2] || "");
+      } else if (current) {
+        fields[current] += "\n" + trimmed;
+      } else {
+        fields.raw.push(trimmed);
+      }
+    });
+    Object.keys(fields).forEach((key) => {
+      if (typeof fields[key] === "string") fields[key] = fields[key].trim();
+    });
+    return fields;
+  }
+
+  function detectPasteType(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return "";
+    const labels = { "作业": "homework", "活动": "activity", "志愿活动": "volunteer", "通知": "notice", "学科任务": "subject" };
+    const explicit = raw.match(/(?:类型|类别|发布类型)\s*[:：]\s*(作业|活动|志愿活动|通知|学科任务)/);
+    if (explicit) return labels[explicit[1]];
+    const prefix = raw.match(/^(作业|活动|志愿活动|通知|学科任务)\s*[:：]/);
+    if (prefix) return labels[prefix[1]];
+    const scores = { homework: 0, activity: 0, volunteer: 0, notice: 0, subject: 0 };
+    if (raw.indexOf("志愿") >= 0) scores.volunteer += 5;
+    if (raw.indexOf("作业") >= 0) scores.homework += 3;
+    if (raw.indexOf("活动") >= 0) scores.activity += 3;
+    if (raw.indexOf("通知") >= 0 || raw.indexOf("公告") >= 0) scores.notice += 3;
+    if (raw.indexOf("学科任务") >= 0 || raw.indexOf("课代表") >= 0) scores.subject += 4;
+    (subjects || []).forEach((item) => {
+      if (item.name && raw.indexOf(item.name) >= 0) scores.subject += 4;
+    });
+    const order = ["notice", "volunteer", "subject", "homework", "activity"];
+    let best = "";
+    let bestScore = 0;
+    order.forEach((key) => {
+      if (scores[key] > bestScore) { best = key; bestScore = scores[key]; }
+    });
+    return best;
+  }
+
+  function pasteTitle(fields) {
+    let title = fields.title || (fields.raw && fields.raw[0]) || "";
+    return title.replace(/^(作业|活动|志愿活动|通知|学科任务)\s*[:：]\s*/, "").trim();
+  }
+
+  function pasteContent(fields) {
+    if (fields.content) return fields.content;
+    const raw = (fields.raw || []).filter((line) => !/^(作业|活动|志愿活动|通知|学科任务)\s*[:：]?\s*$/.test(line));
+    if (!fields.title && raw.length) raw.shift();
+    return raw.join("\n").trim();
+  }
+
+  function parsePasteDate(value, kind) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const normalized = text.replace(/[年月]/g, "-").replace(/日/g, " ").replace(/[./]/g, "-");
+    let year = null;
+    let month = null;
+    let day = null;
+    let hour = null;
+    let minute = null;
+    let match = normalized.match(/(\d{4})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})(?:[T\s]+(\d{1,2})\s*[:：]\s*(\d{1,2}))?/);
+    if (match) {
+      year = Number(match[1]); month = Number(match[2]); day = Number(match[3]);
+      if (match[4] !== undefined) { hour = Number(match[4]); minute = Number(match[5] || 0); }
+    } else {
+      match = normalized.match(/(\d{1,2})\s*-\s*(\d{1,2})(?:[T\s]+(\d{1,2})\s*[:：]\s*(\d{1,2}))?/);
+      if (match) {
+        year = new Date().getFullYear(); month = Number(match[1]); day = Number(match[2]);
+        if (match[3] !== undefined) { hour = Number(match[3]); minute = Number(match[4] || 0); }
+      }
+    }
+    if (!match) return "";
+    if (hour === null) {
+      const timeMatch = text.match(/(\d{1,2})\s*[点时](?:\s*(\d{1,2})\s*分?)?/);
+      if (timeMatch) { hour = Number(timeMatch[1]); minute = timeMatch[2] ? Number(timeMatch[2]) : 0; }
+    }
+    if (hour === null) {
+      if (kind === "deadline") { hour = 23; minute = 59; }
+      else if (kind === "end") { hour = 17; minute = 0; }
+      else { hour = 9; minute = 0; }
+    }
+    if (hour < 12 && /(下午|晚上|傍晚)/.test(text)) hour += 12;
+    const explicitYear = /\d{4}/.test(text);
+    if (!explicitYear) year = new Date().getFullYear();
+    const dt = new Date(year, month - 1, day, hour, minute);
+    if (Number.isNaN(dt.getTime()) || dt.getMonth() !== month - 1 || dt.getDate() !== day) return "";
+    if (!explicitYear && dt.getTime() < Date.now() - 180 * 24 * 3600 * 1000) {
+      dt.setFullYear(year + 1);
+    }
+    const pad = (n) => String(n).padStart(2, "0");
+    return dt.getFullYear() + "-" + pad(dt.getMonth() + 1) + "-" + pad(dt.getDate()) +
+      "T" + pad(dt.getHours()) + ":" + pad(dt.getMinutes());
+  }
+
+  function resolveSubject(fields, text) {
+    const raw = String(fields.subject || "").trim();
+    const aliases = {
+      "高数": "math", "数学": "math", "英语": "english", "心理": "psychology",
+      "人工智能": "ai", "AI": "ai", "物理": "physics", "国防": "defense",
+      "思政": "ideology", "思想道德": "ideology", "体育": "pe",
+      "职业": "career", "生涯": "career",
+    };
+    if (raw) {
+      const hit = (subjects || []).find((item) =>
+        item.name === raw || item.name.indexOf(raw) >= 0 || raw.indexOf(item.name) >= 0
+      );
+      if (hit) return hit.key;
+      for (const alias of Object.keys(aliases)) {
+        if (raw.indexOf(alias) >= 0) return aliases[alias];
+      }
+    }
+    const hit = (subjects || []).find((item) => item.name && String(text).indexOf(item.name) >= 0);
+    if (hit) return hit.key;
+    for (const alias of Object.keys(aliases)) {
+      if (String(text).indexOf(alias) >= 0) return aliases[alias];
+    }
+    return "";
+  }
+
+  function setPasteField(id, value) {
+    if (value === undefined || value === null || value === "") return false;
+    const el = $(id);
+    if (!el) return false;
+    el.value = value;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  function updatePasteDetect() {
+    const text = $("paste-input").value;
+    const type = detectPasteType(text);
+    $("paste-detect").textContent = text.trim()
+      ? (type ? "识别为：" + PASTE_TYPE_NAMES[type] : "未识别类型，请加入「作业 / 活动 / 志愿活动 / 通知 / 学科任务」")
+      : "等待粘贴…";
+  }
+
+  function setPastePanel(open) {
+    $("paste-panel").classList.toggle("hidden", !open);
+    if (open) {
+      updatePasteDetect();
+      setTimeout(() => $("paste-input").focus(), 30);
+    }
+  }
+
+  function fillPaste() {
+    const text = $("paste-input").value.trim();
+    if (!text) { setMsg("paste-msg", "请先粘贴内容", true); return; }
+    const type = detectPasteType(text);
+    if (!type) { setMsg("paste-msg", "未识别类型，请加上类型关键词", true); return; }
+    const card = $(type === "homework" ? "homework-card" : type + "-card");
+    if (!card || card.classList.contains("hidden")) {
+      setMsg("paste-msg", "当前身份没有发布" + PASTE_TYPE_NAMES[type] + "的权限", true);
+      return;
+    }
+    const fields = parsePaste(text);
+    const title = pasteTitle(fields);
+    const content = pasteContent(fields);
+    let filled = 0;
+    const set = (id, value) => { if (setPasteField(id, value)) filled += 1; };
+    if (type === "homework") {
+      set("hw-title", title);
+      set("hw-desc", content);
+      set("hw-deadline", parsePasteDate(fields.deadline || fields.time, "deadline"));
+    } else if (type === "activity") {
+      set("act-title", title);
+      set("act-time", parsePasteDate(fields.time || fields.deadline, "start"));
+      set("act-place", fields.place || "");
+      set("act-content", content);
+    } else if (type === "volunteer") {
+      set("vol-title", title);
+      set("vol-start", parsePasteDate(fields.time || fields.deadline, "start"));
+      set("vol-end", parsePasteDate(fields.end, "end"));
+      set("vol-content", content);
+    } else if (type === "subject") {
+      set("sub-subject", resolveSubject(fields, text));
+      set("sub-title", title);
+      set("sub-content", content);
+      set("sub-deadline", parsePasteDate(fields.deadline || fields.time, "deadline"));
+    } else if (type === "notice") {
+      set("notice-title", title);
+      set("notice-content", content);
+    }
+    if (!filled) { setMsg("paste-msg", "没有识别到可填充的字段", true); return; }
+    $("paste-panel").classList.add("hidden");
+    card.classList.remove("paste-flash");
+    void card.offsetWidth;
+    card.classList.add("paste-flash");
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+    setMsg(PASTE_MSG_IDS[type], "已自动填充，请检查后发布");
+    setMsg("paste-msg", "");
+  }
+
   function renderIdentity(appError) {
     if (!identity) { showLogin('请用姓名和学号登录'); return; }
     $('identity').classList.remove('hidden');
@@ -1278,6 +1531,9 @@ UPLOAD_HTML = """<!doctype html>
     $('volunteer-card').classList.toggle('hidden', !committee);
     $('notice-card').classList.toggle('hidden', !committee);
     $('subject-card').classList.toggle('hidden', !canSub);
+    const canPublish = study || committee || canSub;
+    $('paste-fab').classList.toggle('hidden', !canPublish);
+    if (!canPublish) $('paste-panel').classList.add('hidden');
     const select = $('sub-subject');
     select.textContent = '';
     const allowed = admin ? subjects : subjects.filter((item) => reps.indexOf(item.key) >= 0);
@@ -1519,6 +1775,24 @@ UPLOAD_HTML = """<!doctype html>
   $('vol-submit').addEventListener('click', submitVolunteer);
   $('notice-submit').addEventListener('click', submitNotice);
   $('sub-submit').addEventListener('click', submitSubject);
+
+  $('paste-fab').addEventListener('click', () => setPastePanel($('paste-panel').classList.contains('hidden')));
+  $('paste-close').addEventListener('click', () => setPastePanel(false));
+  $('paste-fill').addEventListener('click', fillPaste);
+  $('paste-clear').addEventListener('click', () => {
+    $('paste-input').value = '';
+    setMsg('paste-msg', '');
+    updatePasteDetect();
+  });
+  $('paste-input').addEventListener('input', updatePasteDetect);
+  $('paste-input').addEventListener('paste', () => setTimeout(updatePasteDetect, 0));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setPastePanel(false); });
+  document.addEventListener('click', (e) => {
+    const panel = $('paste-panel');
+    if (panel.classList.contains('hidden')) return;
+    if (panel.contains(e.target) || $('paste-fab').contains(e.target)) return;
+    setPastePanel(false);
+  });
 
   checkSession();
 })();
