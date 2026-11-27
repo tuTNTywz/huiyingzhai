@@ -861,11 +861,11 @@ MANUAL_HTML = """<!doctype html>
 
   <section id="notice" class="section reveal">
     <div class="sec-head"><span class="sec-num">07</span><h2>通知</h2></div>
-    <p>发布作业、活动、志愿活动或学科任务后，会在「通知」中生成站内通知。</p>
+    <p>「通知」显示班委/管理员发布的班级通知，以及学科任务、志愿活动提醒；作业和活动不再自动进入通知。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>看全文</b><p>通知直接显示完整正文和附件，不再只显示摘要。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>点链接</b><p>正文里的 http/https 网址会自动变成可点击链接；附件也可直接打开。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>进详情</b><p>点击通知进入对应的作业、活动、志愿活动或学科板块。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>发布通知</b><p>班委或管理员点击「发布通知」，填写标题、正文和附件。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><b>点链接 / 进详情</b><p>正文和附件里的网址可直接打开；学科任务、志愿活动通知可点击进入详情。</p></div></div>
     </div>
     <div class="tip">班级还配置了微信/QQ 机器人通知；具体是否收到取决于班级管理员是否启用。</div>
   </section>
@@ -874,7 +874,7 @@ MANUAL_HTML = """<!doctype html>
     <div class="sec-head"><span class="sec-num">08</span><h2>我的</h2></div>
     <p>「我的」显示姓名、学号、班级、职位、身份和负责科目。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>上传入口</b><p>班委和课代表会看到「发布 / 上传」按钮，进入 <b>/upload/</b>。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>上传入口</b><p>班委和课代表会看到「发布内容」按钮，进入 <b>/upload/</b>。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>使用说明书</b><p>可随时返回本页面查看操作说明。</p></div></div>
       <div class="step"><span class="step-num">3</span><div><b>退出</b><p>点击「退出」清除当前浏览器登录状态。</p></div></div>
     </div>
@@ -886,9 +886,9 @@ MANUAL_HTML = """<!doctype html>
     <table>
       <thead><tr><th>身份 / 职务</th><th>可发布</th></tr></thead>
       <tbody>
-        <tr><td>管理员</td><td>作业、活动、志愿活动、全部学科任务</td></tr>
-        <tr><td>学习委员</td><td>作业、活动、志愿活动、本人负责科目的任务</td></tr>
-        <tr><td>其他班委</td><td>活动、志愿活动、本人负责科目的任务</td></tr>
+        <tr><td>管理员</td><td>作业、活动、志愿活动、通知、全部学科任务</td></tr>
+        <tr><td>学习委员</td><td>作业、活动、志愿活动、通知、本人负责科目的任务</td></tr>
+        <tr><td>其他班委</td><td>活动、志愿活动、通知、本人负责科目的任务</td></tr>
         <tr><td>课代表</td><td>本人负责科目的任务</td></tr>
         <tr><td>普通同学</td><td>不可发布，只能浏览和交流</td></tr>
       </tbody>
@@ -1154,6 +1154,18 @@ UPLOAD_HTML = """<!doctype html>
         <div id="vol-msg" class="msg"></div>
       </div>
 
+      <div id="notice-card" class="card form-card hidden">
+        <h2>发布通知</h2>
+        <label for="notice-title">通知标题</label>
+        <input id="notice-title" placeholder="如：本周班会安排">
+        <label for="notice-content">通知内容</label>
+        <textarea id="notice-content" placeholder="填写通知正文…"></textarea>
+        <label for="notice-files">附件（最多 5 个，单个 ≤20MB）</label>
+        <input id="notice-files" type="file" multiple>
+        <div class="form-actions"><button id="notice-submit" class="primary">发布通知</button></div>
+        <div id="notice-msg" class="msg"></div>
+      </div>
+
       <div id="subject-card" class="card form-card hidden">
         <h2>发布学科任务</h2>
         <label for="sub-subject">科目</label>
@@ -1264,6 +1276,7 @@ UPLOAD_HTML = """<!doctype html>
     $('homework-card').classList.toggle('hidden', !study);
     $('activity-card').classList.toggle('hidden', !committee);
     $('volunteer-card').classList.toggle('hidden', !committee);
+    $('notice-card').classList.toggle('hidden', !committee);
     $('subject-card').classList.toggle('hidden', !canSub);
     const select = $('sub-subject');
     select.textContent = '';
@@ -1443,6 +1456,31 @@ UPLOAD_HTML = """<!doctype html>
     }
   }
 
+  async function submitNotice() {
+    const title = $('notice-title').value.trim();
+    if (!title) { setMsg('notice-msg', '请填写通知标题', true); return; }
+    const button = $('notice-submit');
+    button.disabled = true;
+    try {
+      setMsg('notice-msg', '正在上传附件…');
+      const attachments = await uploadFiles($('notice-files'), 'notice');
+      setMsg('notice-msg', '正在发布…');
+      await publishAction('publishNotice', {
+        title: title,
+        content: $('notice-content').value.trim(),
+        attachments: attachments
+      }, 'notice-msg');
+      setMsg('notice-msg', '通知已发布');
+      $('notice-title').value = '';
+      $('notice-content').value = '';
+      $('notice-files').value = '';
+    } catch (err) {
+      setMsg('notice-msg', err.message || '发布失败', true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function submitSubject() {
     const subject = $('sub-subject').value;
     const title = $('sub-title').value.trim();
@@ -1479,6 +1517,7 @@ UPLOAD_HTML = """<!doctype html>
   $('hw-submit').addEventListener('click', submitHomework);
   $('act-submit').addEventListener('click', submitActivity);
   $('vol-submit').addEventListener('click', submitVolunteer);
+  $('notice-submit').addEventListener('click', submitNotice);
   $('sub-submit').addEventListener('click', submitSubject);
 
   checkSession();
@@ -1932,6 +1971,7 @@ class Handler(BaseHTTPRequestHandler):
             "listSubjectTasks", "getSubjectSettings", "getSubjectRep",
             "createPost", "createReply",
             "publishHomework", "publishActivity", "publishSubjectTask",
+            "publishNotice", "deleteNotice",
             "deleteHomework", "deleteActivity", "deleteSubjectTask",
             "setHomeworkStatus",
         }
@@ -1958,6 +1998,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if action == "publishVolunteer" and role not in ("committee", "admin"):
             self._send(403, json.dumps({"ok": False, "message": "仅班委或管理员可发布志愿活动"}, ensure_ascii=False))
+            return
+        if action == "publishNotice" and role not in ("committee", "admin"):
+            self._send(403, json.dumps({"ok": False, "message": "仅班委或管理员可发布通知"}, ensure_ascii=False))
+            return
+        if action == "deleteNotice" and role not in ("committee", "admin"):
+            self._send(403, json.dumps({"ok": False, "message": "仅班委或管理员可删除通知"}, ensure_ascii=False))
             return
         if action == "publishSubjectTask":
             subject = str(payload["data"].get("subject") or "")

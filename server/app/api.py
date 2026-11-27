@@ -134,6 +134,8 @@ WRITE_ACTIONS = {
     "publishActivity",
     "publishVolunteer",
     "deleteActivity",
+    "publishNotice",
+    "deleteNotice",
     "createPost",
     "createReply",
 }
@@ -272,23 +274,6 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             },
         )
 
-        # 通知失败不影响作业发布成功本身
-        try:
-            store.insert(
-                "notifications",
-                {
-                    "type": "homework",
-                    "homeworkId": homework["_id"],
-                    "title": title,
-                    "content": _trim(desc)[:100] or "新作业已发布，点击查看详情",
-                    "deadline": deadline,
-                    "creatorName": user.get("nickname"),
-                    "publisherOpenid": openid,  # 发布者本人不在通知中心展示此条
-                    "createTime": _now_ms(),
-                },
-            )
-        except Exception as exc:
-            print("作业通知失败", exc)
         robot.notify_homework(
             title=title,
             desc=desc,
@@ -362,10 +347,53 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
         await remove_files([homework])
         return {"ok": True}
 
+    # ===== 班级通知：班委/管理员手动发布 =====
+    if action == "publishNotice":
+        if not is_manager(user):
+            return {"ok": False, "msg": "仅班委或管理员可发布通知"}
+        title = _trim(data.get("title"))
+        if not title:
+            return {"ok": False, "msg": "请填写通知标题"}
+        content = _trim(data.get("content"))
+        attachments = normalize_attachments(data.get("attachments"))
+        notice = store.insert(
+            "notifications",
+            {
+                "type": "notice",
+                "title": title,
+                "content": content,
+                "attachments": attachments,
+                "creatorName": user.get("nickname"),
+                "publisherOpenid": openid,
+                "createTime": _now_ms(),
+            },
+        )
+        robot.notify_notice(
+            title=title,
+            content=content,
+            creator_name=user.get("nickname"),
+            attachments=attachments,
+        )
+        return {"ok": True, "id": notice["_id"]}
+
+    if action == "deleteNotice":
+        notice = get_doc_or_none("notifications", data.get("id"))
+        if not notice or notice.get("type") != "notice":
+            return {"ok": False, "msg": "通知不存在或已被删除"}
+        if not is_manager(user):
+            return {"ok": False, "msg": "仅班委或管理员可删除通知"}
+        store.remove("notifications", notice.get("_id"))
+        await remove_files([notice])
+        return {"ok": True}
+
     # 通知中心：站内通知统一由服务端返回
     if action == "fetchHomeworkNotices":
         rows = store.find(
-            "notifications", sort_by="createTime", direction="desc", limit=50
+            "notifications",
+            lambda n: n.get("type") not in ("homework", "activity"),
+            sort_by="createTime",
+            direction="desc",
+            limit=50,
         )
         notices = []
         for n in rows:
@@ -374,16 +402,10 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                 "createMs": _to_ms(n.get("createTime")),
                 "deadlineMs": _to_ms(n.get("deadline")),
             }
-            # 通知里只存了摘要；补上对应作业/任务/活动的完整正文和附件
-            if n.get("type") == "homework":
-                doc = store.find_one(
-                    "homeworks", lambda h: h.get("_id") == n.get("homeworkId")
-                )
-                if doc:
-                    item["fullContent"] = doc.get("desc") or ""
-                    item["attachments"] = doc.get("attachments") or []
-                    item["deadline"] = doc.get("deadline") or n.get("deadline")
-                    item["deadlineMs"] = _to_ms(item["deadline"])
+            # 通知里只存了摘要；补上对应任务/活动的完整正文和附件
+            if n.get("type") == "notice":
+                item["fullContent"] = n.get("content") or ""
+                item["attachments"] = n.get("attachments") or []
             elif n.get("type") == "subject_task":
                 doc = store.find_one(
                     "subject_tasks", lambda t: t.get("_id") == n.get("taskId")
@@ -430,23 +452,6 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                 "createTime": _now_ms(),
             },
         )
-        try:
-            store.insert(
-                "notifications",
-                {
-                    "type": "activity",
-                    "activityId": activity["_id"],
-                    "title": activity.get("title"),
-                    "content": _trim(activity.get("content"))[:100] or "新活动已发布，点击查看详情",
-                    "activityTime": activity.get("activityTime"),
-                    "place": activity.get("place"),
-                    "creatorName": activity.get("creatorName"),
-                    "publisherOpenid": openid,
-                    "createTime": _now_ms(),
-                },
-            )
-        except Exception as exc:
-            print("活动站内通知写入失败", exc)
         robot.notify_activity(
             title=activity.get("title"),
             place=activity.get("place"),

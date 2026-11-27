@@ -66,6 +66,7 @@
   .profile { display:grid; grid-template-columns:110px 1fr; gap:6px 12px; font-size:14px; }
   .profile div:nth-child(odd) { color:var(--muted); }
   .notice { cursor:pointer; }
+  .notice.static { cursor:default; }
   .unread { border-left:3px solid var(--brown); }
   footer { text-align:center; color:var(--muted); font-size:12px; padding:20px 0 40px; }
   footer a { color:inherit; text-decoration:none; }
@@ -533,10 +534,10 @@
     const items = list.map((n) => {
       const isTask = n.type === "subject_task";
       const isVolunteer = n.type === "volunteer";
-      const isActivity = n.type === "activity";
-      const activityLike = isActivity || isVolunteer;
-      const tag = isTask ? subjectName(n.subject) : isVolunteer ? "志愿活动" : isActivity ? "班级活动" : "班级作业";
-      const target = isTask ? n.subject : activityLike ? n.activityId : n.homeworkId;
+      const isNotice = n.type === "notice";
+      const activityLike = isVolunteer;
+      const tag = isTask ? subjectName(n.subject) : isVolunteer ? "志愿活动" : isNotice ? "班级通知" : "通知";
+      const target = isTask ? n.subject : activityLike ? n.activityId : "";
       const content = n.fullContent || n.content || "";
       const when = activityLike
         ? (n.activityTime
@@ -544,19 +545,23 @@
             (n.endTime ? " 至 " + esc(fmt(n.endTime)) : "") + "</span>"
           : "")
         : (n.deadline ? "<span>截止：" + esc(fmt(n.deadline)) + "</span>" : "");
-      return '<article class="card notice" data-act="notice-open" data-type="' + esc(n.type || "") + '" data-target="' + esc(target || "") + '">' +
-        '<div class="row" style="justify-content:space-between"><span class="tag ' + (activityLike ? "gold" : "") + '">' + esc(tag) + "</span>" +
+      const clickable = !!target;
+      return '<article class="card notice' + (clickable ? "" : " static") + '"' +
+        (clickable ? ' data-act="notice-open" data-type="' + esc(n.type || "") + '" data-target="' + esc(target) + '"' : "") + '>' +
+        '<div class="row" style="justify-content:space-between"><span class="tag ' + (activityLike || isNotice ? "gold" : "") + '">' + esc(tag) + "</span>" +
         '<span class="muted">' + esc(fmt(n.createTime)) + "</span></div>" +
         '<div class="title" style="font-weight:700;margin-top:6px">' + esc(n.title || "") + "</div>" +
         (content ? '<div class="desc">' + linkify(content) + "</div>" : "") +
         (activityLike && n.place ? '<div class="meta">地点：' + esc(n.place) + "</div>" : "") +
         attachmentsHtml(n.attachments) +
-        '<div class="meta"><span>发布：' + esc(n.creatorName || "") + "</span>" + when + "</div></article>";
+        '<div class="meta"><span>发布：' + esc(n.creatorName || "") + "</span>" + when + "</div>" +
+        (isNotice && isCommittee() ? '<div class="row" style="margin-top:8px"><button class="btn danger small" data-act="delete-notice" data-id="' + esc(n._id) + '">删除通知</button></div>' : "") +
+        "</article>";
     }).join("");
     const badge = $("notice-count");
     if (list.length) { badge.textContent = String(list.length); badge.classList.remove("hidden"); }
     else badge.classList.add("hidden");
-    $("view").innerHTML = '<div class="section-head">通知</div>' +
+    $("view").innerHTML = '<div class="section-head">通知 ' + (isCommittee() ? publishLink("发布通知", "notice-card") : "") + "</div>" +
       (items || empty("暂无通知"));
   }
 
@@ -624,6 +629,13 @@
       setTab("homework");
     } catch (e) { alert(e.message || "删除失败"); }
   }
+  async function deleteNotice(id) {
+    if (!confirm("确定删除该通知及其附件吗？删除后无法恢复。")) return;
+    try {
+      await action("deleteNotice", { id });
+      await viewNotice();
+    } catch (e) { alert(e.message || "删除失败"); }
+  }
   async function deleteActivity(id, backTab) {
     if (!confirm("确定删除该活动吗？删除后无法恢复。")) return;
     try {
@@ -663,6 +675,7 @@
     else if (act === "toggle-homework") toggleHomework(el);
     else if (act === "delete-homework") run(deleteHomework(el.dataset.id));
     else if (act === "delete-activity") run(deleteActivity(el.dataset.id, "activity"));
+    else if (act === "delete-notice") run(deleteNotice(el.dataset.id));
     else if (act === "delete-volunteer") run(deleteActivity(el.dataset.id, "volunteer"));
     else if (act === "delete-subject-task") run(deleteSubjectTask(el.dataset.id, el.dataset.key));
     else if (act === "post-submit") submitPost();

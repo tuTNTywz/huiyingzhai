@@ -265,6 +265,19 @@ def notify_activity(
     _send_later(_headline("班级活动", title), lines)
 
 
+def notify_notice(
+    *, title: Any, content: Any, creator_name: Any, attachments: Any = None
+) -> None:
+    lines = ["> 发布：%s" % _clip(creator_name, 40)]
+    if content:
+        lines.append("> 内容：%s" % _clip_block(content, 1200))
+    lines.extend(_attachment_lines(attachments))
+    link = _web_link()
+    if link:
+        lines.append(link)
+    _send_later(_headline("班级通知", title), lines)
+
+
 def notify_volunteer(
     *,
     title: Any,
