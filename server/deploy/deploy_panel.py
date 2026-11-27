@@ -686,16 +686,16 @@ MANUAL_HTML = """<!doctype html>
   .site-footer a { color:var(--brown); text-decoration:none; }
   .wechat-guide { margin:14px 0 2px; padding:14px; border:1px solid var(--line); border-radius:16px; background:#fff; }
   .guide-stage { display:flex; gap:16px; align-items:center; }
-  .guide-phone { position:relative; flex:none; width:190px; height:390px; border-radius:26px; border:7px solid #2e2a25; background:#f4f4f4; overflow:hidden; box-shadow:0 16px 34px rgba(60,45,30,.18); }
-  .guide-slide { position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; opacity:0; transform:translateX(12px); transition:opacity .45s ease, transform .45s ease; padding-top:10px; }
+  .guide-phone { position:relative; flex:none; width:250px; height:280px; border-radius:16px; border:1px solid var(--line); background:#f7f2e9; overflow:hidden; box-shadow:0 12px 26px rgba(60,45,30,.12); }
+  .guide-slide { position:absolute; inset:12px; display:flex; align-items:center; justify-content:center; opacity:0; transform:translateX(10px); transition:opacity .45s ease, transform .45s ease; }
   .guide-slide.active { opacity:1; transform:none; }
-  .guide-slide img { width:100%; height:auto; display:block; }
-  .guide-qr { width:150px; height:150px; margin:54px auto 0; border-radius:12px; background:
+  .guide-slide img { max-width:100%; max-height:100%; width:auto; height:auto; display:block; border-radius:9px; box-shadow:0 6px 18px rgba(60,45,30,.16); }
+  .guide-qr { width:150px; height:150px; margin:0 auto; border-radius:12px; background:
     repeating-linear-gradient(90deg,#2e2a25 0 6px,transparent 6px 12px),
     repeating-linear-gradient(0deg,#2e2a25 0 6px,transparent 6px 12px);
     background-size:24px 24px; position:relative; box-shadow:0 0 0 8px #fff,0 0 0 9px #e2d5c2; }
   .guide-qr::after { content:""; position:absolute; left:8px; right:8px; top:12px; height:3px; border-radius:2px; background:#c1936c; box-shadow:0 0 10px #c1936c; animation:scan 2.2s ease-in-out infinite; }
-  .guide-qr-note { text-align:center; color:#8a8478; font-size:11px; margin-top:16px; }
+  .guide-qr-note { text-align:center; color:#8a8478; font-size:11px; margin-top:14px; }
   .guide-main { flex:1; min-width:0; }
   .guide-step { font-size:12px; letter-spacing:.12em; color:var(--brown); margin-bottom:6px; }
   .guide-title { font-size:16px; font-weight:700; margin-bottom:4px; }
@@ -714,7 +714,7 @@ MANUAL_HTML = """<!doctype html>
     .hero { min-height:100vh; padding:54px 18px 70px; }
     .section { padding:22px 18px; border-radius:16px; }
     .guide-stage { flex-direction:column; align-items:stretch; }
-    .guide-phone { width:170px; height:350px; margin:0 auto; }
+    .guide-phone { width:230px; height:260px; margin:0 auto; }
     .guide-desc { min-height:0; }
   }
   @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } *,*::before,*::after { animation:none !important; transition:none !important; } .reveal { opacity:1; transform:none; } }
@@ -761,7 +761,6 @@ MANUAL_HTML = """<!doctype html>
   <a href="#notice">通知</a>
   <a href="#mine">我的</a>
   <a href="#publish">发布内容</a>
-  <a href="#deploy">部署</a>
   <a href="#attach">附件规则</a>
   <a href="#faq">常见问题</a>
 </nav>
@@ -814,7 +813,7 @@ MANUAL_HTML = """<!doctype html>
     <div class="roles">
       <div class="role"><h3>普通同学</h3><p>查看作业、活动、志愿活动，参与交流，接收通知。</p></div>
       <div class="role"><h3>班委</h3><p>发布活动、志愿活动；学习委员还可发布作业；可删除对应内容。</p></div>
-      <div class="role"><h3>课代表 / 管理员</h3><p>课代表发布本人负责科目的任务；管理员拥有全部权限和网页部署控制台。</p></div>
+      <div class="role"><h3>课代表 / 管理员</h3><p>课代表发布本人负责科目的任务；管理员拥有全部权限。</p></div>
     </div>
     <div class="tags"><span class="tag">姓名</span><span class="tag">学号</span><span class="tag">班级自动</span><span class="tag">职位自动</span><span class="tag">名单校验</span></div>
     <div class="tip">登录状态保存在浏览器 Cookie 中，有效期约 30 天；退出在「我的」页面。</div>
@@ -887,7 +886,7 @@ MANUAL_HTML = """<!doctype html>
     <table>
       <thead><tr><th>身份 / 职务</th><th>可发布</th></tr></thead>
       <tbody>
-        <tr><td>管理员</td><td>作业、活动、志愿活动、全部学科任务；网页部署控制台</td></tr>
+        <tr><td>管理员</td><td>作业、活动、志愿活动、全部学科任务</td></tr>
         <tr><td>学习委员</td><td>作业、活动、志愿活动、本人负责科目的任务</td></tr>
         <tr><td>其他班委</td><td>活动、志愿活动、本人负责科目的任务</td></tr>
         <tr><td>课代表</td><td>本人负责科目的任务</td></tr>
@@ -897,20 +896,14 @@ MANUAL_HTML = """<!doctype html>
     <div class="tip">发布后网页版立即显示，并按配置推送微信/QQ 机器人通知。</div>
   </section>
 
-  <section id="deploy" class="section reveal">
-    <div class="sec-head"><span class="sec-num">10</span><h2>网页部署（管理员）</h2></div>
-    <p>管理员访问 <b>/deploy/</b>，用姓名 + 学号登录后可查看当前版本、部署日志并一键部署。</p>
-    <div class="tip">部署会从 GitHub 拉取最新代码并重启后端；失败自动回滚。非管理员会被拒绝。</div>
-  </section>
-
   <section id="attach" class="section reveal">
-    <div class="sec-head"><span class="sec-num">11</span><h2>附件规则</h2></div>
+    <div class="sec-head"><span class="sec-num">10</span><h2>附件规则</h2></div>
     <p>作业、学科任务和论坛帖最多 <b>5 个附件</b>，单个不超过 <b>20MB</b>。支持常见文档和图片。</p>
     <p>附件上传后保存在服务器 <b>/uploads/</b>，通知和详情中可直接打开或下载；图片会直接显示为缩略图，点击查看原图。</p>
   </section>
 
   <section id="faq" class="section reveal">
-    <div class="sec-head"><span class="sec-num">12</span><h2>常见问题</h2></div>
+    <div class="sec-head"><span class="sec-num">11</span><h2>常见问题</h2></div>
     <div class="faq-item">
       <button class="faq-q">登录提示“姓名与学号不匹配”？<span>＋</span></button>
       <div class="faq-a"><p>姓名必须与班级名单完全一致；确认学号没有输错。名单外的学号不能登录。</p></div>
