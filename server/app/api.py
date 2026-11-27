@@ -112,12 +112,25 @@ def _to_ms(value: Any) -> int:
     return _int(value)
 
 
+# 作业完成状态：按学号（openid）独立记录，互不影响
+def homework_done(openid: Any, homework_id: Any) -> bool:
+    if not openid or not homework_id:
+        return False
+    doc = store.find_one(
+        "homework_status",
+        lambda s: s.get("homeworkId") == str(homework_id)
+        and s.get("openid") == openid,
+    )
+    return bool(doc and doc.get("done"))
+
+
 # 未注册用户仍可浏览读接口，写操作一律拦截
 WRITE_ACTIONS = {
     "publishSubjectTask",
     "deleteSubjectTask",
     "publishHomework",
     "deleteHomework",
+    "setHomeworkStatus",
     "publishActivity",
     "publishVolunteer",
     "deleteActivity",
@@ -287,13 +300,47 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
 
     if action == "listHomeworks":
         rows = store.find("homeworks", sort_by="createTime", direction="desc", limit=20)
+        for row in rows:
+            row["done"] = homework_done(openid, row.get("_id"))
         return {"ok": True, "list": rows}
 
     if action == "getHomework":
         item = get_doc_or_none("homeworks", data.get("id"))
         if not item:
             return {"ok": False, "msg": "作业不存在或已被删除"}
+        item["done"] = homework_done(openid, item.get("_id"))
         return {"ok": True, "item": item}
+
+    # 每位同学自行切换某份作业的「已完成 / 未完成」，只影响本人
+    if action == "setHomeworkStatus":
+        homework = get_doc_or_none("homeworks", data.get("id"))
+        if not homework:
+            return {"ok": False, "msg": "作业不存在或已被删除"}
+        if not openid:
+            return {"ok": False, "msg": "请先登录"}
+        done = bool(data.get("done"))
+        existing = store.find_one(
+            "homework_status",
+            lambda s: s.get("homeworkId") == homework.get("_id")
+            and s.get("openid") == openid,
+        )
+        if existing:
+            store.update(
+                "homework_status",
+                existing.get("_id"),
+                {"done": done, "updateTime": _now_ms()},
+            )
+        else:
+            store.insert(
+                "homework_status",
+                {
+                    "homeworkId": homework.get("_id"),
+                    "openid": openid,
+                    "done": done,
+                    "updateTime": _now_ms(),
+                },
+            )
+        return {"ok": True, "done": done}
 
     if action == "deleteHomework":
         homework = get_doc_or_none("homeworks", data.get("id"))
@@ -306,6 +353,10 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
         # 同步移除该作业产生的通知
         store.remove_where(
             "notifications", lambda n: n.get("homeworkId") == homework.get("_id")
+        )
+        # 以及同学们标记的完成状态
+        store.remove_where(
+            "homework_status", lambda s: s.get("homeworkId") == homework.get("_id")
         )
         # 删除附件
         await remove_files([homework])
@@ -350,6 +401,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                     item["fullContent"] = doc.get("content") or ""
                     item["activityTime"] = doc.get("activityTime")
                     item["activityTimeMs"] = _to_ms(doc.get("activityTime"))
+                    item["endTime"] = doc.get("endTime")
                     item["place"] = doc.get("place")
                     item["quota"] = doc.get("quota")
                     item["organizer"] = doc.get("organizer")
@@ -409,6 +461,10 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             return {"ok": False, "msg": "仅班委或管理员可发布志愿活动"}
         if not data.get("title") or not data.get("activityTime"):
             return {"ok": False, "msg": "缺少志愿活动标题或时间"}
+        start_time = _int(data.get("activityTime"))
+        end_time = _int(data.get("endTime"))
+        if end_time and end_time < start_time:
+            return {"ok": False, "msg": "结束时间不能早于开始时间"}
         signup = _trim(data.get("signupUrl"))
         if signup and not (signup.startswith("http://") or signup.startswith("https://")):
             signup = ""
@@ -418,9 +474,10 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             {
                 "category": "volunteer",
                 "title": _trim(data.get("title")),
-                "place": _trim(data.get("place")) or "待定",
+                "place": _trim(data.get("place")),
                 "content": _trim(data.get("content")),
-                "activityTime": _int(data.get("activityTime")),
+                "activityTime": start_time,  # 开始时间，时间戳(ms)
+                "endTime": end_time,  # 结束时间，0 表示未填写
                 "quota": _trim(data.get("quota")),
                 "organizer": _trim(data.get("organizer")),
                 "contact": _trim(data.get("contact")),
@@ -439,6 +496,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                     "title": volunteer.get("title"),
                     "content": _trim(volunteer.get("content"))[:100] or "新志愿活动已发布，点击查看详情",
                     "activityTime": volunteer.get("activityTime"),
+                    "endTime": volunteer.get("endTime"),
                     "place": volunteer.get("place"),
                     "creatorName": volunteer.get("creatorName"),
                     "publisherOpenid": openid,
@@ -451,6 +509,7 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
             title=volunteer.get("title"),
             place=volunteer.get("place"),
             activity_time=volunteer.get("activityTime"),
+            end_time=volunteer.get("endTime"),
             content=volunteer.get("content"),
             creator_name=volunteer.get("creatorName"),
             quota=volunteer.get("quota"),

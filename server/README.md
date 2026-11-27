@@ -111,11 +111,11 @@ sudo -u huiyingzhai .venv/bin/python scripts/import_roster.py /path/to/roster.js
 
 | 栏目 | 内容 |
 | --- | --- |
-| 作业 | 班级作业与 9 个学科板块、附件、删除（管理员/学习委员） |
+| 作业 | 班级作业与 9 个学科板块、附件、个人完成状态切换、删除（管理员/学习委员） |
 | 活动 | 班级活动列表/详情、删除（班委/管理员） |
-| 志愿活动 | 时间、地点、组织、名额、联系方式、报名链接、删除（班委/管理员） |
+| 志愿活动 | 开始/结束时间、详细内容、删除（班委/管理员） |
 | 交流 | 发帖、回复、附件 |
-| 通知 | 作业、活动、志愿活动、学科任务全文与附件，网址可点击 |
+| 通知 | 作业、活动、志愿活动、学科任务全文与附件，图片缩略图，网址可点击 |
 | 我的 | 身份资料、上传入口、使用说明书、退出 |
 
 ### 发布内容
@@ -227,7 +227,7 @@ sudo tar czf /root/huiyingzhai-panel-$(date +%F).tar.gz -C /var/lib/huiyingzhai-
 | GET | `/uploads/...` | 附件静态访问 |
 | POST | `/api/qq/webhook` | QQ 官方机器人回调（Ed25519 验签） |
 
-业务 action：`listHomeworks`、`getHomework`、`publishHomework`、`deleteHomework`、`listActivities`、`getActivity`、`publishActivity`、`deleteActivity`、`listVolunteers`、`publishVolunteer`、`listSubjectTasks`、`getSubjectSettings`、`getSubjectRep`、`publishSubjectTask`、`deleteSubjectTask`、`fetchHomeworkNotices`、`listPosts`、`getPost`、`listReplies`、`createPost`、`createReply`。
+业务 action：`listHomeworks`、`getHomework`、`publishHomework`、`deleteHomework`、`setHomeworkStatus`、`listActivities`、`getActivity`、`publishActivity`、`deleteActivity`、`listVolunteers`、`publishVolunteer`、`listSubjectTasks`、`getSubjectSettings`、`getSubjectRep`、`publishSubjectTask`、`deleteSubjectTask`、`fetchHomeworkNotices`、`listPosts`、`getPost`、`listReplies`、`createPost`、`createReply`。
 
 ## 常见问题
 

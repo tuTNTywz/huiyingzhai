@@ -52,6 +52,10 @@
   .desc { white-space:pre-wrap; margin-top:12px; }
   .attach { display:block; padding:8px 10px; border:1px solid var(--line); border-radius:9px; margin-top:6px; color:var(--brown); text-decoration:none; font-size:13px; }
   .attach small { color:var(--muted); margin-left:6px; }
+  .shots { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .shots a { display:block; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:rgba(120,95,65,.06); }
+  .shots img { display:block; width:148px; height:148px; object-fit:cover; }
+  .btn.done { background:#dcfce7; color:#166534; }
   .post { cursor:pointer; }
   .post-head { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:13px; }
   .post-author { font-weight:700; }
@@ -66,7 +70,7 @@
   footer { text-align:center; color:var(--muted); font-size:12px; padding:20px 0 40px; }
   footer a { color:inherit; text-decoration:none; }
   footer a:hover { text-decoration:underline; }
-  @media (max-width:640px) { .subjects { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:640px) { .subjects { grid-template-columns:repeat(2,1fr); } .shots img { width:100px; height:100px; } }
   @media (prefers-color-scheme:dark) {
     :root { --ink:#ece4d8; --muted:#a99c8b; --paper:#14100d; --card:#1d1712; --line:#33281f; }
     .top { background:rgba(20,16,13,.94); }
@@ -151,15 +155,33 @@
     const v = String(value || "");
     return v.startsWith("/uploads/") || /^https?:\/\//i.test(v) ? v : "";
   }
+  function isImageAttachment(a) {
+    if (!a) return false;
+    if (a.type === "image") return true;
+    return /\.(jpe?g|png|gif|webp|bmp)$/i.test(String(a.fileID || a.name || ""));
+  }
   function attachmentsHtml(list) {
     const items = Array.isArray(list) ? list : [];
     if (!items.length) return "";
-    return items.map((a) => {
+    const images = [];
+    const files = [];
+    items.forEach((a) => {
       const url = safeFile(a.fileID);
-      if (!url) return "";
-      return '<a class="attach" href="' + esc(url) + '" target="_blank" rel="noopener">📎 ' +
-        esc(a.name || "附件") + "<small>" + esc(sizeText(a.size)) + "</small></a>";
-    }).join("");
+      if (!url) return;
+      if (isImageAttachment(a)) {
+        images.push('<a href="' + esc(url) + '" target="_blank" rel="noopener"><img src="' +
+          esc(url) + '" alt="' + esc(a.name || "图片") + '" loading="lazy"></a>');
+        return;
+      }
+      files.push('<a class="attach" href="' + esc(url) + '" target="_blank" rel="noopener">📎 ' +
+        esc(a.name || "附件") + "<small>" + esc(sizeText(a.size)) + "</small></a>");
+    });
+    return (images.length ? '<div class="shots">' + images.join("") + "</div>" : "") + files.join("");
+  }
+  function homeworkToggle(id, done) {
+    return '<button class="btn small ' + (done ? "done" : "secondary") +
+      '" data-act="toggle-homework" data-id="' + esc(id) + '" data-done="' + (done ? "1" : "0") + '">' +
+      (done ? "✓ 已完成" : "未完成") + "</button>";
   }
   function isCommittee() {
     const r = state.identity && state.identity.role;
@@ -312,8 +334,10 @@
         '<div class="meta"><span>截止：' + esc(fmt(deadline)) + "</span>" +
         (Array.isArray(item.attachments) && item.attachments.length ? "<span>📎 " + item.attachments.length + " 个附件</span>" : "") +
         "<span>布置人：" + esc(item.creatorName || "") + "</span></div>" +
-        (isStudy() ? '<div class="row" style="margin-top:8px"><button class="btn danger small" data-act="delete-homework" data-id="' + esc(item._id) + '">删除作业</button></div>' : "") +
-        "</article>";
+        (Array.isArray(item.attachments) ? attachmentsHtml(item.attachments.filter(isImageAttachment)) : "") +
+        '<div class="row" style="margin-top:8px">' + homeworkToggle(item._id, !!item.done) +
+        (isStudy() ? '<button class="btn danger small" data-act="delete-homework" data-id="' + esc(item._id) + '">删除作业</button>' : "") +
+        "</div></article>";
     }).join("");
     $("view").innerHTML =
       '<div class="section-head">学科板块</div><div class="subjects">' + subjects + "</div>" +
@@ -371,8 +395,9 @@
       (Array.isArray(hw.attachments) && hw.attachments.length
         ? '<div class="section-head" style="margin-top:18px">附件列表</div>' + attachmentsHtml(hw.attachments)
         : "") +
-      (isStudy() ? '<div class="row" style="margin-top:18px"><button class="btn danger small" data-act="delete-homework" data-id="' + esc(hw._id) + '">删除作业</button></div>' : "") +
-      "</article>";
+      '<div class="row" style="margin-top:18px">' + homeworkToggle(hw._id, !!hw.done) +
+      (isStudy() ? '<button class="btn danger small" data-act="delete-homework" data-id="' + esc(hw._id) + '">删除作业</button>' : "") +
+      "</div></article>";
   }
 
   async function viewActivity() {
@@ -411,12 +436,17 @@
     const res = await action("listVolunteers");
     const list = Array.isArray(res.list) ? res.list : [];
     const items = list.map((item) => {
-      const time = Number(item.activityTime) || 0;
-      const ended = time && time < Date.now();
+      const start = Number(item.activityTime) || 0;
+      const end = Number(item.endTime) || 0;
+      const endsAt = end || start;
+      const ended = endsAt && endsAt < Date.now();
+      const timeText = start ? fmt(start) + (end ? " 至 " + fmt(end) : "") : "待定";
+      const place = String(item.place || "").trim();
       return '<article class="card hw" data-act="volunteer" data-id="' + esc(item._id) + '">' +
         '<div class="row" style="justify-content:space-between"><b>' + esc(item.title) + "</b>" +
         '<span class="tag ' + (ended ? "gray" : "green") + '">' + (ended ? "已结束" : "招募中") + "</span></div>" +
-        '<div class="meta"><span>🕒 ' + esc(fmt(time)) + "</span><span>📍 " + esc(item.place || "待定") + "</span>" +
+        '<div class="meta"><span>🕒 ' + esc(timeText) + "</span>" +
+        (place && place !== "待定" ? "<span>📍 " + esc(place) + "</span>" : "") +
         (item.quota ? "<span>👥 名额：" + esc(item.quota) + "</span>" : "") + "</div>" +
         (item.organizer ? '<div class="meta"><span>组织：' + esc(item.organizer) + "</span></div>" : "") +
         (isCommittee() ? '<div class="row" style="margin-top:8px"><button class="btn danger small" data-act="delete-volunteer" data-id="' + esc(item._id) + '">删除志愿活动</button></div>' : "") +
@@ -430,11 +460,15 @@
     const res = await action("getActivity", { id });
     const item = res.item || {};
     const signup = /^https?:\/\//i.test(String(item.signupUrl || "")) ? item.signupUrl : "";
+    const start = Number(item.activityTime) || 0;
+    const end = Number(item.endTime) || 0;
+    const timeText = start ? fmt(start) + (end ? " 至 " + fmt(end) : "") : "待定";
+    const place = String(item.place || "").trim();
     $("view").innerHTML =
       backButton("返回志愿活动", "tab-volunteer") +
       '<article class="card"><div class="detail-title">' + esc(item.title || "志愿活动") + "</div>" +
-      '<div class="profile" style="margin-top:12px"><div>时间</div><div>' + esc(fmt(item.activityTime)) + "</div>" +
-      "<div>地点</div><div>" + esc(item.place || "待定") + "</div>" +
+      '<div class="profile" style="margin-top:12px"><div>时间</div><div>' + esc(timeText) + "</div>" +
+      (place && place !== "待定" ? "<div>地点</div><div>" + esc(place) + "</div>" : "") +
       (item.organizer ? "<div>组织</div><div>" + esc(item.organizer) + "</div>" : "") +
       (item.quota ? "<div>名额</div><div>" + esc(item.quota) + "</div>" : "") +
       (item.contact ? "<div>联系</div><div>" + esc(item.contact) + "</div>" : "") +
@@ -505,7 +539,10 @@
       const target = isTask ? n.subject : activityLike ? n.activityId : n.homeworkId;
       const content = n.fullContent || n.content || "";
       const when = activityLike
-        ? (n.activityTime ? "<span>时间：" + esc(fmt(n.activityTime)) + "</span>" : "")
+        ? (n.activityTime
+          ? "<span>时间：" + esc(fmt(n.activityTime)) +
+            (n.endTime ? " 至 " + esc(fmt(n.endTime)) : "") + "</span>"
+          : "")
         : (n.deadline ? "<span>截止：" + esc(fmt(n.deadline)) + "</span>" : "");
       return '<article class="card notice" data-act="notice-open" data-type="' + esc(n.type || "") + '" data-target="' + esc(target || "") + '">' +
         '<div class="row" style="justify-content:space-between"><span class="tag ' + (activityLike ? "gold" : "") + '">' + esc(tag) + "</span>" +
@@ -564,6 +601,22 @@
       await viewPost(postId);
     } catch (e) { setMsg("reply-msg", e.message || "回复失败", true); }
   }
+  async function toggleHomework(button) {
+    const next = button.dataset.done !== "1";
+    button.disabled = true;
+    try {
+      const res = await action("setHomeworkStatus", { id: button.dataset.id, done: next });
+      const done = !!res.done;
+      button.dataset.done = done ? "1" : "0";
+      button.classList.toggle("done", done);
+      button.classList.toggle("secondary", !done);
+      button.textContent = done ? "✓ 已完成" : "未完成";
+    } catch (e) {
+      alert(e.message || "更新失败");
+    } finally {
+      button.disabled = false;
+    }
+  }
   async function deleteHomework(id) {
     if (!confirm("确定删除该作业及其附件吗？删除后无法恢复。")) return;
     try {
@@ -607,6 +660,7 @@
     else if (act === "activity") run(viewActivityDetail(el.dataset.id));
     else if (act === "volunteer") run(viewVolunteerDetail(el.dataset.id));
     else if (act === "post") run(viewPost(el.dataset.id));
+    else if (act === "toggle-homework") toggleHomework(el);
     else if (act === "delete-homework") run(deleteHomework(el.dataset.id));
     else if (act === "delete-activity") run(deleteActivity(el.dataset.id, "activity"));
     else if (act === "delete-volunteer") run(deleteActivity(el.dataset.id, "volunteer"));

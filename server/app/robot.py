@@ -272,16 +272,20 @@ def notify_volunteer(
     activity_time: Any,
     content: Any,
     creator_name: Any,
+    end_time: Any = 0,
     quota: Any = "",
     organizer: Any = "",
     contact: Any = "",
     signup_url: Any = "",
 ) -> None:
+    start_text = _fmt_time(activity_time) or "待定"
+    end_text = _fmt_time(end_time)
     lines = [
-        "> 时间：%s" % (_fmt_time(activity_time) or "待定"),
-        "> 地点：%s" % _clip(place or "待定", 80),
+        "> 时间：%s" % (start_text + (" 至 " + end_text if end_text else "")),
         "> 发布：%s" % _clip(creator_name, 40),
     ]
+    if place and str(place).strip() != "待定":
+        lines.insert(1, "> 地点：%s" % _clip(place, 80))
     if organizer:
         lines.append("> 组织：%s" % _clip(organizer, 80))
     if quota:

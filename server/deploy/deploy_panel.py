@@ -761,8 +761,9 @@ MANUAL_HTML = """<!doctype html>
     <p>「作业」页分为学科板块和班级作业。学科板块按科目进入，班级作业汇总所有班级作业。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>看状态</b><p>「进行中」表示未到截止时间，「已截止」表示已过期；卡片显示布置人、截止时间和附件数量。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>看详情</b><p>点击作业查看完整说明和附件；图片可直接打开，文档可下载。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>删除</b><p>学习委员和管理员可在列表或详情看到「删除作业」按钮，删除会同时清理附件和通知。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>看详情</b><p>点击作业查看完整说明和附件；图片会直接显示缩略图，点击可查看大图；文档可下载。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><b>标记完成</b><p>每份作业旁有「未完成 / 已完成」按钮，点击即可切换；完成状态只记录在自己的账号下。</p></div></div>
+      <div class="step"><span class="step-num">4</span><div><b>删除</b><p>学习委员和管理员可在列表或详情看到「删除作业」按钮，删除会同时清理附件和通知。</p></div></div>
     </div>
   </section>
 
@@ -777,10 +778,10 @@ MANUAL_HTML = """<!doctype html>
 
   <section id="volunteer" class="section reveal">
     <div class="sec-head"><span class="sec-num">05</span><h2>志愿活动</h2></div>
-    <p>「志愿活动」用于发布志愿服务招募，显示时间、地点、组织单位、招募人数和联系方式。</p>
+    <p>「志愿活动」用于发布志愿服务招募，显示开始与结束时间和详细内容；地点、名额、联系方式、报名链接等可写进详细内容。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>查看与报名</b><p>详情页可查看活动说明；有报名链接时点击「报名链接」直接打开。</p></div></div>
-      <div class="step"><span class="step-num">2</span><div><b>发布</b><p>班委或管理员在 <b>/upload/</b> 的「发布志愿活动」表单填写并发布，可附报名链接。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>查看与报名</b><p>详情页可查看完整活动说明；正文中的网址会自动变成可点击链接。</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><b>发布</b><p>班委或管理员在 <b>/upload/</b> 的「发布志愿活动」表单填写活动名称、开始和结束时间、详细内容并发布。</p></div></div>
       <div class="step"><span class="step-num">3</span><div><b>删除</b><p>班委或管理员可在列表或详情删除，通知会同步清理。</p></div></div>
     </div>
   </section>
@@ -841,7 +842,7 @@ MANUAL_HTML = """<!doctype html>
   <section id="attach" class="section reveal">
     <div class="sec-head"><span class="sec-num">11</span><h2>附件规则</h2></div>
     <p>作业、学科任务和论坛帖最多 <b>5 个附件</b>，单个不超过 <b>20MB</b>。支持常见文档和图片。</p>
-    <p>附件上传后保存在服务器 <b>/uploads/</b>，通知和详情中可直接打开或下载。</p>
+    <p>附件上传后保存在服务器 <b>/uploads/</b>，通知和详情中可直接打开或下载；图片会直接显示为缩略图，点击查看原图。</p>
   </section>
 
   <section id="faq" class="section reveal">
@@ -914,6 +915,8 @@ UPLOAD_HTML = """<!doctype html>
   .sub { color: #8a7a68; font-size: 13px; margin: 0 0 18px; }
   .card { background: #fffaf2; border: 1px solid #e8ddcc; border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(120,95,65,.05); }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .row > .field { flex: 1 1 220px; min-width: 0; }
+  .row > .field input { max-width: 100%; }
   .space { justify-content: space-between; }
   button { font: inherit; border: 0; border-radius: 10px; padding: 9px 16px; cursor: pointer; }
   button.primary { background: #9c6b4a; color: #fff; }
@@ -1017,20 +1020,18 @@ UPLOAD_HTML = """<!doctype html>
         <h2>发布志愿活动</h2>
         <label for="vol-title">活动名称</label>
         <input id="vol-title" placeholder="如：图书馆整理志愿服务">
-        <label for="vol-time">活动时间</label>
-        <input id="vol-time" type="datetime-local">
-        <label for="vol-place">活动地点</label>
-        <input id="vol-place" placeholder="如：市图书馆">
-        <label for="vol-organizer">组织单位（选填）</label>
-        <input id="vol-organizer" placeholder="如：院青年志愿者协会">
-        <label for="vol-quota">招募人数（选填）</label>
-        <input id="vol-quota" placeholder="如：20 人">
-        <label for="vol-contact">联系方式（选填）</label>
-        <input id="vol-contact" placeholder="如：QQ 群 / 手机号">
-        <label for="vol-signup">报名链接（选填，http/https）</label>
-        <input id="vol-signup" placeholder="https://…">
-        <label for="vol-content">活动说明（选填）</label>
-        <textarea id="vol-content" placeholder="服务内容、集合方式、注意事项…"></textarea>
+        <div class="row">
+          <div class="field">
+            <label for="vol-start">开始时间</label>
+            <input id="vol-start" type="datetime-local">
+          </div>
+          <div class="field">
+            <label for="vol-end">结束时间</label>
+            <input id="vol-end" type="datetime-local">
+          </div>
+        </div>
+        <label for="vol-content">详细内容</label>
+        <textarea id="vol-content" placeholder="填写服务内容、集合地点、组织单位、招募人数、联系方式、报名链接等…"></textarea>
         <div class="form-actions"><button id="vol-submit" class="primary">发布志愿活动</button></div>
         <div id="vol-msg" class="msg"></div>
       </div>
@@ -1301,8 +1302,10 @@ UPLOAD_HTML = """<!doctype html>
 
   async function submitVolunteer() {
     const title = $('vol-title').value.trim();
-    const activityTime = toMs($('vol-time').value);
-    if (!title || !activityTime) { setMsg('vol-msg', '请填写活动名称和时间', true); return; }
+    const activityTime = toMs($('vol-start').value);
+    const endTime = toMs($('vol-end').value);
+    if (!title || !activityTime) { setMsg('vol-msg', '请填写活动名称和开始时间', true); return; }
+    if (endTime && endTime < activityTime) { setMsg('vol-msg', '结束时间不能早于开始时间', true); return; }
     const button = $('vol-submit');
     button.disabled = true;
     try {
@@ -1310,15 +1313,11 @@ UPLOAD_HTML = """<!doctype html>
       await publishAction('publishVolunteer', {
         title: title,
         activityTime: activityTime,
-        place: $('vol-place').value.trim() || '待定',
-        organizer: $('vol-organizer').value.trim(),
-        quota: $('vol-quota').value.trim(),
-        contact: $('vol-contact').value.trim(),
-        signupUrl: $('vol-signup').value.trim(),
+        endTime: endTime,
         content: $('vol-content').value.trim()
       }, 'vol-msg');
       setMsg('vol-msg', '志愿活动已发布');
-      ['vol-title', 'vol-time', 'vol-place', 'vol-organizer', 'vol-quota', 'vol-contact', 'vol-signup', 'vol-content'].forEach((id) => { $(id).value = ''; });
+      ['vol-title', 'vol-start', 'vol-end', 'vol-content'].forEach((id) => { $(id).value = ''; });
     } catch (err) {
       setMsg('vol-msg', err.message || '发布失败', true);
     } finally {
@@ -1804,6 +1803,7 @@ class Handler(BaseHTTPRequestHandler):
             "createPost", "createReply",
             "publishHomework", "publishActivity", "publishSubjectTask",
             "deleteHomework", "deleteActivity", "deleteSubjectTask",
+            "setHomeworkStatus",
         }
         if action not in allowed:
             self._send(400, json.dumps({"ok": False, "message": "不支持的操作"}, ensure_ascii=False))
