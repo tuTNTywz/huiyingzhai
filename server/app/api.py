@@ -108,6 +108,24 @@ async def remove_files(records: Any) -> None:
         await delete_uploads(file_ids)
 
 
+NOTICE_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+
+async def cleanup_expired_notices() -> int:
+    """删除超过 30 天的通知，并清理其附件。"""
+    cutoff = _now_ms() - NOTICE_TTL_MS
+    expired = store.find(
+        "notifications", lambda n: _int(n.get("createTime")) < cutoff
+    )
+    if not expired:
+        return 0
+    await remove_files(expired)
+    store.remove_where(
+        "notifications", lambda n: _int(n.get("createTime")) < cutoff
+    )
+    return len(expired)
+
+
 def _to_ms(value: Any) -> int:
     return _int(value)
 
@@ -191,25 +209,6 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                 "createTime": _now_ms(),
             },
         )
-
-        # 生成站内通知，全体同学在通知中心可见（失败不影响发布本身）
-        try:
-            store.insert(
-                "notifications",
-                {
-                    "type": "subject_task",
-                    "taskId": task["_id"],
-                    "subject": subject,
-                    "title": title,
-                    "content": content[:100] or "新任务已发布，点击查看详情",
-                    "deadline": deadline,
-                    "creatorName": user.get("nickname"),
-                    "publisherOpenid": openid,  # 发布者本人不在通知中心展示此条
-                    "createTime": _now_ms(),
-                },
-            )
-        except Exception as exc:
-            print("学科任务站内通知写入失败", exc)
 
         robot.notify_subject_task(
             subject_name=SUBJECT_NAMES.get(subject, subject),
@@ -388,48 +387,22 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
 
     # 通知中心：站内通知统一由服务端返回
     if action == "fetchHomeworkNotices":
+        await cleanup_expired_notices()
         rows = store.find(
             "notifications",
-            lambda n: n.get("type") not in ("homework", "activity"),
+            lambda n: n.get("type") == "notice",
             sort_by="createTime",
             direction="desc",
-            limit=50,
         )
-        notices = []
-        for n in rows:
-            item = {
+        notices = [
+            {
                 **n,
                 "createMs": _to_ms(n.get("createTime")),
-                "deadlineMs": _to_ms(n.get("deadline")),
+                "fullContent": n.get("content") or "",
+                "attachments": n.get("attachments") or [],
             }
-            # 通知里只存了摘要；补上对应任务/活动的完整正文和附件
-            if n.get("type") == "notice":
-                item["fullContent"] = n.get("content") or ""
-                item["attachments"] = n.get("attachments") or []
-            elif n.get("type") == "subject_task":
-                doc = store.find_one(
-                    "subject_tasks", lambda t: t.get("_id") == n.get("taskId")
-                )
-                if doc:
-                    item["fullContent"] = doc.get("content") or ""
-                    item["attachments"] = doc.get("attachments") or []
-                    item["deadline"] = doc.get("deadline") or n.get("deadline")
-                    item["deadlineMs"] = _to_ms(item["deadline"])
-            elif n.get("type") in ("activity", "volunteer"):
-                doc = store.find_one(
-                    "activities", lambda a: a.get("_id") == n.get("activityId")
-                )
-                if doc:
-                    item["fullContent"] = doc.get("content") or ""
-                    item["activityTime"] = doc.get("activityTime")
-                    item["activityTimeMs"] = _to_ms(doc.get("activityTime"))
-                    item["endTime"] = doc.get("endTime")
-                    item["place"] = doc.get("place")
-                    item["quota"] = doc.get("quota")
-                    item["organizer"] = doc.get("organizer")
-                    item["contact"] = doc.get("contact")
-                    item["signupUrl"] = doc.get("signupUrl")
-            notices.append(item)
+            for n in rows
+        ]
         return {"ok": True, "list": notices}
 
     # ===== 活动栏目：班委或管理员发布 =====
@@ -492,24 +465,6 @@ async def handle_action(user: dict, action: str, data: Optional[dict] = None) ->
                 "createTime": _now_ms(),
             },
         )
-        try:
-            store.insert(
-                "notifications",
-                {
-                    "type": "volunteer",
-                    "activityId": volunteer["_id"],
-                    "title": volunteer.get("title"),
-                    "content": _trim(volunteer.get("content"))[:100] or "新志愿活动已发布，点击查看详情",
-                    "activityTime": volunteer.get("activityTime"),
-                    "endTime": volunteer.get("endTime"),
-                    "place": volunteer.get("place"),
-                    "creatorName": volunteer.get("creatorName"),
-                    "publisherOpenid": openid,
-                    "createTime": _now_ms(),
-                },
-            )
-        except Exception as exc:
-            print("志愿活动站内通知写入失败", exc)
         robot.notify_volunteer(
             title=volunteer.get("title"),
             place=volunteer.get("place"),

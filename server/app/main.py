@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import auth, db as store, files, qqbot
-from .api import SUBJECT_KEYS, SUBJECT_NAMES, handle_action
+from .api import SUBJECT_KEYS, SUBJECT_NAMES, cleanup_expired_notices, handle_action
 from .config import config
 
 INLINE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
@@ -21,6 +21,10 @@ INLINE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 async def lifespan(_app: FastAPI):
     config.upload_dir.mkdir(parents=True, exist_ok=True)
     store.cleanup_sessions()
+    try:
+        await cleanup_expired_notices()
+    except Exception as exc:
+        print("清理过期通知失败", exc)
     print(f"汇英斋服务已启动：http://127.0.0.1:{config.port}")
     print(f"对外地址：{config.base_url or '未配置（请填写 BASE_URL）'}")
     print(f"数据目录：{config.data_dir}")

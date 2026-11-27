@@ -861,11 +861,11 @@ MANUAL_HTML = """<!doctype html>
 
   <section id="notice" class="section reveal">
     <div class="sec-head"><span class="sec-num">07</span><h2>通知</h2></div>
-    <p>「通知」显示班委/管理员发布的班级通知，以及学科任务、志愿活动提醒；作业和活动不再自动进入通知。</p>
+    <p>「通知」只显示班委/管理员发布的班级通知，按发布时间从新到旧排列；超过 30 天自动删除。</p>
     <div class="steps">
-      <div class="step"><span class="step-num">1</span><div><b>看全文</b><p>通知直接显示完整正文和附件，不再只显示摘要。</p></div></div>
+      <div class="step"><span class="step-num">1</span><div><b>看全文</b><p>通知显示完整正文和附件；正文里的网址和附件都可直接打开。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>发布通知</b><p>班委或管理员点击「发布通知」，填写标题、正文和附件。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>点链接 / 进详情</b><p>正文和附件里的网址可直接打开；学科任务、志愿活动通知可点击进入详情。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><b>自动清理</b><p>通知保留 30 天，过期后自动删除，附件一并清理。</p></div></div>
     </div>
     <div class="tip">班级还配置了微信/QQ 机器人通知；具体是否收到取决于班级管理员是否启用。</div>
   </section>
