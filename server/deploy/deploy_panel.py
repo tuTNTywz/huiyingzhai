@@ -1302,19 +1302,19 @@ UPLOAD_HTML = """<!doctype html>
   function parsePaste(text) {
     const fields = { raw: [] };
     let current = "";
-    String(text || "").split(/\r?\n/).forEach((line) => {
+    String(text || "").split(/\\r?\\n/).forEach((line) => {
       const trimmed = line.trim();
       if (!trimmed) {
-        if (current) fields[current] += "\n";
+        if (current) fields[current] += "\\n";
         return;
       }
       const match = trimmed.match(/^([^:：]{1,12})\s*[:：]\s*(.*)$/);
       const key = match ? normalizePasteKey(match[1]) : "";
       if (key) {
         current = key;
-        fields[key] = (fields[key] ? fields[key] + "\n" : "") + (match[2] || "");
+        fields[key] = (fields[key] ? fields[key] + "\\n" : "") + (match[2] || "");
       } else if (current) {
-        fields[current] += "\n" + trimmed;
+        fields[current] += "\\n" + trimmed;
       } else {
         fields.raw.push(trimmed);
       }
@@ -1360,7 +1360,7 @@ UPLOAD_HTML = """<!doctype html>
     if (fields.content) return fields.content;
     const raw = (fields.raw || []).filter((line) => !/^(作业|活动|志愿活动|通知|学科任务)\s*[:：]?\s*$/.test(line));
     if (!fields.title && raw.length) raw.shift();
-    return raw.join("\n").trim();
+    return raw.join("\\n").trim();
   }
 
   function parsePasteDate(value, kind) {
