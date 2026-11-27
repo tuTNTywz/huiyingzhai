@@ -116,6 +116,8 @@ sudo -u huiyingzhai .venv/bin/python scripts/import_roster.py /path/to/roster.js
 | 志愿活动 | 开始/结束时间、详细内容、删除（班委/管理员） |
 | 交流 | 发帖、回复、附件 |
 | 通知 | 班委/管理员发布的通知全文与附件；按发布时间倒序；保留 30 天后自动删除 |
+
+各列表页（作业、活动、志愿活动、交流、通知、学科）顶部有关键词搜索框，按标题/正文/发布人等即时过滤。
 | 我的 | 身份资料、上传入口、使用说明书、退出 |
 
 ### 发布内容
@@ -226,6 +228,13 @@ sudo tar czf /root/huiyingzhai-panel-$(date +%F).tar.gz -C /var/lib/huiyingzhai-
 | POST | `/api/upload` | 附件上传，需登录，multipart 字段 `file` |
 | GET | `/uploads/...` | 附件静态访问 |
 | POST | `/api/qq/webhook` | QQ 官方机器人回调（Ed25519 验签） |
+| GET/POST/DELETE | `/api/ai/settings` | 读取/保存/删除当前用户的 AI 模型与加密 API Key |
+| POST | `/api/ai/fill` | 用当前用户的 API Key 调用模型，返回结构化发布字段 |
+
+网页发布页右上角「📋 智能填充」支持两种模式：
+
+- 普通填充：本地规则识别，不上传文字、不调用外部服务；
+- AI 填充：用户自选常用模型（DeepSeek / 通义千问 / Kimi / GLM / OpenAI / SiliconFlow）并填写自己的 API Key；Key 用 `AI_KEY_SECRET`（留空回退 `WEB_PANEL_SECRET`）加密后存服务器，接口只返回尾号，不回显明文；模型请求由服务器代理，费用由用户自己的账号承担。
 
 业务 action：`listHomeworks`、`getHomework`、`publishHomework`、`deleteHomework`、`setHomeworkStatus`、`listActivities`、`getActivity`、`publishActivity`、`deleteActivity`、`listVolunteers`、`publishVolunteer`、`listSubjectTasks`、`getSubjectSettings`、`getSubjectRep`、`publishSubjectTask`、`deleteSubjectTask`、`publishNotice`、`deleteNotice`、`fetchHomeworkNotices`、`listPosts`、`getPost`、`listReplies`、`createPost`、`createReply`。
 

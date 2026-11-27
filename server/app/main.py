@@ -10,7 +10,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import auth, db as store, files, qqbot
+from . import ai, auth, db as store, files, qqbot
 from .api import SUBJECT_KEYS, SUBJECT_NAMES, cleanup_expired_notices, handle_action
 from .config import config
 
@@ -82,6 +82,112 @@ async def health():
         "time": store.now_ms(),
         "baseUrl": config.base_url or None,
     }
+
+
+def _ai_settings(openid: str):
+    return store.find_one("ai_settings", lambda s: s.get("_openid") == openid)
+
+
+def _ai_settings_payload(row: dict | None) -> dict:
+    return {
+        "ok": True,
+        "configured": bool(row and row.get("keyEnc")),
+        "provider": (row or {}).get("provider") or "",
+        "model": (row or {}).get("model") or "",
+        "keyHint": (row or {}).get("keyHint") or "",
+        "models": ai.public_models(),
+    }
+
+
+@app.get("/api/ai/settings")
+async def ai_get_settings(request: Request):
+    user, error = _require_user(request)
+    if error:
+        return error
+    return _ai_settings_payload(_ai_settings(user.get("_openid")))
+
+
+@app.post("/api/ai/settings")
+async def ai_save_settings(request: Request):
+    user, error = _require_user(request)
+    if error:
+        return error
+    body = await _json_body(request)
+    try:
+        provider, model = ai.validate_model(body.get("provider"), body.get("model"))
+    except ValueError as exc:
+        return {"ok": False, "msg": str(exc)}
+    api_key = str(body.get("apiKey") or "").strip()
+    if len(api_key) > 500:
+        return {"ok": False, "msg": "API Key 过长"}
+    openid = user.get("_openid")
+    row = _ai_settings(openid)
+    if not api_key and not (row and row.get("keyEnc")):
+        return {"ok": False, "msg": "请填写 API Key"}
+    payload = {
+        "provider": provider,
+        "model": model,
+        "updateTime": store.now_ms(),
+    }
+    if api_key:
+        try:
+            payload["keyEnc"] = ai.encrypt_key(api_key)
+        except Exception as exc:
+            print("AI Key 加密失败", exc)
+            return {"ok": False, "msg": "保存 API Key 失败，请检查服务端加密配置"}
+        payload["keyHint"] = ai.key_hint(api_key)
+    if row:
+        updated = store.update("ai_settings", row.get("_id"), payload)
+    else:
+        payload["_openid"] = openid
+        payload["createTime"] = store.now_ms()
+        updated = store.insert("ai_settings", payload)
+    return _ai_settings_payload(updated)
+
+
+@app.delete("/api/ai/settings")
+async def ai_delete_settings(request: Request):
+    user, error = _require_user(request)
+    if error:
+        return error
+    openid = user.get("_openid")
+    row = _ai_settings(openid)
+    if row:
+        store.remove("ai_settings", row.get("_id"))
+    return {"ok": True, "configured": False, "models": ai.public_models()}
+
+
+@app.post("/api/ai/fill")
+async def ai_fill(request: Request):
+    user, error = _require_user(request)
+    if error:
+        return error
+    row = _ai_settings(user.get("_openid"))
+    if not row or not row.get("keyEnc"):
+        return {"ok": False, "msg": "请先选择模型并保存 API Key"}
+    body = await _json_body(request)
+    text = str(body.get("text") or "").strip()
+    if not text:
+        return {"ok": False, "msg": "请先粘贴内容"}
+    if len(text) > 6000:
+        text = text[:6000]
+    try:
+        api_key = ai.decrypt_key(str(row.get("keyEnc") or ""))
+        fields = await ai.fill_fields(
+            str(row.get("provider") or ""),
+            str(row.get("model") or ""),
+            api_key,
+            text,
+        )
+        return {"ok": True, "fields": fields}
+    except Exception as exc:
+        msg = str(exc) or "AI 填充失败"
+        lowered = msg.lower()
+        if "decrypt" in lowered or "base64" in lowered:
+            msg = "API Key 无法解密，请重新保存"
+        if "API Key" not in msg:
+            print("AI 填充失败：", msg)
+        return {"ok": False, "msg": msg}
 
 
 @app.post("/api/qq/webhook")

@@ -45,6 +45,8 @@ class Config:
 
         # 网页面板与后端之间的内部共享密钥（install.sh 生成）
         self.web_panel_secret = _str("WEB_PANEL_SECRET")
+        # 用户 AI API Key 的加密密钥；留空时回退到 WEB_PANEL_SECRET
+        self.ai_key_secret = _str("AI_KEY_SECRET")
 
         # 可选：企业微信群机器人 Webhook。留空则不发企业微信通知
         self.wechat_robot_webhook = _str("WECHAT_ROBOT_WEBHOOK")

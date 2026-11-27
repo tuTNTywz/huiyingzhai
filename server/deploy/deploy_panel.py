@@ -292,8 +292,8 @@ def _app_conn(timeout: int = 20):
     )
 
 
-def app_json(path: str, payload=None, token: str = "", method: str = ""):
-    conn = _app_conn()
+def app_json(path: str, payload=None, token: str = "", method: str = "", timeout: int = 20):
+    conn = _app_conn(timeout=timeout)
     headers = {"Content-Type": "application/json"}
     if APP_SECRET:
         headers["X-Panel-Secret"] = APP_SECRET
@@ -805,6 +805,7 @@ MANUAL_HTML = """<!doctype html>
       <div class="step"><span class="step-num">4</span><div><b>开始使用</b><p>顶部切换作业、活动、志愿活动、交流、通知和我的；手机和电脑浏览器都可以。</p></div></div>
     </div>
     <div class="tip">学号必须与班级名单一致；姓名不匹配会被拒绝登录。不要使用他人学号。</div>
+    <div class="tip">作业、活动、志愿活动、交流、通知和学科任务列表顶部都有关键词搜索框，输入标题、正文或发布人即可即时过滤。</div>
   </section>
 
   <section id="login" class="section reveal">
@@ -894,7 +895,7 @@ MANUAL_HTML = """<!doctype html>
       </tbody>
     </table>
     <div class="tip">发布后网页版立即显示，并按配置推送微信/QQ 机器人通知。</div>
-    <div class="tip">发布页右上角有「📋 智能填充」悬浮球：把通知/作业等文字粘贴进去，点「填充」会自动识别类型并填到对应表单。</div>
+    <div class="tip">发布页右上角有「📋 智能填充」悬浮球：粘贴文字后，普通模式用本地规则识别；点「切换到 AI 填充」可使用自己的 API Key 和常用模型识别，Key 加密保存在服务器，不回显。</div>
   </section>
 
   <section id="attach" class="section reveal">
@@ -1065,6 +1066,11 @@ UPLOAD_HTML = """<!doctype html>
   .paste-head button { background: transparent; color: #8a7a68; padding: 0 4px; font-size: 20px; line-height: 1; }
   .paste-hint { margin: 4px 0 8px; color: #8a7a68; font-size: 12px; line-height: 1.5; }
   .paste-panel textarea { max-width: 100%; min-height: 150px; font-size: 13px; line-height: 1.55; }
+  .paste-mode-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 8px; }
+  .paste-mode-row .paste-hint { margin: 0; }
+  #ai-config { border-top: 1px dashed #e2d5c2; padding-top: 8px; margin-bottom: 8px; }
+  #ai-config select, #ai-config input { max-width: 100%; }
+  #ai-key-status { margin: 4px 0 0; min-height: 1.2em; }
   .paste-detect { margin: 8px 0; min-height: 1.2em; color: #9c6b4a; font-size: 12px; }
   .paste-actions { display: flex; gap: 8px; }
   .paste-flash { animation: pasteFlash 1.6s ease; }
@@ -1093,6 +1099,22 @@ UPLOAD_HTML = """<!doctype html>
 <aside id="paste-panel" class="paste-panel hidden" aria-label="粘贴内容自动填充">
   <div class="paste-head"><b>粘贴内容自动填充</b><button id="paste-close" type="button" aria-label="关闭">×</button></div>
   <div class="paste-hint">把作业 / 活动 / 志愿活动 / 通知 / 学科任务的文字粘贴进来，自动识别并填到对应发布窗口。</div>
+  <div class="paste-mode-row">
+    <span id="paste-mode-label" class="paste-hint">当前：普通填充</span>
+    <button id="paste-mode" class="secondary small" type="button">切换到 AI 填充</button>
+  </div>
+  <div id="ai-config" class="hidden">
+    <label for="ai-model">模型（使用你自己的 API）</label>
+    <select id="ai-model"></select>
+    <label for="ai-key">API Key</label>
+    <input id="ai-key" type="password" autocomplete="new-password" placeholder="sk-...（加密保存，不回显）">
+    <div id="ai-key-status" class="paste-hint">未配置</div>
+    <div class="paste-actions" style="margin-top:8px">
+      <button id="ai-save" class="secondary" type="button">保存配置</button>
+      <button id="ai-clear-key" class="secondary" type="button">清除 Key</button>
+    </div>
+    <div id="ai-msg" class="msg"></div>
+  </div>
   <textarea id="paste-input" placeholder="类型：作业&#10;标题：高数第三章习题&#10;截止：2026-12-01 20:00&#10;内容：完成第 1-10 题，拍照上传。"></textarea>
   <div id="paste-detect" class="paste-detect">等待粘贴…</div>
   <div class="paste-actions"><button id="paste-fill" class="primary" type="button">填充</button><button id="paste-clear" class="secondary" type="button">清空</button></div>
@@ -1442,6 +1464,10 @@ UPLOAD_HTML = """<!doctype html>
   }
 
   function updatePasteDetect() {
+    if (pasteMode === "ai") {
+      $("paste-detect").textContent = "AI 模式：由模型识别类型和字段";
+      return;
+    }
     const text = $("paste-input").value;
     const type = detectPasteType(text);
     $("paste-detect").textContent = text.trim()
@@ -1457,19 +1483,24 @@ UPLOAD_HTML = """<!doctype html>
     }
   }
 
-  function fillPaste() {
-    const text = $("paste-input").value.trim();
-    if (!text) { setMsg("paste-msg", "请先粘贴内容", true); return; }
-    const type = detectPasteType(text);
-    if (!type) { setMsg("paste-msg", "未识别类型，请加上类型关键词", true); return; }
+  function applyPasteFields(type, fields, text) {
     const card = $(type === "homework" ? "homework-card" : type + "-card");
     if (!card || card.classList.contains("hidden")) {
       setMsg("paste-msg", "当前身份没有发布" + PASTE_TYPE_NAMES[type] + "的权限", true);
-      return;
+      return false;
     }
-    const fields = parsePaste(text);
-    const title = pasteTitle(fields);
-    const content = pasteContent(fields);
+    const title = fields.title || "";
+    let content = fields.content || "";
+    if (type === "volunteer") {
+      const extras = [];
+      if (fields.organizer) extras.push("组织单位：" + fields.organizer);
+      if (fields.quota) extras.push("招募人数：" + fields.quota);
+      if (fields.contact) extras.push("联系方式：" + fields.contact);
+      if (fields.signupUrl) extras.push("报名链接：" + fields.signupUrl);
+      if (extras.length && content.indexOf(extras[0]) < 0) {
+        content = content ? content + "\\n\\n" + extras.join("\\n") : extras.join("\\n");
+      }
+    }
     let filled = 0;
     const set = (id, value) => { if (setPasteField(id, value)) filled += 1; };
     if (type === "homework") {
@@ -1495,7 +1526,7 @@ UPLOAD_HTML = """<!doctype html>
       set("notice-title", title);
       set("notice-content", content);
     }
-    if (!filled) { setMsg("paste-msg", "没有识别到可填充的字段", true); return; }
+    if (!filled) { setMsg("paste-msg", "没有识别到可填充的字段", true); return false; }
     $("paste-panel").classList.add("hidden");
     card.classList.remove("paste-flash");
     void card.offsetWidth;
@@ -1503,6 +1534,165 @@ UPLOAD_HTML = """<!doctype html>
     card.scrollIntoView({ behavior: "smooth", block: "start" });
     setMsg(PASTE_MSG_IDS[type], "已自动填充，请检查后发布");
     setMsg("paste-msg", "");
+    return true;
+  }
+
+  function fillPaste() {
+    const text = $("paste-input").value.trim();
+    if (!text) { setMsg("paste-msg", "请先粘贴内容", true); return; }
+    const type = detectPasteType(text);
+    if (!type) { setMsg("paste-msg", "未识别类型，请加上类型关键词", true); return; }
+    const fields = parsePaste(text);
+    fields.title = pasteTitle(fields);
+    fields.content = pasteContent(fields);
+    applyPasteFields(type, fields, text);
+  }
+
+  let pasteMode = "normal";
+  let aiSettings = null;
+  const AI_MODELS_FALLBACK = [
+    { provider: "deepseek", model: "deepseek-chat", name: "DeepSeek Chat" },
+    { provider: "deepseek", model: "deepseek-reasoner", name: "DeepSeek Reasoner" },
+    { provider: "qwen", model: "qwen-plus", name: "通义千问 Plus" },
+    { provider: "qwen", model: "qwen-turbo", name: "通义千问 Turbo" },
+    { provider: "qwen", model: "qwen-max", name: "通义千问 Max" },
+    { provider: "moonshot", model: "moonshot-v1-8k", name: "Kimi 8K" },
+    { provider: "moonshot", model: "moonshot-v1-32k", name: "Kimi 32K" },
+    { provider: "zhipu", model: "glm-4-flash", name: "GLM-4-Flash" },
+    { provider: "zhipu", model: "glm-4-plus", name: "GLM-4-Plus" },
+    { provider: "openai", model: "gpt-4o-mini", name: "GPT-4o mini" },
+    { provider: "openai", model: "gpt-4o", name: "GPT-4o" },
+    { provider: "openai", model: "gpt-4.1-mini", name: "GPT-4.1 mini" },
+    { provider: "siliconflow", model: "Qwen/Qwen2.5-7B-Instruct", name: "SiliconFlow Qwen2.5 7B" },
+  ];
+
+  function populateAiModels(models) {
+    const select = $("ai-model");
+    if (!select || select.options.length) return;
+    const list = Array.isArray(models) && models.length ? models : AI_MODELS_FALLBACK;
+    list.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.provider + "|" + item.model;
+      option.textContent = item.name + " · " + item.provider;
+      select.appendChild(option);
+    });
+  }
+
+  function updateAiStatus() {
+    const select = $("ai-model");
+    const label = select && select.selectedIndex >= 0 ? select.options[select.selectedIndex].textContent : "";
+    $("ai-key-status").textContent = aiSettings && aiSettings.configured
+      ? "已保存 " + (aiSettings.keyHint || "****") + (label ? " · " + label : "")
+      : "未配置，请填写自己的 API Key";
+  }
+
+  async function loadAiSettings() {
+    try {
+      const resp = await api("/me/api/ai/settings");
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) throw new Error(data.message || data.msg || "读取 AI 配置失败");
+      aiSettings = data;
+      populateAiModels(data.models);
+      const select = $("ai-model");
+      if (data.provider && data.model) {
+        const value = data.provider + "|" + data.model;
+        if (Array.from(select.options).some((o) => o.value === value)) select.value = value;
+      }
+      updateAiStatus();
+    } catch (err) {
+      setMsg("ai-msg", err.message || "读取 AI 配置失败", true);
+    }
+  }
+
+  function setPasteMode(mode) {
+    pasteMode = mode === "ai" ? "ai" : "normal";
+    $("ai-config").classList.toggle("hidden", pasteMode !== "ai");
+    $("paste-mode").textContent = pasteMode === "ai" ? "切换到普通填充" : "切换到 AI 填充";
+    $("paste-mode-label").textContent = pasteMode === "ai" ? "当前：AI 填充" : "当前：普通填充";
+    $("paste-fill").textContent = pasteMode === "ai" ? "AI 填充" : "填充";
+    if (pasteMode === "ai") {
+      populateAiModels(AI_MODELS_FALLBACK);
+      loadAiSettings();
+    }
+    updatePasteDetect();
+  }
+
+  async function saveAiSettings() {
+    const select = $("ai-model");
+    const value = select.value || "";
+    const parts = value.split("|");
+    if (parts.length !== 2) { setMsg("ai-msg", "请选择模型", true); return; }
+    const apiKey = $("ai-key").value.trim();
+    if (!apiKey && !(aiSettings && aiSettings.configured)) {
+      setMsg("ai-msg", "请填写自己的 API Key", true);
+      return;
+    }
+    const button = $("ai-save");
+    button.disabled = true;
+    try {
+      const resp = await api("/me/api/ai/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: parts[0], model: parts[1], apiKey: apiKey }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) throw new Error(data.message || data.msg || "保存失败");
+      aiSettings = data;
+      $("ai-key").value = "";
+      updateAiStatus();
+      setMsg("ai-msg", apiKey ? "已加密保存" : "模型已更新");
+    } catch (err) {
+      setMsg("ai-msg", err.message || "保存失败", true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function clearAiKey() {
+    if (!aiSettings || !aiSettings.configured) { setMsg("ai-msg", "当前没有保存 Key"); return; }
+    if (!confirm("确定清除已保存的 API Key 吗？")) return;
+    try {
+      const resp = await api("/me/api/ai/settings", { method: "DELETE" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) throw new Error(data.message || data.msg || "清除失败");
+      aiSettings = data;
+      $("ai-key").value = "";
+      updateAiStatus();
+      setMsg("ai-msg", "已清除 API Key");
+    } catch (err) {
+      setMsg("ai-msg", err.message || "清除失败", true);
+    }
+  }
+
+  async function aiFill() {
+    const text = $("paste-input").value.trim();
+    if (!text) { setMsg("ai-msg", "请先粘贴内容", true); return; }
+    if (!aiSettings || !aiSettings.configured) {
+      setMsg("ai-msg", "请先选择模型并保存 API Key", true);
+      return;
+    }
+    const button = $("paste-fill");
+    button.disabled = true;
+    setMsg("ai-msg", "AI 识别中，请稍候…");
+    try {
+      const resp = await api("/me/api/ai/fill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) throw new Error(data.message || data.msg || "AI 填充失败");
+      const fields = data.fields || {};
+      const type = fields.type;
+      if (!PASTE_TYPE_NAMES[type]) throw new Error("AI 未识别出发布类型");
+      fields.title = fields.title || "";
+      fields.content = fields.content || "";
+      if (!applyPasteFields(type, fields, text)) throw new Error("未能填充到表单");
+    } catch (err) {
+      setMsg("ai-msg", err.message || "AI 填充失败", true);
+    } finally {
+      button.disabled = false;
+    }
   }
 
   function renderIdentity(appError) {
@@ -1778,7 +1968,11 @@ UPLOAD_HTML = """<!doctype html>
 
   $('paste-fab').addEventListener('click', () => setPastePanel($('paste-panel').classList.contains('hidden')));
   $('paste-close').addEventListener('click', () => setPastePanel(false));
-  $('paste-fill').addEventListener('click', fillPaste);
+  $('paste-mode').addEventListener('click', () => setPasteMode(pasteMode === 'ai' ? 'normal' : 'ai'));
+  $('paste-fill').addEventListener('click', () => { if (pasteMode === 'ai') aiFill(); else fillPaste(); });
+  $('ai-save').addEventListener('click', saveAiSettings);
+  $('ai-clear-key').addEventListener('click', clearAiKey);
+  $('ai-model').addEventListener('change', updateAiStatus);
   $('paste-clear').addEventListener('click', () => {
     $('paste-input').value = '';
     setMsg('paste-msg', '');
@@ -2095,6 +2289,9 @@ class Handler(BaseHTTPRequestHandler):
             lines = _tail_text(LOG_FILE).splitlines()[-LOG_LINES:]
             self._send(200, "\n".join(lines), "text/plain; charset=utf-8")
             return
+        if path == "/api/ai/settings":
+            self._handle_ai_settings_get()
+            return
         if path == "/api/pages/download":
             self._handle_page_download()
             return
@@ -2110,6 +2307,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/logout":
             self._handle_logout()
             return
+        if path == "/api/ai/settings":
+            self._handle_ai_settings_save()
+            return
+        if path == "/api/ai/fill":
+            self._handle_ai_fill()
+            return
         if path == "/api/app/upload":
             self._handle_app_upload()
             return
@@ -2121,6 +2324,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/pages":
             self._handle_page_upload()
+            return
+        self._send(404, json.dumps({"ok": False, "message": "接口不存在"}, ensure_ascii=False))
+
+    def do_DELETE(self):
+        _area, path = self._route()
+        if path == "/api/ai/settings":
+            self._handle_ai_settings_delete()
             return
         self._send(404, json.dumps({"ok": False, "message": "接口不存在"}, ensure_ascii=False))
 
@@ -2193,6 +2403,41 @@ class Handler(BaseHTTPRequestHandler):
         if token:
             return token
         return refresh_app_token(record)
+
+    def _forward_ai(self, method: str, path: str, payload=None, need_csrf: bool = True):
+        _token, record = self._require_session()
+        if not record:
+            return
+        if need_csrf and not self._require_csrf(record):
+            return
+        app_token = self._app_token_for(record)
+        if not app_token:
+            self._send(400, json.dumps({"ok": False, "message": "请先登录"}, ensure_ascii=False))
+            return
+        status, data = app_json(path, payload, token=app_token, method=method, timeout=50)
+        if status == 401:
+            new_token = refresh_app_token(record)
+            if new_token:
+                status, data = app_json(path, payload, token=new_token, method=method, timeout=50)
+        self._send(status, json.dumps(data, ensure_ascii=False))
+
+    def _handle_ai_settings_get(self):
+        self._forward_ai("GET", "/api/ai/settings", payload=None, need_csrf=False)
+
+    def _handle_ai_settings_save(self):
+        data = self._read_json()
+        if data is None:
+            return
+        self._forward_ai("POST", "/api/ai/settings", data)
+
+    def _handle_ai_settings_delete(self):
+        self._forward_ai("DELETE", "/api/ai/settings", payload=None)
+
+    def _handle_ai_fill(self):
+        data = self._read_json(limit=32 * 1024)
+        if data is None:
+            return
+        self._forward_ai("POST", "/api/ai/fill", data)
 
     def _handle_app_upload(self):
         _token, record = self._require_session()

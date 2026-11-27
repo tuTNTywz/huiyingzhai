@@ -99,6 +99,17 @@ if [[ -z "${APP_SECRET}" ]]; then
   chmod 600 "${TARGET}/.env"
 fi
 
+AI_SECRET="$(sed -n 's/^AI_KEY_SECRET=//p' "${TARGET}/.env" 2>/dev/null | tail -n1)"
+if [[ -z "${AI_SECRET}" ]]; then
+  AI_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+  printf '
+# 用户 AI API Key 的加密密钥
+AI_KEY_SECRET=%s
+' "${AI_SECRET}" >>"${TARGET}/.env"
+  chown "${APP_USER}:${APP_USER}" "${TARGET}/.env"
+  chmod 600 "${TARGET}/.env"
+fi
+
 cat > "${PANEL_CONF}" <<EOF
 # 由 install.sh 生成
 PANEL_PORT=3999

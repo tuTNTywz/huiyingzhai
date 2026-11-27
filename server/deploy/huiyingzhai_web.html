@@ -45,6 +45,11 @@
   .tag.gray { background:#e5e7eb; color:#6b7280; }
   .tag.gold { background:#fef3c7; color:#92400e; }
   .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .search-bar { margin:0 0 12px; }
+  .search-bar input { width:100%; max-width:100%; padding:9px 12px; border:1px solid #dfcfba; border-radius:10px; background:#fffdf9; color:inherit; font:inherit; }
+  .search-hidden { display:none !important; }
+  .search-empty { display:none; }
+  .search-empty.show { display:block; }
   .msg { margin-top:8px; font-size:13px; color:var(--muted); min-height:1.3em; }
   .hidden { display:none !important; }
   .back { background:none; border:0; color:var(--brown); font:inherit; cursor:pointer; padding:0; margin-bottom:10px; }
@@ -298,6 +303,26 @@
     return '<button class="back" data-act="' + act + '">← ' + esc(label) + "</button>";
   }
   function empty(text) { return '<div class="card muted">' + esc(text) + "</div>"; }
+  function searchBar(scope, placeholder) {
+    return '<div class="search-bar"><input class="search-input" data-search-scope="' + scope +
+      '" placeholder="' + esc(placeholder) + '" autocomplete="off"></div>';
+  }
+  function searchEmpty() {
+    return '<div id="search-empty" class="card muted search-empty">没有匹配的内容</div>';
+  }
+  function applySearch(scope) {
+    const input = document.querySelector('.search-input[data-search-scope="' + scope + '"]');
+    if (!input) return;
+    const query = input.value.trim().toLowerCase();
+    let visible = 0;
+    document.querySelectorAll("#view [data-search]").forEach((card) => {
+      const hit = !query || String(card.dataset.search || "").toLowerCase().indexOf(query) >= 0;
+      card.classList.toggle("search-hidden", !hit);
+      if (hit) visible += 1;
+    });
+    const emptyBox = document.getElementById("search-empty");
+    if (emptyBox) emptyBox.classList.toggle("show", !!query && visible === 0);
+  }
   function run(task) {
     Promise.resolve(task).catch((e) => {
       $("view").innerHTML = '<div class="card">' + esc((e && e.message) || "加载失败") + "</div>";
@@ -328,7 +353,7 @@
     const hw = list.map((item) => {
       const deadline = Number(item.deadline) || 0;
       const expired = deadline && deadline < Date.now();
-      return '<article class="card hw" data-act="homework" data-id="' + esc(item._id) + '">' +
+      return '<article class="card hw" data-act="homework" data-id="' + esc(item._id) + '" data-search="' + esc((item.title || "") + " " + (item.desc || "") + " " + (item.creatorName || "")) + '">' +
         '<div class="row" style="justify-content:space-between"><span class="title">' + esc(item.title) + "</span>" +
         '<span class="tag ' + (expired ? "gray" : "green") + '">' + (expired ? "已截止" : "进行中") + "</span></div>" +
         (item.desc ? '<div class="muted">' + esc(item.desc) + "</div>" : "") +
@@ -342,8 +367,9 @@
     }).join("");
     $("view").innerHTML =
       '<div class="section-head">学科板块</div><div class="subjects">' + subjects + "</div>" +
+      searchBar("homework", "搜索作业标题、说明、布置人…") +
       '<div class="section-head">班级作业 ' + (isStudy() ? publishLink("发布作业", "homework-card") : "") + "</div>" +
-      (hw || empty("暂无班级作业"));
+      (hw || empty("暂无班级作业")) + searchEmpty();
   }
 
   async function viewSubject(key) {
@@ -359,7 +385,7 @@
     const taskHtml = list.map((task) => {
       const deadline = Number(task.deadline) || 0;
       const expired = deadline && deadline < Date.now();
-      return '<article class="card"><div class="row" style="justify-content:space-between"><b>' + esc(task.title) + "</b>" +
+      return '<article class="card" data-search="' + esc((task.title || "") + " " + (task.content || "") + " " + (task.creatorName || "")) + '"><div class="row" style="justify-content:space-between"><b>' + esc(task.title) + "</b>" +
         '<span class="tag ' + (deadline ? (expired ? "gray" : "green") : "gold") + '">' +
         (deadline ? (expired ? "已截止" : "进行中") : "通知") + "</span></div>" +
         '<div class="desc">' + linkify(task.content || "（无详细内容）") + "</div>" +
@@ -378,8 +404,9 @@
       "<div>学分</div><div>" + esc(st.credit || "待设置") + "</div>" +
       "<div>课程安排</div><div>" + esc(st.schedule || "待设置") + "</div>" +
       "<div>课代表</div><div>" + esc(rp.name ? rp.name + "（" + (rp.studentId || "") + "）" : "暂未设置") + "</div></div></div>" +
+      searchBar("subject", "搜索任务标题、内容、发布人…") +
       '<div class="section-head">任务通知 ' + (isAdmin() || reps().indexOf(key) >= 0 ? publishLink("发布学科任务", "subject-card") : "") + "</div>" +
-      (taskHtml || empty("本科目暂无任务通知"));
+      (taskHtml || empty("本科目暂无任务通知")) + searchEmpty();
   }
 
   async function viewHomeworkDetail(id) {
@@ -407,7 +434,7 @@
     const items = list.map((item) => {
       const time = Number(item.activityTime) || 0;
       const ended = time && time < Date.now();
-      return '<article class="card hw" data-act="activity" data-id="' + esc(item._id) + '">' +
+      return '<article class="card hw" data-act="activity" data-id="' + esc(item._id) + '" data-search="' + esc((item.title || "") + " " + (item.place || "") + " " + (item.content || "") + " " + (item.creatorName || "")) + '">' +
         '<div class="row" style="justify-content:space-between"><b>' + esc(item.title) + "</b>" +
         '<span class="tag ' + (ended ? "gray" : "gold") + '">' + (ended ? "已结束" : "待举办") + "</span></div>" +
         '<div class="meta"><span>🕒 ' + esc(fmt(time)) + "</span><span>📍 " + esc(item.place || "待定") + "</span></div>" +
@@ -415,8 +442,9 @@
         (isCommittee() ? '<div class="row" style="margin-top:8px"><button class="btn danger small" data-act="delete-activity" data-id="' + esc(item._id) + '">删除活动</button></div>' : "") +
         "</article>";
     }).join("");
-    $("view").innerHTML = '<div class="section-head">活动 ' + (isCommittee() ? publishLink("发布活动", "activity-card") : "") + "</div>" +
-      (items || empty("暂无活动"));
+    $("view").innerHTML = searchBar("activity", "搜索活动名称、地点、内容、发布人…") +
+      '<div class="section-head">活动 ' + (isCommittee() ? publishLink("发布活动", "activity-card") : "") + "</div>" +
+      (items || empty("暂无活动")) + searchEmpty();
   }
 
   async function viewActivityDetail(id) {
@@ -443,7 +471,7 @@
       const ended = endsAt && endsAt < Date.now();
       const timeText = start ? fmt(start) + (end ? " 至 " + fmt(end) : "") : "待定";
       const place = String(item.place || "").trim();
-      return '<article class="card hw" data-act="volunteer" data-id="' + esc(item._id) + '">' +
+      return '<article class="card hw" data-act="volunteer" data-id="' + esc(item._id) + '" data-search="' + esc((item.title || "") + " " + (item.place || "") + " " + (item.organizer || "") + " " + (item.contact || "") + " " + (item.content || "")) + '">' +
         '<div class="row" style="justify-content:space-between"><b>' + esc(item.title) + "</b>" +
         '<span class="tag ' + (ended ? "gray" : "green") + '">' + (ended ? "已结束" : "招募中") + "</span></div>" +
         '<div class="meta"><span>🕒 ' + esc(timeText) + "</span>" +
@@ -453,8 +481,9 @@
         (isCommittee() ? '<div class="row" style="margin-top:8px"><button class="btn danger small" data-act="delete-volunteer" data-id="' + esc(item._id) + '">删除志愿活动</button></div>' : "") +
         "</article>";
     }).join("");
-    $("view").innerHTML = '<div class="section-head">志愿活动 ' + (isCommittee() ? publishLink("发布志愿活动", "volunteer-card") : "") + "</div>" +
-      (items || empty("暂无志愿活动"));
+    $("view").innerHTML = searchBar("volunteer", "搜索志愿活动名称、地点、组织、内容…") +
+      '<div class="section-head">志愿活动 ' + (isCommittee() ? publishLink("发布志愿活动", "volunteer-card") : "") + "</div>" +
+      (items || empty("暂无志愿活动")) + searchEmpty();
   }
 
   async function viewVolunteerDetail(id) {
@@ -486,7 +515,7 @@
     const list = Array.isArray(res.list) ? res.list : [];
     const posts = list.map((item) => {
       const isManager = item.role === "committee" || item.role === "admin";
-      return '<article class="card post" data-act="post" data-id="' + esc(item._id) + '">' +
+      return '<article class="card post" data-act="post" data-id="' + esc(item._id) + '" data-search="' + esc((item.content || "") + " " + (item.nickname || "")) + '">' +
         '<div class="post-head"><span class="post-author">' + esc(item.nickname || "同窗") +
         ' <span class="tag ' + (isManager ? "gold" : "green") + '">' + (isManager ? "班委" : "同学") + "</span></span>" +
         '<span class="muted">' + esc(fmt(item.createTime)) + "</span></div>" +
@@ -500,7 +529,8 @@
       '<div class="row" style="margin-top:10px"><input id="post-files" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,image/*">' +
       '<button class="btn primary" data-act="post-submit">发帖</button>' +
       '<span id="post-msg" class="msg"></span></div></div>' +
-      '<div class="section-head">大家的帖子</div>' + (posts || empty("还没有帖子，来开个话题吧"));
+      searchBar("forum", "搜索帖子内容、发帖人…") +
+      '<div class="section-head">大家的帖子</div>' + (posts || empty("还没有帖子，来开个话题吧")) + searchEmpty();
   }
 
   async function viewPost(id) {
@@ -533,7 +563,7 @@
     const list = Array.isArray(res.list) ? res.list : [];
     const items = list.map((n) => {
       const content = n.fullContent || n.content || "";
-      return '<article class="card notice static">' +
+      return '<article class="card notice static" data-search="' + esc((n.title || "") + " " + content + " " + (n.creatorName || "")) + '">' +
         '<div class="row" style="justify-content:space-between"><span class="tag gold">班级通知</span>' +
         '<span class="muted">' + esc(fmt(n.createTime)) + "</span></div>" +
         '<div class="title" style="font-weight:700;margin-top:6px">' + esc(n.title || "") + "</div>" +
@@ -546,8 +576,9 @@
     const badge = $("notice-count");
     if (list.length) { badge.textContent = String(list.length); badge.classList.remove("hidden"); }
     else badge.classList.add("hidden");
-    $("view").innerHTML = '<div class="section-head">通知 ' + (isCommittee() ? publishLink("发布通知", "notice-card") : "") + "</div>" +
-      (items || empty("暂无通知"));
+    $("view").innerHTML = searchBar("notice", "搜索通知标题、内容、发布人…") +
+      '<div class="section-head">通知 ' + (isCommittee() ? publishLink("发布通知", "notice-card") : "") + "</div>" +
+      (items || empty("暂无通知")) + searchEmpty();
   }
 
   async function viewMine() {
@@ -645,6 +676,10 @@
   document.getElementById("tabs").addEventListener("click", (event) => {
     const button = event.target.closest("[data-tab]");
     if (button) setTab(button.dataset.tab);
+  });
+  document.getElementById("view").addEventListener("input", (event) => {
+    const scope = event.target && event.target.dataset ? event.target.dataset.searchScope : "";
+    if (scope) applySearch(scope);
   });
   document.getElementById("view").addEventListener("click", (event) => {
     const anchor = event.target.closest("a");
