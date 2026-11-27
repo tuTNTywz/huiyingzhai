@@ -823,6 +823,7 @@ MANUAL_HTML = """<!doctype html>
   <section id="homework" class="section reveal">
     <div class="sec-head"><span class="sec-num">03</span><h2>作业</h2></div>
     <p>「作业」页分为学科板块和班级作业。学科板块按科目进入，班级作业汇总所有班级作业。</p>
+    <p>学科板块下方的搜索框可按作业标题、说明或布置人即时过滤；搜索只在当前列表内生效。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>看状态</b><p>「进行中」表示未到截止时间，「已截止」表示已过期；卡片显示布置人、截止时间和附件数量。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>看详情</b><p>点击作业查看完整说明和附件；图片会直接显示缩略图，点击可查看大图；文档可下载。</p></div></div>
@@ -833,7 +834,7 @@ MANUAL_HTML = """<!doctype html>
 
   <section id="activity" class="section reveal">
     <div class="sec-head"><span class="sec-num">04</span><h2>活动</h2></div>
-    <p>「活动」汇总班级活动，卡片显示名称、时间、地点和发布人。</p>
+    <p>「活动」汇总班级活动，卡片显示名称、时间、地点和发布人；顶部搜索框可按名称、地点、内容或发布人过滤。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>查看详情</b><p>点击卡片查看完整活动说明、时间、地点和发布人。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>发布与删除</b><p>班委或管理员在 <b>/upload/</b> 发布活动；可在列表或详情删除。</p></div></div>
@@ -842,7 +843,7 @@ MANUAL_HTML = """<!doctype html>
 
   <section id="volunteer" class="section reveal">
     <div class="sec-head"><span class="sec-num">05</span><h2>志愿活动</h2></div>
-    <p>「志愿活动」用于发布志愿服务招募，显示开始与结束时间和详细内容；地点、名额、联系方式、报名链接等可写进详细内容。</p>
+    <p>「志愿活动」用于发布志愿服务招募，显示开始与结束时间和详细内容；地点、名额、联系方式、报名链接等可写进详细内容。顶部搜索框可按名称、地点、组织、内容过滤。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>查看与报名</b><p>详情页可查看完整活动说明；正文中的网址会自动变成可点击链接。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>发布</b><p>班委或管理员在 <b>/upload/</b> 的「发布志愿活动」表单填写活动名称、开始和结束时间、详细内容并发布。</p></div></div>
@@ -852,7 +853,7 @@ MANUAL_HTML = """<!doctype html>
 
   <section id="forum" class="section reveal">
     <div class="sec-head"><span class="sec-num">06</span><h2>交流</h2></div>
-    <p>所有登录同学都可以发帖、回复和上传附件（图片、文档等）。</p>
+    <p>所有登录同学都可以发帖、回复和上传附件（图片、文档等）；帖子列表上方的搜索框可按内容或发帖人过滤。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>发帖</b><p>填写内容或选择附件后点击「发帖」；帖子按时间倒序显示。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>回复</b><p>点击帖子进入详情，在底部回复；附件会显示在正文下方。</p></div></div>
@@ -862,7 +863,7 @@ MANUAL_HTML = """<!doctype html>
 
   <section id="notice" class="section reveal">
     <div class="sec-head"><span class="sec-num">07</span><h2>通知</h2></div>
-    <p>「通知」只显示班委/管理员发布的班级通知，按发布时间从新到旧排列；超过 30 天自动删除。</p>
+    <p>「通知」只显示班委/管理员发布的班级通知，按发布时间从新到旧排列；超过 30 天自动删除。通知上方的搜索框可按标题、正文或发布人过滤。</p>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>看全文</b><p>通知显示完整正文和附件；正文里的网址和附件都可直接打开。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>发布通知</b><p>班委或管理员点击「发布通知」，填写标题、正文和附件。</p></div></div>
@@ -895,7 +896,8 @@ MANUAL_HTML = """<!doctype html>
       </tbody>
     </table>
     <div class="tip">发布后网页版立即显示，并按配置推送微信/QQ 机器人通知。</div>
-    <div class="tip">发布页右上角有「📋 智能填充」悬浮球：粘贴文字后，普通模式用本地规则识别；点「切换到 AI 填充」可使用自己的 API Key 和常用模型识别，Key 加密保存在服务器，不回显。</div>
+    <div class="tip">发布页右上角有「📋 智能填充」悬浮球：粘贴文字后，普通模式用本地规则识别；点「切换到 AI 填充」可使用自己的 API Key 和常用模型识别。</div>
+    <div class="tip">AI 填充可选 DeepSeek、通义千问、Kimi、GLM、GPT、SiliconFlow 等常用模型。Key 加密保存在服务器，只显示尾号；可随时更换模型、更新或清除 Key，费用由自己的 API 账号承担。</div>
   </section>
 
   <section id="attach" class="section reveal">
@@ -921,6 +923,14 @@ MANUAL_HTML = """<!doctype html>
     <div class="faq-item">
       <button class="faq-q">忘记登录状态 / 需要换账号？<span>＋</span></button>
       <div class="faq-a"><p>到「我的」点「退出」，再用另一个姓名 + 学号登录。</p></div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">搜索不到内容？<span>＋</span></button>
+      <div class="faq-a"><p>搜索只过滤当前页面的列表；换到其他栏目请使用该栏目自己的搜索框。关键词会同时匹配标题、正文、地点或发布人。</p></div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">AI 填充的 API Key 安全吗？<span>＋</span></button>
+      <div class="faq-a"><p>Key 使用服务器密钥加密保存，接口只返回尾号，不会回显明文；模型请求由服务器代理，费用由你自己的 API 账号承担。可以随时更换或清除。</p></div>
     </div>
     <div class="faq-item">
       <button class="faq-q">网页打不开或样式错乱？<span>＋</span></button>
