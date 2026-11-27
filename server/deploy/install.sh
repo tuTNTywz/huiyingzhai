@@ -124,6 +124,9 @@ install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai_web.html" \
   /usr/local/lib/huiyingzhai/huiyingzhai_web.html
 install -m 644 "${REPO_ROOT}/server/deploy/deploy_page.html" \
   /usr/local/lib/huiyingzhai/deploy_page.html
+install -d -m 755 /usr/local/lib/huiyingzhai/wechat-guide
+install -m 644 "${REPO_ROOT}/server/deploy/wechat-guide/"*.jpg \
+  /usr/local/lib/huiyingzhai/wechat-guide/
 
 install -m 644 "${REPO_ROOT}/server/deploy/huiyingzhai-deploy.service" \
   /etc/systemd/system/huiyingzhai-deploy.service

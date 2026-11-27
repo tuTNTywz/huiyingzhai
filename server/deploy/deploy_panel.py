@@ -160,6 +160,8 @@ def load_web_bytes() -> bytes:
 
 
 DEPLOY_PAGE_PATH = Path(__file__).resolve().with_name("deploy_page.html")
+GUIDE_DIR = Path(__file__).resolve().with_name("wechat-guide")
+GUIDE_FILES = {"follow.jpg", "settings-menu.jpg", "mute.jpg"}
 
 
 def load_deploy_bytes() -> bytes:
@@ -631,7 +633,9 @@ MANUAL_HTML = """<!doctype html>
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body { margin:0; font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif; color:var(--ink); background:var(--paper); }
-  .hero { position:relative; min-height:58vh; display:grid; place-items:center; overflow:hidden; text-align:center; padding:64px 20px 80px; background:radial-gradient(circle at 50% 20%, #fffdf8 0%, #f7f1e6 48%, #efe6d7 100%); }
+  body.cover-locked { overflow:hidden; height:100vh; }
+  .hero { position:relative; min-height:100vh; display:grid; place-items:center; overflow:hidden; text-align:center; padding:64px 20px 80px; cursor:pointer; background:radial-gradient(circle at 50% 20%, #fffdf8 0%, #f7f1e6 48%, #efe6d7 100%); }
+  .hero:focus-visible { outline:3px solid #c1936c; outline-offset:-8px; }
   .orb { position:absolute; border-radius:50%; filter:blur(46px); opacity:.55; pointer-events:none; }
   .orb-a { width:300px; height:300px; background:#e8c9a8; top:-60px; left:-50px; animation:drift 11s ease-in-out infinite; }
   .orb-b { width:260px; height:260px; background:#d9e3d0; bottom:-70px; right:-40px; animation:drift 13s ease-in-out infinite reverse; }
@@ -680,11 +684,39 @@ MANUAL_HTML = """<!doctype html>
   .faq-item.open .faq-q span { transform:rotate(45deg); }
   .site-footer { text-align:center; padding:10px 18px 48px; color:#9a8f80; font-size:12px; letter-spacing:.06em; }
   .site-footer a { color:var(--brown); text-decoration:none; }
+  .wechat-guide { margin:14px 0 2px; padding:14px; border:1px solid var(--line); border-radius:16px; background:#fff; }
+  .guide-stage { display:flex; gap:16px; align-items:center; }
+  .guide-phone { position:relative; flex:none; width:190px; height:390px; border-radius:26px; border:7px solid #2e2a25; background:#f4f4f4; overflow:hidden; box-shadow:0 16px 34px rgba(60,45,30,.18); }
+  .guide-slide { position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; opacity:0; transform:translateX(12px); transition:opacity .45s ease, transform .45s ease; padding-top:10px; }
+  .guide-slide.active { opacity:1; transform:none; }
+  .guide-slide img { width:100%; height:auto; display:block; }
+  .guide-qr { width:150px; height:150px; margin:54px auto 0; border-radius:12px; background:
+    repeating-linear-gradient(90deg,#2e2a25 0 6px,transparent 6px 12px),
+    repeating-linear-gradient(0deg,#2e2a25 0 6px,transparent 6px 12px);
+    background-size:24px 24px; position:relative; box-shadow:0 0 0 8px #fff,0 0 0 9px #e2d5c2; }
+  .guide-qr::after { content:""; position:absolute; left:8px; right:8px; top:12px; height:3px; border-radius:2px; background:#c1936c; box-shadow:0 0 10px #c1936c; animation:scan 2.2s ease-in-out infinite; }
+  .guide-qr-note { text-align:center; color:#8a8478; font-size:11px; margin-top:16px; }
+  .guide-main { flex:1; min-width:0; }
+  .guide-step { font-size:12px; letter-spacing:.12em; color:var(--brown); margin-bottom:6px; }
+  .guide-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+  .guide-desc { font-size:13px; color:#6f675d; min-height:40px; }
+  .guide-dots { display:flex; gap:7px; margin-top:12px; }
+  .guide-dots button { width:9px; height:9px; padding:0; border:0; border-radius:50%; background:#e2d5c2; cursor:pointer; }
+  .guide-dots button.active { background:var(--brown); transform:scale(1.15); }
+  .guide-hint { margin-top:10px; font-size:11px; color:#a99c8b; }
+  @keyframes scan { 0%,100% { top:12px; } 50% { top:132px; } }
   @keyframes rise { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
   @keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
   @keyframes drift { 0%,100% { transform:translate(0,0) scale(1); } 50% { transform:translate(26px,18px) scale(1.08); } }
   @keyframes breathe { 0%,100% { opacity:.45; } 50% { opacity:1; } }
-  @media (max-width:700px) { .roles { grid-template-columns:1fr; } .hero { min-height:54vh; padding:54px 18px 70px; } .section { padding:22px 18px; border-radius:16px; } }
+  @media (max-width:700px) {
+    .roles { grid-template-columns:1fr; }
+    .hero { min-height:100vh; padding:54px 18px 70px; }
+    .section { padding:22px 18px; border-radius:16px; }
+    .guide-stage { flex-direction:column; align-items:stretch; }
+    .guide-phone { width:170px; height:350px; margin:0 auto; }
+    .guide-desc { min-height:0; }
+  }
   @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } *,*::before,*::after { animation:none !important; transition:none !important; } .reveal { opacity:1; transform:none; } }
   @media (prefers-color-scheme:dark) {
     :root { --ink:#ece4d8; --muted:#a99c8b; --paper:#14100d; --card:#1d1712; --line:#33281f; }
@@ -696,7 +728,8 @@ MANUAL_HTML = """<!doctype html>
     .role { background:#241c16; }
     .sec-num, .tag { background:#33261c; color:#dcb894; }
     .step-num { background:#241c16; border-color:#4a3829; }
-    .step p, .role p, .faq-a, td { color:#b8aa99; }
+    .step p, .role p, .faq-a, td, .guide-desc { color:#b8aa99; }
+    .wechat-guide { background:#241c16; }
     .tip { background:#2a2119; color:#d9c2a8; border-left-color:#a97a54; }
     .faq-item, th, td { border-bottom-color:#3a2d22; }
     .hero-back { color:#c9b9a6; border-color:#4a3829; }
@@ -706,7 +739,7 @@ MANUAL_HTML = """<!doctype html>
 <noscript><style>.reveal { opacity:1; transform:none; } .faq-a { max-height:none; padding-bottom:12px; }</style></noscript>
 </head>
 <body>
-<header class="hero">
+<header class="hero" id="cover" role="button" tabindex="0" aria-label="点击进入说明书">
   <div class="orb orb-a"></div>
   <div class="orb orb-b"></div>
   <div class="hero-inner">
@@ -714,7 +747,7 @@ MANUAL_HTML = """<!doctype html>
     <h1>汇英斋 · 使用说明书</h1>
     <p class="hero-sub">作业 · 活动 · 志愿 · 交流，一册在手</p>
     <a class="hero-back" href="/">← 返回主页</a>
-    <div class="scroll-hint">向下滑动阅读 ↓</div>
+    <div class="scroll-hint">点击进入 · 向下滚动阅读 ↓</div>
   </div>
 </header>
 
@@ -739,7 +772,38 @@ MANUAL_HTML = """<!doctype html>
     <div class="steps">
       <div class="step"><span class="step-num">1</span><div><b>打开网页版</b><p>浏览器访问 <b>https://tutnt.com/huiyingzhai/</b>（或班级公布的域名）。</p></div></div>
       <div class="step"><span class="step-num">2</span><div><b>姓名 + 学号登录</b><p>填写班级名单中的真实姓名和学号。名单内的学号首次登录会自动创建网页身份，无需单独注册。</p></div></div>
-      <div class="step"><span class="step-num">3</span><div><b>开始使用</b><p>顶部切换作业、活动、志愿活动、交流、通知和我的；手机和电脑浏览器都可以。</p></div></div>
+      <div class="step"><span class="step-num">3</span><div>
+        <b>打开微信通知</b>
+        <p>关注班级使用的服务号并关闭「消息免打扰」，发布作业/活动时能及时收到提醒；不需要可以跳过。</p>
+        <div class="wechat-guide" id="wechat-guide">
+          <div class="guide-stage">
+            <div class="guide-phone">
+              <div class="guide-slide active" data-index="0">
+                <div>
+                  <div class="guide-qr"></div>
+                  <div class="guide-qr-note">扫描班级群二维码</div>
+                </div>
+              </div>
+              <div class="guide-slide" data-index="1"><img src="/manual/guide/follow.jpg" alt="关注服务号" loading="lazy"></div>
+              <div class="guide-slide" data-index="2"><img src="/manual/guide/settings-menu.jpg" alt="打开设置" loading="lazy"></div>
+              <div class="guide-slide" data-index="3"><img src="/manual/guide/mute.jpg" alt="关闭消息免打扰" loading="lazy"></div>
+            </div>
+            <div class="guide-main">
+              <div class="guide-step" id="guide-step">第 1 步 / 共 4 步</div>
+              <div class="guide-title" id="guide-title">扫描二维码</div>
+              <div class="guide-desc" id="guide-desc">用微信扫描班级群里的服务号二维码。</div>
+              <div class="guide-dots" id="guide-dots" aria-label="微信通知步骤">
+                <button class="active" data-slide="0" aria-label="第 1 步"></button>
+                <button data-slide="1" aria-label="第 2 步"></button>
+                <button data-slide="2" aria-label="第 3 步"></button>
+                <button data-slide="3" aria-label="第 4 步"></button>
+              </div>
+              <div class="guide-hint">动画自动播放，也可点击圆点切换</div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+      <div class="step"><span class="step-num">4</span><div><b>开始使用</b><p>顶部切换作业、活动、志愿活动、交流、通知和我的；手机和电脑浏览器都可以。</p></div></div>
     </div>
     <div class="tip">学号必须与班级名单一致；姓名不匹配会被拒绝登录。不要使用他人学号。</div>
   </section>
@@ -876,6 +940,27 @@ MANUAL_HTML = """<!doctype html>
 
 <script>
 (() => {
+  // 封面：首屏锁定滚动，点击/回车进入后恢复滚轮阅读
+  const cover = document.getElementById('cover');
+  const start = document.getElementById('start');
+  if (cover && start) {
+    if (!location.hash) document.body.classList.add('cover-locked');
+    const enter = () => {
+      document.body.classList.remove('cover-locked');
+      start.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    cover.addEventListener('click', (event) => {
+      if (event.target.closest('a')) return;
+      enter();
+    });
+    cover.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        enter();
+      }
+    });
+  }
+
   const items = document.querySelectorAll('.reveal');
   if ('IntersectionObserver' in window) {
     const io = new IntersectionObserver((entries) => {
@@ -892,6 +977,46 @@ MANUAL_HTML = """<!doctype html>
       button.parentElement.classList.toggle('open');
     });
   });
+
+  // 微信通知步骤动画：二维码 → 关注服务号 → 设置 → 关闭免打扰
+  const guide = document.getElementById('wechat-guide');
+  if (guide) {
+    const slides = Array.from(guide.querySelectorAll('.guide-slide'));
+    const dots = Array.from(guide.querySelectorAll('.guide-dots button'));
+    const stepLabel = document.getElementById('guide-step');
+    const title = document.getElementById('guide-title');
+    const desc = document.getElementById('guide-desc');
+    const captions = [
+      ['扫描二维码', '用微信扫描班级群里的服务号二维码。'],
+      ['关注服务号', '进入服务号主页，点击「关注服务号」。'],
+      ['打开设置', '点右上角「…」，在菜单中选择「设置」。'],
+      ['关闭消息免打扰', '关闭「消息免打扰」，保留「接收文章推送」。'],
+    ];
+    let index = 0;
+    let timer = null;
+    const show = (next) => {
+      index = (next + slides.length) % slides.length;
+      slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
+      dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+      stepLabel.textContent = '第 ' + (index + 1) + ' 步 / 共 ' + slides.length + ' 步';
+      title.textContent = captions[index][0];
+      desc.textContent = captions[index][1];
+    };
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const play = () => {
+      stop();
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      timer = setInterval(() => show(index + 1), 3200);
+    };
+    dots.forEach((dot) => dot.addEventListener('click', () => {
+      show(Number(dot.dataset.slide) || 0);
+      play();
+    }));
+    guide.addEventListener('mouseenter', stop);
+    guide.addEventListener('mouseleave', play);
+    show(0);
+    play();
+  }
 })();
 </script>
 </body>
@@ -1596,6 +1721,18 @@ class Handler(BaseHTTPRequestHandler):
             if self._page_editor():
                 content = inject_page_toolbar(content, "intro")
             self._send(200, content, "text/html; charset=utf-8")
+            return
+        if area == "" and path.startswith("/manual/guide/"):
+            name = path.rsplit("/", 1)[-1]
+            if name not in GUIDE_FILES:
+                self._send(404, json.dumps({"ok": False, "message": "图片不存在"}, ensure_ascii=False))
+                return
+            try:
+                data = (GUIDE_DIR / name).read_bytes()
+            except OSError:
+                self._send(404, json.dumps({"ok": False, "message": "图片不存在"}, ensure_ascii=False))
+                return
+            self._send(200, data, "image/jpeg")
             return
         if area == "" and path in ("/manual", "/manual/", "/manual/index.html"):
             content = inject_icp_footer(load_page_bytes("manual"))
